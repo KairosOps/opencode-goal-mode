@@ -27,7 +27,10 @@ permission:
     "git clean *": deny
     "git push *": deny
   task: deny
-  external_directory: allow
+  external_directory:
+    "*": ask
+    "/projects/**": allow
+    "~/\.config/opencode/**": allow
   todowrite: deny
   question: ask
   webfetch: allow

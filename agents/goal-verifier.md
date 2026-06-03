@@ -11,9 +11,21 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  bash: allow
+  bash:
+    "*": ask
+    "git status *": allow
+    "git diff *": allow
+    "git log *": allow
+    "npm test *": allow
+    "pnpm test *": allow
+    "bun test *": allow
+    "node --test *": allow
+    "rg *": allow
   task: deny
-  external_directory: allow
+  external_directory:
+    "*": ask
+    "/projects/**": allow
+    "~/\.config/opencode/**": allow
   todowrite: deny
   question: ask
   webfetch: allow
