@@ -4,7 +4,10 @@ import plugin, { __test } from "../plugins/goal-guard.js";
 
 test("detects destructive bash commands", () => {
   assert.equal(__test.looksLikeDestructiveBash("rm -rf /tmp/x"), true);
+  assert.equal(__test.looksLikeDestructiveBash("sudo rm -fr /tmp/x"), true);
   assert.equal(__test.looksLikeDestructiveBash("git reset --hard"), true);
+  assert.equal(__test.looksLikeDestructiveBash("find . -delete"), true);
+  assert.equal(__test.looksLikeDestructiveBash("dd if=/tmp/x of=/dev/sda"), true);
   assert.equal(__test.looksLikeDestructiveBash("npm test"), false);
 });
 
@@ -31,6 +34,32 @@ test("final completion is rewritten when dirty", async () => {
   await hooks["experimental.text.complete"]({ sessionID: "complete-test", messageID: "m", partID: "p" }, output);
   assert.match(output.text, /Goal Not Completed/);
   assert.match(output.text, /blocked completion/i);
+});
+
+test("final completion is rewritten when required reviews never ran", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  await hooks["chat.params"]({ sessionID: "no-review-test", agent: "goal" }, {});
+  const output = { text: "Goal Completed\n\nReview cycles: 0" };
+  await hooks["experimental.text.complete"]({ sessionID: "no-review-test", messageID: "m", partID: "p" }, output);
+  assert.match(output.text, /Goal Not Completed/);
+  assert.match(output.text, /goal-prompt-auditor/);
+});
+
+test("completion is allowed only after all required gates pass after edit", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "gate-pass-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "edit", sessionID, callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+
+  for (const agent of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
+    await hooks["chat.params"]({ sessionID, agent }, {});
+    await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: agent, args: { command: "npm test" } }, { output: "Verdict: PASS", title: "", metadata: {} });
+  }
+
+  const output = { text: "Goal Completed\n\nReview cycles: 5" };
+  await hooks["experimental.text.complete"]({ sessionID, messageID: "m", partID: "p" }, output);
+  assert.match(output.text, /Goal Completed/);
+  assert.doesNotMatch(output.text, /Goal Not Completed/);
 });
 
 test("compaction preserves goal guard state", async () => {
