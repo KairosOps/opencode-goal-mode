@@ -29,6 +29,7 @@ const requiredAgents = [
   "goal-data-reviewer.md",
   "goal-perf-reviewer.md",
   "goal-quality-gate.md",
+  "goal-completion-guard.md",
 ];
 
 test("all required agents exist", () => {

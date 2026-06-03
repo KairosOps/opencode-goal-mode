@@ -2,10 +2,15 @@ import { createHash } from "node:crypto";
 
 const WRITE_TOOLS = new Set(["edit", "write", "apply_patch"]);
 
-const DEEP_RESEARCH_AGENTS = new Set([
-  "goal-deep-researcher",
-  "goal-web-researcher",
-]);
+const MUTATING_BASH_RE = new RegExp(
+  [
+    "\\b(rm|mv|cp|cat|tee|perl|python|node)\\b",
+    "\\b(tee|python3?|node\\s+-e|perl\\s+-pi)\\b",
+    "(^|&&|;|\\|\\|)\\s*[^|>]*[|>]",
+    "\\b(formatter|format|prettier|eslint)\\b",
+  ].join("|"),
+  "i"
+);
 
 const REVIEW_AGENTS = new Set([
   "goal-reviewer",
@@ -67,16 +72,36 @@ function createState() {
     lastEditAt: null,
     lastVerificationAt: null,
     verdicts: [],
+    latestVerdict: {},
     currentAgent: undefined,
     completedBlocked: 0,
     verificationSeen: false,
+    lastCompletionRejectAt: null,
   };
 }
 
 const sessions = new Map();
+const MAX_SESSIONS = 200;
+
+function evictOldestSession() {
+  if (sessions.size <= MAX_SESSIONS) return;
+  let oldestKey = null;
+  let oldestTime = Infinity;
+  for (const [key, state] of sessions) {
+    const t = new Date(state.lastEditAt || state.lastReviewAt || 0).getTime();
+    if (t < oldestTime) {
+      oldestTime = t;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey) sessions.delete(oldestKey);
+}
 
 function stateFor(sessionID) {
-  if (!sessions.has(sessionID)) sessions.set(sessionID, createState());
+  if (!sessions.has(sessionID)) {
+    evictOldestSession();
+    sessions.set(sessionID, createState());
+  }
   return sessions.get(sessionID);
 }
 
@@ -100,16 +125,49 @@ function isFail(text) {
   return /Verdict:\s*FAIL\b/i.test(text);
 }
 
+function isVerification(command) {
+  const normalized = String(command || "").trim();
+  return [
+    /\bnpm\s+test\b/,
+    /\bnpm\s+run\s+test\b/,
+    /\bnpm\s+run\s+validate\b/,
+    /\bnpm\s+run\s+check\b/,
+    /\bnpm\s+run\s+lint\b/,
+    /\bnpm\s+run\s+typecheck\b/,
+    /\bnpm\s+run\s+build\b/,
+    /\bnpm\s+run\s+unit\b/,
+    /\bnpm\s+run\s+integration\b/,
+    /\bjest\b/,
+    /\bmocha\b/,
+    /\bvite\s+test\b/,
+    /\bvitest\b/,
+    /\bpnpm\s+test\b/,
+    /\byarn\s+test\b/,
+    /\bbun\s+test\b/,
+    /\bgo\s+test\b/,
+    /\bcargo\s+test\b/,
+    /\bpytest\b/,
+    /\bpython\s+-m\s+pytest\b/,
+    /\bpython\s+-m\s+unittest\b/,
+    /\bphpunit\b/,
+    /\bmake\s+test\b/,
+    /\bmake\s+check\b/,
+    /\bmake\s+validate\b/,
+    /\btest\b/,
+  ].some((pattern) => pattern.test(normalized));
+}
+
 function looksLikeDestructiveBash(command) {
   const normalized = String(command || "").trim();
   return [
-    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+-[a-zA-Z]*[rf][a-zA-Z]*[rf]?\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+(--recursive|--force|--recursive\s+--force|-rf|-fr)\b/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+-[a-zA-Z]*[rR][a-zA-Z]*[rfRF]?\b/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+(--recursive|--force|--recursive\s+--force|-rf|-fr|-r)\b/,
     /(^|&&|;|\|\|)\s*git\s+reset\b/,
     /(^|&&|;|\|\|)\s*git\s+clean\b/,
-    /(^|&&|;|\|\|)\s*git\s+checkout\s+--?\b/,
-    /(^|&&|;|\|\|)\s*git\s+push\s+--force\b/,
-    /(^|&&|;|\|\|)\s*git\s+push\s+-f\b/,
+    /(^|&&|;|\|\|)\s*git\s+checkout\b/,
+    /(^|&&|;|\|\|)\s*git\s+restore\b/,
+    /(^|&&|;|\|\|)\s*git\s+switch\b/,
+    /(^|&&|;|\|\|)\s*git\s+push\b/,
     /(^|&&|;|\|\|)\s*(sudo\s+)?find\b.*\s-delete\b/,
     /(^|&&|;|\|\|)\s*(sudo\s+)?find\b.*\s-exec\s+rm\b/,
     /(^|&&|;|\|\|)\s*(sudo\s+)?dd\b.*\bof=\/dev\//,
@@ -124,14 +182,57 @@ function commandFingerprint(command) {
   return createHash("sha256").update(String(command || "")).digest("hex").slice(0, 12);
 }
 
-function verdictAfter(state, agent, since) {
-  return state.verdicts.some((entry) => entry.agent === agent && entry.verdict === "PASS" && (!since || entry.at >= since));
+function latestVerdictFor(state, agent) {
+  const entries = state.verdicts.filter((entry) => entry.agent === agent);
+  if (!entries.length) return null;
+  return entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))[0];
 }
 
-function requiredGates(state) {
+function verdictAfter(state, agent, since) {
+  const latest = latestVerdictFor(state, agent);
+  if (!latest) return false;
+  if (latest.verdict !== "PASS") return false;
+  if (!since) return true;
+  return latest.at >= since;
+}
+
+const BASE_GATES = [
+  "goal-prompt-auditor",
+  "goal-reviewer",
+  "goal-diff-reviewer",
+  "goal-verifier",
+  "goal-final-auditor",
+];
+
+const CONTEXTUAL_GATES = {
+  security: "goal-security-reviewer",
+  permissions: "goal-security-reviewer",
+  auth: "goal-security-reviewer",
+  shell: "goal-security-reviewer",
+  test: "goal-test-reviewer",
+  coverage: "goal-test-reviewer",
+  ops: "goal-ops-reviewer",
+  restart: "goal-ops-reviewer",
+  install: "goal-ops-reviewer",
+  api: "goal-api-reviewer",
+  endpoint: "goal-api-reviewer",
+  schema: "goal-api-reviewer",
+  data: "goal-data-reviewer",
+  database: "goal-data-reviewer",
+  migration: "goal-data-reviewer",
+  performance: "goal-perf-reviewer",
+  latency: "goal-perf-reviewer",
+  quality: "goal-quality-gate",
+  standard: "goal-quality-gate",
+};
+
+function requiredGates(state, promptText, changedFilesText) {
   const since = [state.lastEditAt, state.lastVerificationAt].filter(Boolean).sort().at(-1);
-  const gates = ["goal-prompt-auditor", "goal-reviewer", "goal-verifier", "goal-final-auditor"];
-  if (state.lastEditAt) gates.splice(2, 0, "goal-diff-reviewer");
+  const text = `${promptText || ""} ${(changedFilesText || state.dirtyReasons.join(" ") || "")}`.toLowerCase();
+  const gates = [...BASE_GATES];
+  for (const [keyword, agent] of Object.entries(CONTEXTUAL_GATES)) {
+    if (text.includes(keyword) && !gates.includes(agent)) gates.push(agent);
+  }
   return { since, gates };
 }
 
@@ -159,8 +260,10 @@ function summarizeState(state) {
 export async function GoalGuardPlugin({ client }) {
   return {
     async "chat.params"(input) {
-      if (!input?.sessionID) return;
-      const state = stateFor(input.sessionID);
+      if (!input?.sessionID || typeof input.sessionID !== "string") return;
+      const normalized = input.sessionID.trim();
+      if (!normalized) return;
+      const state = stateFor(normalized);
       state.currentAgent = input.agent;
       if (GOAL_AGENTS.has(input.agent)) state.active = true;
     },
@@ -170,7 +273,14 @@ export async function GoalGuardPlugin({ client }) {
       if (input.tool === "bash" && looksLikeDestructiveBash(output?.args?.command)) {
         state.active = true;
         state.dirtyReasons.push(`blocked risky bash fingerprint:${commandFingerprint(output.args.command)}`);
-        throw new Error("Goal Guard blocked a destructive or high-risk bash command. Ask the user or use a safer command.");
+        throw new Error(
+          "Goal Guard blocked a destructive or high-risk bash command. Ask the user or use a safer command."
+        );
+      }
+      if (input.tool === "write" || input.tool === "edit" || input.tool === "apply_patch") {
+        state.dirty = true;
+        state.lastEditAt = nowIso();
+        state.dirtyReasons.push(`${input.tool} at ${state.lastEditAt}`);
       }
     },
 
@@ -188,45 +298,50 @@ export async function GoalGuardPlugin({ client }) {
         state.dirtyReasons.push(`${input.tool} at ${at}`);
       }
 
+      const isReviewing = REVIEW_AGENTS.has(state.currentAgent);
       if (input.tool === "bash") {
-        const command = String(input.args?.command || "");
-        if (/\b(npm|pnpm|bun|yarn|node)\s+(test|run|--test)\b|\bpytest\b|\bcargo\s+test\b|\bgo\s+test\b/.test(command)) {
+        const command = String(input?.args?.command || "");
+        if (isVerification(command) && !isReviewing) {
           state.verificationSeen = true;
           state.lastVerificationAt = at;
-          state.dirtyReasons.push(`verification command fingerprint:${commandFingerprint(command)}`);
+        }
+        if (!looksLikeDestructiveBash(command) && MUTATING_BASH_RE.test(command) && !isReviewing) {
+          state.dirty = true;
+          state.lastEditAt = at;
+          state.dirtyReasons.push(`bash mutation fingerprint:${commandFingerprint(command)}`);
         }
       }
 
       if (input.tool === "task" && REVIEW_AGENTS.has(invokedReviewAgent)) {
         const out = textOf(output);
-        if (isPass(out) || isFail(out)) {
-          const verdict = isPass(out) ? "PASS" : "FAIL";
-          state.verdicts.push({ agent: invokedReviewAgent, verdict, at });
-          state.lastReviewAt = at;
-          if (["goal-final-auditor", "goal-reviewer", "goal-prompt-auditor"].includes(invokedReviewAgent)) {
-            state.reviewCycles += 1;
-          }
-          if (verdict === "PASS" && invokedReviewAgent === "goal-final-auditor" && completionAllowed(state)) {
-            state.dirty = false;
-            state.dirtyReasons = [];
-          }
-        }
+        const failFirst = isFail(out);
+        const passAfter = isPass(out) && !failFirst;
+        if (!failFirst && !passAfter) return;
+        const verdict = passAfter ? "PASS" : "FAIL";
+        state.verdicts.push({ agent: invokedReviewAgent, verdict, at });
+        state.latestVerdict[invokedReviewAgent] = { verdict, at };
+        state.lastReviewAt = at;
       }
 
       if (agent && REVIEW_AGENTS.has(agent)) {
         const out = textOf(output);
-        if (isPass(out) || isFail(out)) {
-          const verdict = isPass(out) ? "PASS" : "FAIL";
+        if (/Verdict:\s*(PASS|FAIL)\b/i.test(out)) {
+          const failFirst = isFail(out);
+          const passAfter = isPass(out) && !failFirst;
+          if (!failFirst && !passAfter) return;
+          const verdict = passAfter ? "PASS" : "FAIL";
           state.verdicts.push({ agent, verdict, at });
+          state.latestVerdict[agent] = { verdict, at };
           state.lastReviewAt = at;
           if (agent === "goal-final-auditor" || agent === "goal-reviewer" || agent === "goal-prompt-auditor") {
             state.reviewCycles += 1;
           }
-          if (["goal-final-auditor", "goal-reviewer", "goal-prompt-auditor", "goal-diff-reviewer", "goal-verifier"].includes(agent) && verdict === "PASS" && completionAllowed(state)) {
-            state.dirty = false;
-            state.dirtyReasons = [];
-          }
         }
+      }
+
+      if (agent === "goal-final-auditor" && latestVerdictFor(state, agent)?.verdict === "PASS" && completionAllowed(state)) {
+        state.dirty = false;
+        state.dirtyReasons = [];
       }
     },
 

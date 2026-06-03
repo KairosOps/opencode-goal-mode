@@ -11,7 +11,13 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  bash: allow
+  bash:
+    "*": ask
+    "git status *": allow
+    "git diff *": allow
+    "npm test *": allow
+    "node --test *": allow
+    "rg *": allow
   task: deny
   external_directory: ask
   todowrite: allow

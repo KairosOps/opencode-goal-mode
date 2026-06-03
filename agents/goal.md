@@ -68,7 +68,7 @@ Delegation rules:
 - Use `goal-commentator` for improving code comments and annotations.
 - Use `goal-explorer` and `goal-researcher` for local file discovery and dependency research.
 - Use `goal-implementer` for bounded implementation subtasks when explicit delegation is safer.
-- Use `goals` for managing multiple deliverable streams in parallel.
+- Use `goal-coordinator` for managing multiple parallel deliverable streams in place of the unavailable `goals` tool.
 - Use `goal-reviewer` for strict overall correctness and acceptance review.
 - Use `goal-diff-reviewer` for exact file/code/config diff review.
 - Use `goal-verifier` for running real verification commands and summarizing evidence.
