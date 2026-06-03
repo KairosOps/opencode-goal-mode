@@ -5,10 +5,14 @@ import plugin, { __test } from "../plugins/goal-guard.js";
 test("detects destructive bash commands", () => {
   assert.equal(__test.looksLikeDestructiveBash("rm -rf /tmp/x"), true);
   assert.equal(__test.looksLikeDestructiveBash("sudo rm -fr /tmp/x"), true);
+  assert.equal(__test.looksLikeDestructiveBash("rm --recursive --force /tmp/x"), true);
   assert.equal(__test.looksLikeDestructiveBash("git reset --hard"), true);
+  assert.equal(__test.looksLikeDestructiveBash("git push --force"), true);
   assert.equal(__test.looksLikeDestructiveBash("find . -delete"), true);
+  assert.equal(__test.looksLikeDestructiveBash("find . -exec rm -f {} +"), true);
   assert.equal(__test.looksLikeDestructiveBash("dd if=/tmp/x of=/dev/sda"), true);
   assert.equal(__test.looksLikeDestructiveBash("npm test"), false);
+  assert.equal(__test.looksLikeDestructiveBash("ls -la"), false);
 });
 
 test("plugin blocks destructive bash before tool execution", async () => {
@@ -27,6 +31,66 @@ test("write tool marks session dirty", async () => {
   assert.equal(Boolean(state.lastEditAt), true);
 });
 
+test("task tool captures review verdict from subagent", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "task-review-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "task", sessionID, callID: "c", args: { subagent_type: "goal-reviewer", prompt: "Review this." } }, { output: "Verdict: PASS", title: "", metadata: {} });
+  const state = __test.stateFor(sessionID);
+  assert.equal(state.verdicts.some((v) => v.agent === "goal-reviewer" && v.verdict === "PASS"), true);
+});
+
+test("task tool captures review failure from subagent", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "task-review-fail-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "task", sessionID, callID: "c", args: { subagent_type: "goal-final-auditor", prompt: "Audit this." } }, { output: "Verdict: FAIL", title: "", metadata: {} });
+  const state = __test.stateFor(sessionID);
+  assert.equal(state.verdicts.some((v) => v.agent === "goal-final-auditor" && v.verdict === "FAIL"), true);
+});
+
+test("verification command updates lastVerificationAt", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "verify-time-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  const before = new Date().toISOString();
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: "c", args: { command: "npm test" } }, { output: "", title: "", metadata: {} });
+  const state = __test.stateFor(sessionID);
+  assert.equal(state.verificationSeen, true);
+  assert.ok(state.lastVerificationAt >= before);
+});
+
+test("final completion blocks claimed review cycles fewer than recorded", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "cycles-block-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "edit", sessionID, callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+  // separate verification so review timestamps stay after it
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: "v", args: { command: "npm test" } }, { output: "", title: "", metadata: {} });
+
+  for (const agent of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
+    await hooks["chat.params"]({ sessionID, agent }, {});
+    await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: agent, args: { command: "npm test" } }, { output: "Verdict: PASS", title: "", metadata: {} });
+  }
+
+  const output = { text: "Goal Completed\n\nReview cycles: 2" };
+  await hooks["experimental.text.complete"]({ sessionID, messageID: "m", partID: "p" }, output);
+  assert.match(output.text, /Goal Not Completed/);
+  assert.match(output.text, /fewer than recorded/i);
+});
+
+test("final completion blocks missing review cycles entirely", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "zero-cycles-block-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "edit", sessionID, callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: "v", args: { command: "npm test" } }, { output: "", title: "", metadata: {} });
+  const output = { text: "Goal Completed\n\nReview cycles: 0" };
+  await hooks["experimental.text.complete"]({ sessionID, messageID: "m", partID: "p" }, output);
+  assert.match(output.text, /Goal Not Completed/);
+  assert.match(output.text, /no review cycles recorded/i);
+});
+
 test("final completion is rewritten when dirty", async () => {
   const hooks = await plugin({ client: { app: { log: async () => undefined } } });
   await hooks["tool.execute.after"]({ tool: "edit", sessionID: "complete-test", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
@@ -42,7 +106,7 @@ test("final completion is rewritten when required reviews never ran", async () =
   const output = { text: "Goal Completed\n\nReview cycles: 0" };
   await hooks["experimental.text.complete"]({ sessionID: "no-review-test", messageID: "m", partID: "p" }, output);
   assert.match(output.text, /Goal Not Completed/);
-  assert.match(output.text, /goal-prompt-auditor/);
+  assert.match(output.text, /no review cycles recorded/i);
 });
 
 test("completion is allowed only after all required gates pass after edit", async () => {

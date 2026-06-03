@@ -17,6 +17,18 @@ const requiredAgents = [
   "goal-ops-reviewer.md",
   "goal-doc-reviewer.md",
   "goal-final-auditor.md",
+  "goal-deep-researcher.md",
+  "goal-web-researcher.md",
+  "goal-architect.md",
+  "goal-mapper.md",
+  "goal-planner.md",
+  "goal-coordinator.md",
+  "goal-doc-writer.md",
+  "goal-commentator.md",
+  "goal-api-reviewer.md",
+  "goal-data-reviewer.md",
+  "goal-perf-reviewer.md",
+  "goal-quality-gate.md",
 ];
 
 test("all required agents exist", () => {

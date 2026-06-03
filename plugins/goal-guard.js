@@ -1,5 +1,29 @@
 import { createHash } from "node:crypto";
 
+const WRITE_TOOLS = new Set(["edit", "write", "apply_patch"]);
+
+const DEEP_RESEARCH_AGENTS = new Set([
+  "goal-deep-researcher",
+  "goal-web-researcher",
+]);
+
+const REVIEW_AGENTS = new Set([
+  "goal-reviewer",
+  "goal-prompt-auditor",
+  "goal-diff-reviewer",
+  "goal-verifier",
+  "goal-test-reviewer",
+  "goal-security-reviewer",
+  "goal-ux-reviewer",
+  "goal-ops-reviewer",
+  "goal-doc-reviewer",
+  "goal-final-auditor",
+  "goal-api-reviewer",
+  "goal-data-reviewer",
+  "goal-perf-reviewer",
+  "goal-quality-gate",
+]);
+
 const GOAL_AGENTS = new Set([
   "goal",
   "goal-implementer",
@@ -13,22 +37,25 @@ const GOAL_AGENTS = new Set([
   "goal-ops-reviewer",
   "goal-doc-reviewer",
   "goal-final-auditor",
+  "goal-deep-researcher",
+  "goal-web-researcher",
+  "goal-architect",
+  "goal-mapper",
+  "goal-planner",
+  "goal-coordinator",
+  "goal-doc-writer",
+  "goal-commentator",
+  "goal-api-reviewer",
+  "goal-data-reviewer",
+  "goal-perf-reviewer",
+  "goal-quality-gate",
 ]);
 
-const WRITE_TOOLS = new Set(["edit", "write", "apply_patch"]);
-
-const REVIEW_AGENTS = new Set([
-  "goal-reviewer",
-  "goal-prompt-auditor",
-  "goal-diff-reviewer",
-  "goal-verifier",
-  "goal-test-reviewer",
-  "goal-security-reviewer",
-  "goal-ux-reviewer",
-  "goal-ops-reviewer",
-  "goal-doc-reviewer",
-  "goal-final-auditor",
-]);
+function normalizedAgent(input) {
+  if (!input) return undefined;
+  const agent = String(input.agent || input.args?.subagent_type || "").trim();
+  return agent || undefined;
+}
 
 function createState() {
   return {
@@ -38,6 +65,7 @@ function createState() {
     reviewCycles: 0,
     lastReviewAt: null,
     lastEditAt: null,
+    lastVerificationAt: null,
     verdicts: [],
     currentAgent: undefined,
     completedBlocked: 0,
@@ -57,7 +85,11 @@ function nowIso() {
 }
 
 function textOf(output) {
-  return String(output?.output || "");
+  const raw = output?.output || output?.text || output?.message || "";
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object" && raw?.output) return String(raw.output);
+  if (typeof raw === "object" && raw?.text) return String(raw.text);
+  return JSON.stringify(raw || "");
 }
 
 function isPass(text) {
@@ -72,13 +104,19 @@ function looksLikeDestructiveBash(command) {
   const normalized = String(command || "").trim();
   return [
     /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+-[a-zA-Z]*[rf][a-zA-Z]*[rf]?\b/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+(--recursive|--force|--recursive\s+--force|-rf|-fr)\b/,
     /(^|&&|;|\|\|)\s*git\s+reset\b/,
     /(^|&&|;|\|\|)\s*git\s+clean\b/,
-    /(^|&&|;|\|\|)\s*git\s+checkout\s+--\b/,
-    /(^|&&|;|\|\|)\s*git\s+push\b/,
+    /(^|&&|;|\|\|)\s*git\s+checkout\s+--?\b/,
+    /(^|&&|;|\|\|)\s*git\s+push\s+--force\b/,
+    /(^|&&|;|\|\|)\s*git\s+push\s+-f\b/,
     /(^|&&|;|\|\|)\s*(sudo\s+)?find\b.*\s-delete\b/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?find\b.*\s-exec\s+rm\b/,
     /(^|&&|;|\|\|)\s*(sudo\s+)?dd\b.*\bof=\/dev\//,
     /(^|&&|;|\|\|)\s*(sudo\s+)?mkfs(\.|\s|$)/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?shred\b/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?truncate\b/,
+    /(^|&&|;|\|\|)\s*(sudo\s+)?chmod\s+-[a-zA-Z]*[rR][a-zA-Z]*[wW][a-zA-Z]*[xX][a-zA-Z]*\s+\/\b/,
   ].some((pattern) => pattern.test(normalized));
 }
 
@@ -91,7 +129,7 @@ function verdictAfter(state, agent, since) {
 }
 
 function requiredGates(state) {
-  const since = state.lastEditAt;
+  const since = [state.lastEditAt, state.lastVerificationAt].filter(Boolean).sort().at(-1);
   const gates = ["goal-prompt-auditor", "goal-reviewer", "goal-verifier", "goal-final-auditor"];
   if (state.lastEditAt) gates.splice(2, 0, "goal-diff-reviewer");
   return { since, gates };
@@ -139,6 +177,7 @@ export async function GoalGuardPlugin({ client }) {
     async "tool.execute.after"(input, output) {
       const state = stateFor(input.sessionID);
       const agent = state.currentAgent;
+      const invokedReviewAgent = normalizedAgent(input);
       const at = nowIso();
 
       if (agent && GOAL_AGENTS.has(agent)) state.active = true;
@@ -153,7 +192,24 @@ export async function GoalGuardPlugin({ client }) {
         const command = String(input.args?.command || "");
         if (/\b(npm|pnpm|bun|yarn|node)\s+(test|run|--test)\b|\bpytest\b|\bcargo\s+test\b|\bgo\s+test\b/.test(command)) {
           state.verificationSeen = true;
+          state.lastVerificationAt = at;
           state.dirtyReasons.push(`verification command fingerprint:${commandFingerprint(command)}`);
+        }
+      }
+
+      if (input.tool === "task" && REVIEW_AGENTS.has(invokedReviewAgent)) {
+        const out = textOf(output);
+        if (isPass(out) || isFail(out)) {
+          const verdict = isPass(out) ? "PASS" : "FAIL";
+          state.verdicts.push({ agent: invokedReviewAgent, verdict, at });
+          state.lastReviewAt = at;
+          if (["goal-final-auditor", "goal-reviewer", "goal-prompt-auditor"].includes(invokedReviewAgent)) {
+            state.reviewCycles += 1;
+          }
+          if (verdict === "PASS" && invokedReviewAgent === "goal-final-auditor" && completionAllowed(state)) {
+            state.dirty = false;
+            state.dirtyReasons = [];
+          }
         }
       }
 
@@ -166,7 +222,7 @@ export async function GoalGuardPlugin({ client }) {
           if (agent === "goal-final-auditor" || agent === "goal-reviewer" || agent === "goal-prompt-auditor") {
             state.reviewCycles += 1;
           }
-          if (verdict === "PASS" && agent === "goal-final-auditor" && completionAllowed(state)) {
+          if (["goal-final-auditor", "goal-reviewer", "goal-prompt-auditor", "goal-diff-reviewer", "goal-verifier"].includes(agent) && verdict === "PASS" && completionAllowed(state)) {
             state.dirty = false;
             state.dirtyReasons = [];
           }
@@ -181,9 +237,21 @@ export async function GoalGuardPlugin({ client }) {
 
     async "experimental.text.complete"(input, output) {
       const state = stateFor(input.sessionID);
-      if (/Goal Completed/i.test(output.text || "") && !completionAllowed(state)) {
+      const text = output.text || "";
+      const completedMatch = text.match(/Review cycles:\s*(\d+)/i);
+      const claimedCycles = completedMatch ? parseInt(completedMatch[1], 10) : -1;
+
+      if (/Goal Completed/i.test(text) && claimedCycles < state.reviewCycles) {
         state.completedBlocked += 1;
-        output.text = output.text.replace(/Goal Completed/i, "Goal Not Completed");
+        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
+        output.text += `\n\nGoal Guard blocked completion: claimed review cycles (${claimedCycles}) are fewer than recorded (${state.reviewCycles}). State: ${summarizeState(state)}`;
+      } else if (/Goal Completed/i.test(text) && claimedCycles === 0 && state.reviewCycles === 0) {
+        state.completedBlocked += 1;
+        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
+        output.text += `\n\nGoal Guard blocked completion: no review cycles recorded. State: ${summarizeState(state)}`;
+      } else if (/Goal Completed/i.test(text) && !completionAllowed(state)) {
+        state.completedBlocked += 1;
+        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
         output.text += `\n\nGoal Guard blocked completion: required review gates are missing or stale (${missingGates(state).join(", ") || "goal session not active"}). State: ${summarizeState(state)}`;
       }
     },
