@@ -3,14 +3,36 @@
   "version": "0.1.0",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
-  "private": true,
+  "engines": {
+    "node": ">=20.11"
+  },
+  "packageManager": "npm@10",
+  "bin": {
+    "opencode-goal-mode-install": "scripts/install.mjs"
+  },
+  "files": [
+    "agents/",
+    "commands/",
+    "docs/",
+    "plugins/",
+    "scripts/",
+    "tests/",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test",
     "test:agents": "node tests/agents.test.mjs",
     "test:commands": "node tests/commands.test.mjs",
     "test:plugin": "node tests/plugin.test.mjs",
     "test:install": "node tests/install.test.mjs",
-    "validate": "npm test && node scripts/validate-opencode-config.mjs",
+    "pack:check": "npm pack --dry-run",
+    "audit": "npm audit --audit-level=moderate",
+    "publish:check": "node scripts/check-npm-publish-ready.mjs",
+    "validate": "npm test && node scripts/validate-opencode-config.mjs && npm run publish:check -- --skip-registry && npm run pack:check",
+    "ci": "npm run validate && npm run audit",
+    "prepublishOnly": "npm run ci && npm run publish:check",
+    "install:local": "node scripts/install.mjs",
     "install:global": "node scripts/install.mjs --global"
   },
   "keywords": [
@@ -20,7 +42,19 @@
     "review",
     "plugin"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devinoldenburg/opencode-goal-mode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/devinoldenburg/opencode-goal-mode/issues"
+  },
+  "homepage": "https://github.com/devinoldenburg/opencode-goal-mode#readme",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "devDependencies": {
     "@opencode-ai/plugin": "1.15.13"
   }

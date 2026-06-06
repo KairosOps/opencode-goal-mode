@@ -2,15 +2,16 @@ import { createHash } from "node:crypto";
 
 const WRITE_TOOLS = new Set(["edit", "write", "apply_patch"]);
 
-const MUTATING_BASH_RE = new RegExp(
-  [
-    "\\b(rm|mv|cp|cat|tee|perl|python|node)\\b",
-    "\\b(tee|python3?|node\\s+-e|perl\\s+-pi)\\b",
-    "(^|&&|;|\\|\\|)\\s*[^|>]*[|>]",
-    "\\b(formatter|format|prettier|eslint)\\b",
-  ].join("|"),
-  "i"
-);
+const MUTATING_BASH_PATTERNS = [
+  /(^|&&|;|\|\|)\s*(sudo\s+)?(rm|mv|cp|mkdir|rmdir|touch|ln)\b/i,
+  /(^|&&|;|\|\|)\s*(sudo\s+)?(tee|xargs\s+(rm|mv|cp))\b/i,
+  /(^|&&|;|\|\|)\s*[^|]*\s(>|>>)\s*(?!\/dev\/null\b)\S+/i,
+  /(^|&&|;|\|\|)\s*(perl\s+-pi|sed\s+-i)\b/i,
+  /(^|&&|;|\|\|)\s*(npm|pnpm|yarn|bun)\s+(install|ci|add|remove|update)\b/i,
+  /(^|&&|;|\|\|)\s*(npm|pnpm|yarn|bun)\s+(run\s+)?(format|fix|lint:fix)\b/i,
+  /\b((npx|pnpm\s+exec|yarn)\s+)?(prettier|eslint)\b.*\s(--write|--fix)\b/i,
+  /\b(node|python3?)\b.*\b(writeFile|appendFile|copyFile|rename|unlink|rmSync|mkdir|rmdir|openSync)\b/i,
+];
 
 const REVIEW_AGENTS = new Set([
   "goal-reviewer",
@@ -84,7 +85,7 @@ const sessions = new Map();
 const MAX_SESSIONS = 200;
 
 function evictOldestSession() {
-  if (sessions.size <= MAX_SESSIONS) return;
+  if (sessions.size < MAX_SESSIONS) return;
   let oldestKey = null;
   let oldestTime = Infinity;
   for (const [key, state] of sessions) {
@@ -98,11 +99,12 @@ function evictOldestSession() {
 }
 
 function stateFor(sessionID) {
-  if (!sessions.has(sessionID)) {
-    evictOldestSession();
-    sessions.set(sessionID, createState());
+  const key = String(sessionID || "default").trim() || "default";
+  if (!sessions.has(key)) {
+    while (sessions.size >= MAX_SESSIONS) evictOldestSession();
+    sessions.set(key, createState());
   }
-  return sessions.get(sessionID);
+  return sessions.get(key);
 }
 
 function nowIso() {
@@ -153,7 +155,6 @@ function isVerification(command) {
     /\bmake\s+test\b/,
     /\bmake\s+check\b/,
     /\bmake\s+validate\b/,
-    /\btest\b/,
   ].some((pattern) => pattern.test(normalized));
 }
 
@@ -178,6 +179,13 @@ function looksLikeDestructiveBash(command) {
   ].some((pattern) => pattern.test(normalized));
 }
 
+function looksLikeMutatingBash(command) {
+  const normalized = String(command || "").trim();
+  if (!normalized) return false;
+  if (looksLikeDestructiveBash(normalized)) return true;
+  return MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function commandFingerprint(command) {
   return createHash("sha256").update(String(command || "")).digest("hex").slice(0, 12);
 }
@@ -186,6 +194,15 @@ function latestVerdictFor(state, agent) {
   const entries = state.verdicts.filter((entry) => entry.agent === agent);
   if (!entries.length) return null;
   return entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))[0];
+}
+
+function recordReviewVerdict(state, agent, verdict, at) {
+  state.verdicts.push({ agent, verdict, at });
+  state.latestVerdict[agent] = { verdict, at };
+  state.lastReviewAt = at;
+  if (agent === "goal-final-auditor") {
+    state.reviewCycles += 1;
+  }
 }
 
 function verdictAfter(state, agent, since) {
@@ -270,9 +287,10 @@ export async function GoalGuardPlugin({ client }) {
 
     async "tool.execute.before"(input, output) {
       const state = stateFor(input.sessionID);
-      if (input.tool === "bash" && looksLikeDestructiveBash(output?.args?.command)) {
+      const command = output?.args?.command || input?.args?.command;
+      if (input.tool === "bash" && looksLikeDestructiveBash(command)) {
         state.active = true;
-        state.dirtyReasons.push(`blocked risky bash fingerprint:${commandFingerprint(output.args.command)}`);
+        state.dirtyReasons.push(`blocked risky bash fingerprint:${commandFingerprint(command)}`);
         throw new Error(
           "Goal Guard blocked a destructive or high-risk bash command. Ask the user or use a safer command."
         );
@@ -289,6 +307,7 @@ export async function GoalGuardPlugin({ client }) {
       const agent = state.currentAgent;
       const invokedReviewAgent = normalizedAgent(input);
       const at = nowIso();
+      let recordedReviewAgent = null;
 
       if (agent && GOAL_AGENTS.has(agent)) state.active = true;
 
@@ -305,7 +324,7 @@ export async function GoalGuardPlugin({ client }) {
           state.verificationSeen = true;
           state.lastVerificationAt = at;
         }
-        if (!looksLikeDestructiveBash(command) && MUTATING_BASH_RE.test(command) && !isReviewing) {
+        if (!looksLikeDestructiveBash(command) && looksLikeMutatingBash(command) && !isReviewing) {
           state.dirty = true;
           state.lastEditAt = at;
           state.dirtyReasons.push(`bash mutation fingerprint:${commandFingerprint(command)}`);
@@ -318,9 +337,8 @@ export async function GoalGuardPlugin({ client }) {
         const passAfter = isPass(out) && !failFirst;
         if (!failFirst && !passAfter) return;
         const verdict = passAfter ? "PASS" : "FAIL";
-        state.verdicts.push({ agent: invokedReviewAgent, verdict, at });
-        state.latestVerdict[invokedReviewAgent] = { verdict, at };
-        state.lastReviewAt = at;
+        recordReviewVerdict(state, invokedReviewAgent, verdict, at);
+        recordedReviewAgent = invokedReviewAgent;
       }
 
       if (agent && REVIEW_AGENTS.has(agent)) {
@@ -330,16 +348,16 @@ export async function GoalGuardPlugin({ client }) {
           const passAfter = isPass(out) && !failFirst;
           if (!failFirst && !passAfter) return;
           const verdict = passAfter ? "PASS" : "FAIL";
-          state.verdicts.push({ agent, verdict, at });
-          state.latestVerdict[agent] = { verdict, at };
-          state.lastReviewAt = at;
-          if (agent === "goal-final-auditor" || agent === "goal-reviewer" || agent === "goal-prompt-auditor") {
-            state.reviewCycles += 1;
-          }
+          recordReviewVerdict(state, agent, verdict, at);
+          recordedReviewAgent = agent;
         }
       }
 
-      if (agent === "goal-final-auditor" && latestVerdictFor(state, agent)?.verdict === "PASS" && completionAllowed(state)) {
+      if (
+        recordedReviewAgent === "goal-final-auditor" &&
+        latestVerdictFor(state, recordedReviewAgent)?.verdict === "PASS" &&
+        completionAllowed(state)
+      ) {
         state.dirty = false;
         state.dirtyReasons = [];
       }
@@ -353,18 +371,25 @@ export async function GoalGuardPlugin({ client }) {
     async "experimental.text.complete"(input, output) {
       const state = stateFor(input.sessionID);
       const text = output.text || "";
+      const claimsCompletion = /Goal Completed/i.test(text);
       const completedMatch = text.match(/Review cycles:\s*(\d+)/i);
       const claimedCycles = completedMatch ? parseInt(completedMatch[1], 10) : -1;
 
-      if (/Goal Completed/i.test(text) && claimedCycles < state.reviewCycles) {
+      if (!claimsCompletion) return;
+
+      if (claimedCycles < 0) {
         state.completedBlocked += 1;
         output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
-        output.text += `\n\nGoal Guard blocked completion: claimed review cycles (${claimedCycles}) are fewer than recorded (${state.reviewCycles}). State: ${summarizeState(state)}`;
-      } else if (/Goal Completed/i.test(text) && claimedCycles === 0 && state.reviewCycles === 0) {
+        output.text += `\n\nGoal Guard blocked completion: missing required Review cycles line. State: ${summarizeState(state)}`;
+      } else if (state.reviewCycles === 0) {
         state.completedBlocked += 1;
         output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
         output.text += `\n\nGoal Guard blocked completion: no review cycles recorded. State: ${summarizeState(state)}`;
-      } else if (/Goal Completed/i.test(text) && !completionAllowed(state)) {
+      } else if (claimedCycles !== state.reviewCycles) {
+        state.completedBlocked += 1;
+        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
+        output.text += `\n\nGoal Guard blocked completion: claimed review cycles (${claimedCycles}) do not match recorded review cycles (${state.reviewCycles}). State: ${summarizeState(state)}`;
+      } else if (!completionAllowed(state)) {
         state.completedBlocked += 1;
         output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
         output.text += `\n\nGoal Guard blocked completion: required review gates are missing or stale (${missingGates(state).join(", ") || "goal session not active"}). State: ${summarizeState(state)}`;
@@ -390,4 +415,12 @@ export async function GoalGuardPlugin({ client }) {
 }
 
 export default GoalGuardPlugin;
-export const __test = { createState, stateFor, sessions, looksLikeDestructiveBash, summarizeState };
+export const __test = {
+  createState,
+  stateFor,
+  sessions,
+  looksLikeDestructiveBash,
+  looksLikeMutatingBash,
+  isVerification,
+  summarizeState,
+};

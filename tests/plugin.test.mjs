@@ -15,6 +15,28 @@ test("detects destructive bash commands", () => {
   assert.equal(__test.looksLikeDestructiveBash("ls -la"), false);
 });
 
+test("distinguishes read-only and mutating bash commands", () => {
+  assert.equal(__test.looksLikeMutatingBash("cat README.md"), false);
+  assert.equal(__test.looksLikeMutatingBash("rg goal agents"), false);
+  assert.equal(__test.looksLikeMutatingBash("node -e \"console.log('ok')\""), false);
+  assert.equal(__test.looksLikeMutatingBash("cat README.md > /tmp/goal-output.txt"), true);
+  assert.equal(__test.looksLikeMutatingBash("npm install"), true);
+  assert.equal(__test.looksLikeMutatingBash("npx prettier --write README.md"), true);
+});
+
+test("detects verification commands without generic test false positives", () => {
+  assert.equal(__test.isVerification("npm test"), true);
+  assert.equal(__test.isVerification("npm run validate"), true);
+  assert.equal(__test.isVerification("rg test README.md"), false);
+  assert.equal(__test.isVerification("node tests/plugin.test.mjs"), false);
+});
+
+test("state cache evicts at the configured session limit", () => {
+  __test.sessions.clear();
+  for (let i = 0; i < 205; i += 1) __test.stateFor(`session-${i}`);
+  assert.equal(__test.sessions.size, 200);
+});
+
 test("plugin blocks destructive bash before tool execution", async () => {
   const hooks = await plugin({ client: { app: { log: async () => undefined } } });
   await assert.rejects(
@@ -27,6 +49,26 @@ test("write tool marks session dirty", async () => {
   const hooks = await plugin({ client: { app: { log: async () => undefined } } });
   await hooks["tool.execute.after"]({ tool: "edit", sessionID: "dirty-test", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
   const state = __test.stateFor("dirty-test");
+  assert.equal(state.dirty, true);
+  assert.equal(Boolean(state.lastEditAt), true);
+});
+
+test("read-only bash does not mark session dirty", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "read-only-bash-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: "c", args: { command: "cat README.md" } }, { output: "", title: "", metadata: {} });
+  const state = __test.stateFor(sessionID);
+  assert.equal(state.dirty, false);
+  assert.equal(state.lastEditAt, null);
+});
+
+test("mutating bash marks session dirty", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "mutating-bash-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: "c", args: { command: "cat README.md > /tmp/goal-output.txt" } }, { output: "", title: "", metadata: {} });
+  const state = __test.stateFor(sessionID);
   assert.equal(state.dirty, true);
   assert.equal(Boolean(state.lastEditAt), true);
 });
@@ -60,7 +102,16 @@ test("verification command updates lastVerificationAt", async () => {
   assert.ok(state.lastVerificationAt >= before);
 });
 
-test("final completion blocks claimed review cycles fewer than recorded", async () => {
+test("task-based final auditor records one review cycle", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  const sessionID = "task-final-cycle-test";
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "task", sessionID, callID: "c", args: { subagent_type: "goal-final-auditor", prompt: "Audit this." } }, { output: "Verdict: PASS", title: "", metadata: {} });
+  const state = __test.stateFor(sessionID);
+  assert.equal(state.reviewCycles, 1);
+});
+
+test("final completion blocks claimed review cycles that do not match recorded", async () => {
   const hooks = await plugin({ client: { app: { log: async () => undefined } } });
   const sessionID = "cycles-block-test";
   await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
@@ -76,7 +127,7 @@ test("final completion blocks claimed review cycles fewer than recorded", async 
   const output = { text: "Goal Completed\n\nReview cycles: 2" };
   await hooks["experimental.text.complete"]({ sessionID, messageID: "m", partID: "p" }, output);
   assert.match(output.text, /Goal Not Completed/);
-  assert.match(output.text, /fewer than recorded/i);
+  assert.match(output.text, /do not match recorded/i);
 });
 
 test("final completion blocks missing review cycles entirely", async () => {
@@ -89,6 +140,15 @@ test("final completion blocks missing review cycles entirely", async () => {
   await hooks["experimental.text.complete"]({ sessionID, messageID: "m", partID: "p" }, output);
   assert.match(output.text, /Goal Not Completed/);
   assert.match(output.text, /no review cycles recorded/i);
+});
+
+test("final completion blocks missing review cycles line", async () => {
+  const hooks = await plugin({ client: { app: { log: async () => undefined } } });
+  await hooks["chat.params"]({ sessionID: "missing-cycle-line-test", agent: "goal" }, {});
+  const output = { text: "Goal Completed\n\nDone." };
+  await hooks["experimental.text.complete"]({ sessionID: "missing-cycle-line-test", messageID: "m", partID: "p" }, output);
+  assert.match(output.text, /Goal Not Completed/);
+  assert.match(output.text, /missing required Review cycles line/i);
 });
 
 test("final completion is rewritten when dirty", async () => {
@@ -120,7 +180,7 @@ test("completion is allowed only after all required gates pass after edit", asyn
     await hooks["tool.execute.after"]({ tool: "bash", sessionID, callID: agent, args: { command: "npm test" } }, { output: "Verdict: PASS", title: "", metadata: {} });
   }
 
-  const output = { text: "Goal Completed\n\nReview cycles: 5" };
+  const output = { text: "Goal Completed\n\nReview cycles: 1" };
   await hooks["experimental.text.complete"]({ sessionID, messageID: "m", partID: "p" }, output);
   assert.match(output.text, /Goal Completed/);
   assert.doesNotMatch(output.text, /Goal Not Completed/);
