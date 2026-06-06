@@ -67,9 +67,27 @@ opencode-goal-mode-install --global
 
 Publishing is handled by `.github/workflows/publish.yml`.
 
-Required repository secret:
+First publish:
 
-- `NPM_TOKEN`: an npm automation token with publish rights for `opencode-goal-mode`.
+```bash
+npm publish --access public --otp <2fa-code>
+```
+
+npm requires 2FA proof or a granular access token with bypass 2FA enabled for creating and publishing packages. After the package exists on npm, configure Trusted Publishing for tokenless releases:
+
+- Provider: GitHub Actions
+- Organization/user: `devinoldenburg`
+- Repository: `opencode-goal-mode`
+- Workflow filename: `publish.yml`
+- Allowed action: `npm publish`
+
+The workflow already has `id-token: write`, runs on Node 24, uses npm 11, and publishes with:
+
+```bash
+npm publish --access public
+```
+
+If you prefer token-based publishing instead of Trusted Publishing, add a repository secret named `NPM_TOKEN` with a granular npm token that has publish rights and bypass 2FA enabled.
 
 Release flow:
 
@@ -78,11 +96,7 @@ npm version patch
 git push --follow-tags
 ```
 
-Create a GitHub Release from the pushed tag, for example `v0.1.1`. The publish workflow validates the package, checks that the tag matches `package.json`, verifies that the version is not already on npm, then runs:
-
-```bash
-npm publish --access public --provenance
-```
+Create a GitHub Release from the pushed tag, for example `v0.1.1`. The publish workflow validates the package, checks that the tag matches `package.json`, verifies that the version is not already on npm, then publishes to npm.
 
 Manual workflow dispatch defaults to `npm publish --dry-run`.
 
