@@ -5,7 +5,59 @@ review subagents, slash commands, and a `goal-guard` plugin that enforces review
 discipline, blocks destructive shell commands, and preserves goal state across
 compaction **and** restarts.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the design.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and [research/](research/)
+for the platform reference, comparison, and threat model.
+
+## Why it's different
+
+Most "goal mode" / agentic setups are **prompt-only**: the model is *asked* to
+review its work and to keep going until done. Goal Mode adds a guard plugin that
+makes that discipline **mechanical at the harness layer** — the model cannot
+declare `Goal Completed` until the required reviews actually passed, and it
+cannot run a destructive command that a regex guard would miss.
+
+![Mechanically-enforced goal discipline vs. Claude Code and Codex](docs/benchmarks/capability-matrix.svg)
+
+Compared to Claude Code and OpenAI Codex (full analysis, with citations and
+honest caveats, in [research/goal-mode-comparison.md](research/goal-mode-comparison.md)):
+
+- **It is the only one of the three that mechanically blocks a premature
+  completion claim by default.** Goal Mode intercepts the finished message and
+  rewrites `Goal Completed` → `Goal Not Completed` unless every required reviewer
+  gate has a *fresh* PASS and the claimed `Review cycles: N` matches the recorded
+  counter. Claude Code can do this only via a user-authored Stop hook; Codex's
+  code review is advisory.
+- **An edit automatically invalidates prior approvals.** A reviewer gate counts
+  only when its PASS is newer (by a monotonic integer sequence) than the last
+  edit — so any change forces the relevant reviews to re-run. Neither Claude Code
+  nor Codex ships this stale-review invariant.
+- **Required specialist reviews are auto-selected and enforced** (security, api,
+  data, performance …) from the goal text, contract, and changed files — not left
+  to the model's discretion.
+- **Destructive commands are blocked by a real shell tokenizer**, not a regex.
+  Claude Code's own docs call Bash argument-matching *"fragile"*.
+
+### Benchmark: shell-guard accuracy
+
+The guard replaced a boundary-anchored regex classifier. On a labeled corpus of
+71 real commands (`npm run bench`, reproducible — see
+[research/benchmarks.md](research/benchmarks.md)):
+
+![Destructive-command detection rate by family](docs/benchmarks/detection-by-family.svg)
+
+![Overall guard accuracy: detection rate vs false-positive rate](docs/benchmarks/overall-scorecard.svg)
+
+| | Legacy regex guard | Goal Mode analyzer |
+| --- | --- | --- |
+| Destructive-command detection | **20.8%** | **100%** |
+| False positives on safe commands | **21.7%** | **0%** |
+| Obfuscated bypasses caught (`$(…)`, `bash -c`, `sudo -u`, interpreters) | 0% | 100% |
+| Remote exec (`curl \| sh`) caught | 0% | 100% |
+
+The deeper analysis costs ~0.6 µs more per command (~500,000 classifications/
+second) — negligible for a per-tool-call guard:
+
+![Per-command analysis latency](docs/benchmarks/latency.svg)
 
 ## Requirements
 
