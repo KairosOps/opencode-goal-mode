@@ -292,6 +292,7 @@ test("compaction preserves concrete live state values", async () => {
   assert.match(joined, /Goal Guard state/);
   assert.match(joined, /reviewCycles=1/);
   assert.match(joined, /Review Ledger/);
+  assert.match(joined, /Reviewer Memory/);
   void store;
 });
 
@@ -302,7 +303,7 @@ test("compaction preserves concrete live state values", async () => {
 test("default export registers the goal_* tools", async () => {
   const hooks = await plugin({ client: { app: { log: async () => undefined } } });
   assert.ok(hooks.tool);
-  for (const name of ["goal_status", "goal_evidence_map", "goal_contract", "goal_evidence", "goal_reset"]) {
+  for (const name of ["goal_status", "goal_evidence_map", "goal_reviewer_memory", "goal_contract", "goal_evidence", "goal_reset"]) {
     assert.equal(typeof hooks.tool[name].execute, "function", `${name} missing`);
   }
 });
@@ -330,6 +331,29 @@ test("goal_status returns structured status", async () => {
   let report = JSON.parse(res.output);
   assert.equal(report.active, true);
   assert.ok(Array.isArray(report.requiredGates));
+  assert.equal(report.reviewerMemory.open.length, 0);
+});
+
+test("goal_reviewer_memory exposes unresolved and resolved findings", async () => {
+  const guard = makeGuard();
+  const { createGoalTools } = await import("../plugins/goal-guard/tools.js");
+  const tools = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
+  await guard.hooks["chat.params"]({ sessionID: "mem", agent: "goal" }, {});
+  await guard.hooks["tool.execute.after"](
+    { tool: "task", sessionID: "mem", callID: "r1", args: { subagent_type: "goal-reviewer" } },
+    { output: "Blocking findings\n- Missing retry test\nVerdict: FAIL", title: "", metadata: {} },
+  );
+  let report = JSON.parse((await tools.goal_reviewer_memory.execute({}, { sessionID: "mem" })).output);
+  assert.equal(report.open.length, 1);
+  assert.match(report.open[0].finding, /Missing retry test|Blocking findings/);
+
+  await guard.hooks["tool.execute.after"](
+    { tool: "task", sessionID: "mem", callID: "r2", args: { subagent_type: "goal-reviewer" } },
+    { output: "Verdict: PASS", title: "", metadata: {} },
+  );
+  report = JSON.parse((await tools.goal_reviewer_memory.execute({}, { sessionID: "mem" })).output);
+  assert.equal(report.open.length, 0);
+  assert.equal(report.resolved.length, 1);
 });
 
 test("goal_evidence_map maps criteria to evidence and reviewer status", async () => {

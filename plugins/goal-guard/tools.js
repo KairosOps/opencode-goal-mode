@@ -12,7 +12,7 @@
  */
 
 import { tool } from "@opencode-ai/plugin";
-import { evidenceMapReport, statusReport } from "./summary.js";
+import { evidenceMapReport, reviewerMemoryReport, statusReport } from "./summary.js";
 import { recordEvidence } from "./events.js";
 import { refreshStickyGates } from "./gates.js";
 import { createState } from "./state.js";
@@ -60,6 +60,22 @@ export function createGoalTools({ store, config, persist }) {
           title: `Evidence map: ${covered}/${report.criteria.length} criteria covered`,
           output: JSON.stringify(report, null, 2),
           metadata: { criteriaCount: report.criteria.length, coveredCount: covered, missingGates: report.missingGates },
+        };
+      },
+    }),
+
+    goal_reviewer_memory: tool({
+      description:
+        "Return durable Reviewer Memory for this session: unresolved and recently resolved " +
+        "reviewer findings carried across cycles. Read-only.",
+      args: {},
+      async execute(_args, ctx) {
+        const state = store.stateFor(ctx.sessionID);
+        const report = reviewerMemoryReport(state);
+        return {
+          title: `Reviewer Memory: ${report.open.length} open findings`,
+          output: JSON.stringify(report, null, 2),
+          metadata: { openCount: report.open.length, total: report.total },
         };
       },
     }),

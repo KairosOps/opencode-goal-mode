@@ -36,6 +36,7 @@ export function createState(nowIso) {
     lastReviewAt: null,
     lastVerificationAt: null,
     verdicts: [],
+    reviewerMemory: [],
     evidence: [],
     latestVerdict: {},
     currentAgent: undefined,
@@ -59,7 +60,7 @@ function reviveState(raw) {
     if (raw[field] !== undefined) base[field] = raw[field];
   }
   // Defensive normalisation of array/object shapes.
-  for (const arrField of ["dirtyReasons", "changedFiles", "verdicts", "evidence", "completionRejections"]) {
+  for (const arrField of ["dirtyReasons", "changedFiles", "verdicts", "reviewerMemory", "evidence", "completionRejections"]) {
     if (!Array.isArray(base[arrField])) base[arrField] = [];
   }
   if (!base.latestVerdict || typeof base.latestVerdict !== "object") base.latestVerdict = {};

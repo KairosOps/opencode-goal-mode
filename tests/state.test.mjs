@@ -8,6 +8,7 @@ test("createState produces a well-formed record", () => {
   assert.equal(st.dirty, false);
   assert.equal(st.reviewCycles, 0);
   assert.deepEqual(st.verdicts, []);
+  assert.deepEqual(st.reviewerMemory, []);
   assert.deepEqual(st.latestVerdict, {});
   assert.equal(st.lastEditSeq, 0);
 });
@@ -98,12 +99,13 @@ test("restore drops unknown fields and repairs array shapes", () => {
   store.restore({
     version: 1,
     seq: 10,
-    sessions: [["s1", { dirty: true, bogus: 42, verdicts: "not-an-array", latestVerdict: null }]],
+    sessions: [["s1", { dirty: true, bogus: 42, verdicts: "not-an-array", reviewerMemory: "nope", latestVerdict: null }]],
   });
   const st = store.stateFor("s1");
   assert.equal(st.dirty, true);
   assert.equal(st.bogus, undefined);
   assert.deepEqual(st.verdicts, []);
+  assert.deepEqual(st.reviewerMemory, []);
   assert.deepEqual(st.latestVerdict, {});
 });
 

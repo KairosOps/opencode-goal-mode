@@ -183,16 +183,18 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (tool === "task") {
           const sub = normalizedSubagent(inp);
           if (isReviewAgent(sub)) {
-            const verdict = parseVerdict(textOf(out));
+            const text = textOf(out);
+            const verdict = parseVerdict(text);
             if (verdict) {
-              recordVerdict(store, state, sub, verdict);
+              recordVerdict(store, state, sub, verdict, text);
               recordedAgent = sub;
             }
           }
         } else if (isReviewAgent(state.currentAgent)) {
-          const verdict = parseVerdict(textOf(out));
+          const text = textOf(out);
+          const verdict = parseVerdict(text);
           if (verdict) {
-            recordVerdict(store, state, state.currentAgent, verdict);
+            recordVerdict(store, state, state.currentAgent, verdict, text);
             recordedAgent = state.currentAgent;
           }
         }
@@ -231,7 +233,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         const state = store.stateFor(inp.sessionID);
         out.context.push(
           `Goal Guard state: ${summarizeState(state, config)}. Preserve Goal Contract, Verification Ledger, ` +
-            `Review Ledger, review cycle count, dirty state, and open findings across compaction.`,
+            `Review Ledger, Reviewer Memory, review cycle count, dirty state, and open findings across compaction.`,
         );
       } catch {
         /* ignore */

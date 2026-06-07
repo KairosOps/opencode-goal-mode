@@ -18,9 +18,30 @@ export function summarizeState(state, config) {
     `lastEditSeq=${state.lastEditSeq || 0}`,
     `lastReviewSeq=${state.lastReviewSeq || 0}`,
     `recentVerdicts=${verdictSummary}`,
+    `openReviewerMemory=${reviewerMemoryReport(state).open.length}`,
     `missingGates=${missingGates(state, config).join(" ") || "none"}`,
     `dirtyReasons=${state.dirtyReasons.slice(-5).join(" | ") || "none"}`,
   ].join("; ");
+}
+
+export function reviewerMemoryReport(state) {
+  const memory = Array.isArray(state.reviewerMemory) ? state.reviewerMemory : [];
+  const shape = (item) => ({
+    agent: item.agent,
+    finding: item.finding,
+    severity: item.severity || "blocking",
+    status: item.status || "open",
+    count: item.count || 1,
+    firstAt: item.firstAt || null,
+    lastAt: item.lastAt || null,
+    resolvedAt: item.resolvedAt || null,
+    fresh: Number(item.lastSeq || 0) > Number(state.lastEditSeq || 0),
+  });
+  return {
+    open: memory.filter((item) => (item.status || "open") === "open").slice(-20).map(shape),
+    resolved: memory.filter((item) => item.status === "resolved").slice(-20).map(shape),
+    total: memory.length,
+  };
 }
 
 /** Structured status object for the goal_status tool / diagnostics. */
@@ -39,6 +60,7 @@ export function statusReport(state, config) {
     lastReviewAt: state.lastReviewAt,
     lastVerificationAt: state.lastVerificationAt,
     evidenceCount: state.evidence.length,
+    reviewerMemory: reviewerMemoryReport(state),
     changedFiles: state.changedFiles.slice(-50),
     contract: state.contract,
     completionAllowed: Boolean(state.active) && missing.length === 0,
@@ -80,6 +102,7 @@ export function evidenceMapReport(state, config) {
   const items = criteria.map((criterion) => {
     const entries = state.evidence.filter((entry) => evidenceMatchesCriterion(entry, criterion));
     const status = criterionStatus(entries, state, missing);
+    const memory = reviewerMemoryReport(state).open.filter((item) => item.finding.toLowerCase().includes(String(criterion).trim().toLowerCase()));
     return {
       criterion,
       status,
@@ -91,6 +114,7 @@ export function evidenceMapReport(state, config) {
         fresh: evidenceFresh(entry, state),
       })),
       reviewers,
+      reviewerMemory: memory,
       gap:
         status === "missing"
           ? "No recorded evidence references this acceptance criterion."

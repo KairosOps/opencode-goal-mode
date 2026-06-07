@@ -33,6 +33,9 @@ export function buildSystemInjection(state, config) {
   lines.push(`- Verification observed: ${r.verificationSeen ? "yes" : "no"}.`);
   lines.push(`- Required review gates: ${bullet(r.requiredGates)}.`);
   lines.push(`- Gates still missing or stale: ${bullet(r.missingGates)}.`);
+  if (r.reviewerMemory.open.length) {
+    lines.push(`- Open Reviewer Memory: ${r.reviewerMemory.open.map((m) => `${m.agent}: ${m.finding}`).join(" | ")}.`);
+  }
   lines.push(
     `- Completion is currently ${r.completionAllowed ? "ALLOWED" : "BLOCKED"}. ` +
       (r.completionAllowed

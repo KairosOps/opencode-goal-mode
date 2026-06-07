@@ -68,17 +68,52 @@ export function latestVerdictFor(state, agent) {
   return state.latestVerdict[agent] || null;
 }
 
+function summarizeFinding(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[\s>*_-]+/, "").trim())
+    .filter(Boolean)
+    .filter((line) => !/^verdict:?\s*(pass|fail)\b/i.test(line));
+  const blocking = lines.find((line) => /block|fail|finding|risk|missing|gap|regression/i.test(line));
+  return String(blocking || lines[0] || "Reviewer reported a blocking finding.").slice(0, 240);
+}
+
+function updateReviewerMemory(state, agent, verdict, at, seq, text) {
+  state.reviewerMemory ||= [];
+  if (verdict === "PASS") {
+    for (const item of state.reviewerMemory) {
+      if (item.agent === agent && item.status === "open") {
+        item.status = "resolved";
+        item.resolvedAt = at;
+        item.resolvedSeq = seq;
+      }
+    }
+    return;
+  }
+  const finding = summarizeFinding(text);
+  const open = state.reviewerMemory.find((item) => item.agent === agent && item.status === "open" && item.finding === finding);
+  if (open) {
+    open.lastAt = at;
+    open.lastSeq = seq;
+    open.count += 1;
+  } else {
+    state.reviewerMemory.push({ agent, finding, severity: "blocking", status: "open", firstAt: at, firstSeq: seq, lastAt: at, lastSeq: seq, count: 1 });
+  }
+  if (state.reviewerMemory.length > 100) state.reviewerMemory.splice(0, state.reviewerMemory.length - 100);
+}
+
 /**
  * Record a review verdict for `agent`, stamping it with the next monotonic seq.
  * Increments the review-cycle count when the cycle-closing agent reports.
  */
-export function recordVerdict(store, state, agent, verdict) {
+export function recordVerdict(store, state, agent, verdict, text = "") {
   const at = store.nowIso();
   const seq = store.nextSeq();
   const entry = { agent, verdict, at, seq };
   state.verdicts.push(entry);
   if (state.verdicts.length > 200) state.verdicts.splice(0, state.verdicts.length - 200);
   state.latestVerdict[agent] = { verdict, at, seq };
+  updateReviewerMemory(state, agent, verdict, at, seq, text);
   state.lastReviewAt = at;
   state.lastReviewSeq = seq;
   state.updatedAt = at;

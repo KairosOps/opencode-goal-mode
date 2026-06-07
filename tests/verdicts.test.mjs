@@ -82,6 +82,20 @@ test("recordVerdict increments review cycles only for the final auditor", () => 
   assert.equal(st.reviewCycles, 2);
 });
 
+test("recordVerdict stores and resolves reviewer memory", () => {
+  const store = createStore();
+  const st = createState();
+  recordVerdict(store, st, "goal-doc-reviewer", "FAIL", "Blocking findings\n- README missing tool docs\nVerdict: FAIL");
+  assert.equal(st.reviewerMemory.length, 1);
+  assert.equal(st.reviewerMemory[0].agent, "goal-doc-reviewer");
+  assert.equal(st.reviewerMemory[0].status, "open");
+  assert.match(st.reviewerMemory[0].finding, /Blocking findings|README missing/);
+
+  recordVerdict(store, st, "goal-doc-reviewer", "PASS", "Verdict: PASS");
+  assert.equal(st.reviewerMemory[0].status, "resolved");
+  assert.ok(st.reviewerMemory[0].resolvedSeq > st.reviewerMemory[0].lastSeq);
+});
+
 test("verdict log is bounded", () => {
   const store = createStore();
   const st = createState();
