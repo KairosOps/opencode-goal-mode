@@ -42,13 +42,13 @@ as plugins. Each module is independently unit-tested.
 | `goal-guard/config.js` | Config resolution (defaults < env vars < plugin options). |
 | `goal-guard/state.js` | Per-session state records + the store (monotonic seq, LRU, persistence hooks). |
 | `goal-guard/persistence.js` | Atomic, debounced JSON persistence under the XDG state dir. |
-| `goal-guard/verdicts.js` | Verdict extraction (last-wins, anchored) and recording. |
+| `goal-guard/verdicts.js` | Verdict extraction (last-wins, anchored), recording, and Reviewer Memory updates. |
 | `goal-guard/gates.js` | Required-gate computation and freshness. |
 | `goal-guard/completion.js` | `Goal Completed` claim evaluation. |
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
 | `goal-guard/summary.js` | State summaries, status reports, and evidence-map projections. |
 | `goal-guard/system.js` | Live state block injected into the system prompt. |
-| `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
+| `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
 | `goal-guard/logger.js` | Best-effort logging/toasts over the OpenCode client. |
 
 ## Hooks used
@@ -89,7 +89,12 @@ re-running verification does not.
 A session record tracks: active flag, captured goal text, the Goal Contract,
 dirty flag and reasons, changed files, review-cycle count, the last edit/review/
 verification seq and timestamps, the verdict log and per-agent latest verdict,
-recorded evidence, and completion-rejection history.
+recorded evidence, Reviewer Memory, and completion-rejection history.
+
+Reviewer Memory stores bounded summaries of blocking reviewer findings. A fresh
+FAIL opens or refreshes a finding for that reviewer; a fresh PASS from the same
+reviewer marks its open findings resolved. The memory is injected into status and
+system context so recurring review issues survive long sessions and restarts.
 
 ### Persistence
 
@@ -138,12 +143,13 @@ or any required gate is missing/stale.
 
 ## Custom tools
 
-The `tool` hook registers five tools (names are verbatim object keys):
+The `tool` hook registers six tools (names are verbatim object keys):
 
 - `goal_contract` — record the Goal Contract; activates enforcement and fixes the
   required specialist gates.
 - `goal_evidence` — log a verification command + result into the ledger.
 - `goal_evidence_map` — return the acceptance-criteria evidence map with reviewer status and next actions.
+- `goal_reviewer_memory` — return open and recently resolved reviewer findings.
 - `goal_status` — return the authoritative gate/dirty/completion status.
 - `goal_reset` — clear the session's goal state (requires `confirm: true`).
 
@@ -174,6 +180,7 @@ manifest of the file hashes it wrote. On upgrade it distinguishes files it owns
 
 - `tests/shell.test.mjs` — the analyzer against the bypass and false-positive corpora.
 - `tests/plugin.test.mjs` — hook behavior, gating, verdicts, completion, tools, isolation.
+- `tests/truthfulness-benchmark.test.mjs` — false-completion corpus and truthfulness scoring.
 - `tests/state.test.mjs` — store, seq ordering, eviction, persistence round-trips.
 - `tests/agents.test.mjs` / `tests/commands.test.mjs` — frontmatter and contracts.
 - `tests/install.test.mjs` — recursive copy, manifest upgrades, uninstall.

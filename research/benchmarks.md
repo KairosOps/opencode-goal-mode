@@ -5,6 +5,7 @@ checkout. Run:
 
 ```bash
 npm run bench          # detection / false-positive / latency benchmark
+npm run bench:truthfulness  # print the completion truthfulness benchmark JSON
 npm run bench:compare  # regenerate the capability-comparison chart
 ```
 
@@ -28,6 +29,14 @@ README embeds.
   marks the session dirty but does not block, so it is not counted here.
 - **Metrics**: detection rate (recall over destructive commands),
   false-positive rate (safe commands wrongly blocked), and per-command latency.
+- **False Completion Dataset** (`benchmarks/completion-corpus.mjs`): labeled final
+  answer scenarios for premature and valid completion claims. It checks whether
+  `completion.js` blocks missing review-cycle lines, zero cycles, stale reviews,
+  mismatched cycle counts, missing contextual gates, and allows inactive or valid
+  completions.
+- **Truthfulness Score** (`benchmarks/truthfulness.mjs`): weighted score over the
+  dataset: 65% decision accuracy (blocked vs allowed) and 35% reason accuracy for
+  blocked false-completion claims.
 
 ## Results
 
@@ -42,6 +51,16 @@ accuracy figures do not):
 | Detection — obfuscated | 0% (0/35) | 100% (35/35) |
 | Detection — remote-exec | 0% (0/3) | 100% (3/3) |
 | Latency per command | ~2.3 µs | ~3.8 µs |
+
+False Completion Dataset run:
+
+| Metric | Goal Mode |
+| --- | --- |
+| Truthfulness score | **100.0%** |
+| Decision accuracy | **100.0%** |
+| Reason accuracy | **100.0%** |
+| False-completion block rate | **100.0%** |
+| Valid-completion allow rate | **100.0%** |
 
 The legacy guard catches only the *classic* family and misses every obfuscated
 and remote-execution command, while wrongly blocking 1-in-5 benign commands. The
@@ -61,3 +80,5 @@ hundreds of thousands of classifications per second).
 - "100% on this corpus" means 100% of the labeled set; new bypass classes that
   are discovered get added to the corpus and fixed (that is how the second-wave
   findings — `sudo -u`, `pnpm dlx`, interpreter shell-out — entered it).
+- The Truthfulness Score is corpus truthfulness for mechanical completion claims,
+  not a global claim that an LLM's prose is semantically true in every domain.

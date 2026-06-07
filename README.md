@@ -38,7 +38,7 @@ honest caveats, in [research/goal-mode-comparison.md](research/goal-mode-compari
 - **Destructive commands are blocked by a real shell tokenizer**, not a regex.
   Claude Code's own docs call Bash argument-matching *"fragile"*.
 
-### Benchmark: shell-guard accuracy
+### Benchmarks: shell guard + truthfulness
 
 The guard replaced a boundary-anchored regex classifier. On a labeled corpus of
 71 real commands (`npm run bench` from a repository checkout, reproducible — see
@@ -60,6 +60,13 @@ The deeper analysis costs a few microseconds per command on this machine
 per-tool-call guard:
 
 ![Per-command analysis latency](docs/benchmarks/latency.svg)
+
+Goal Mode also ships a **False Completion Dataset** for completion-claim
+truthfulness: `npm run bench` evaluates labeled premature and valid completion
+claims, including missing review-cycle lines, stale reviews after edits, missing
+contextual gates, inactive sessions, and custom completion markers.
+
+![Benchmark Truthfulness Score](docs/benchmarks/truthfulness-score.svg)
 
 ## Requirements
 
@@ -83,9 +90,11 @@ per-tool-call guard:
     `Goal Not Completed` with the exact missing review gates.
   - **Contextual gating**: the goal text and changed files determine which
     specialist reviewers are required.
-  - **Disk persistence**: review ledgers survive OpenCode restarts.
+  - **Reviewer Memory**: blocking reviewer findings are carried across cycles,
+    surfaced in status/system context, and marked resolved by fresh PASS verdicts.
+  - **Disk persistence**: review ledgers and Reviewer Memory survive OpenCode restarts.
   - **Custom tools**: `goal_contract`, `goal_evidence`, `goal_evidence_map`,
-    `goal_status`, `goal_reset`.
+    `goal_reviewer_memory`, `goal_status`, `goal_reset`.
   - **Live state injection** into the system prompt so the model always knows
     what the guard requires.
 - A test suite validating the analyzer, plugin hooks, state store, install
@@ -155,13 +164,14 @@ Or via environment variables (`GOAL_GUARD_*`):
 
 ## Custom tools
 
-The plugin registers five tools the model can call directly:
+The plugin registers six tools the model can call directly:
 
 - `goal_contract` — record the Goal Contract (requirements, non-goals,
   acceptance criteria). Activates enforcement and fixes the required gates.
 - `goal_evidence` — record a verification command and result.
 - `goal_evidence_map` — return the acceptance-criteria evidence map with
   reviewer status, gaps, and next actions.
+- `goal_reviewer_memory` — return unresolved and recently resolved reviewer findings.
 - `goal_status` — return the authoritative gate/dirty/completion status.
 - `goal_reset` — clear the session's goal state (requires `confirm: true`).
 

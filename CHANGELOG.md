@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.4
+
+- Add Reviewer Memory for unresolved/resolved reviewer findings across cycles.
+- Add a False Completion Dataset and Benchmark Truthfulness Score for completion-claim enforcement.
+
 ## v0.2.3
 
 - Add `/goal-evidence-map` to map acceptance criteria to recorded verification evidence, gaps, and next actions.

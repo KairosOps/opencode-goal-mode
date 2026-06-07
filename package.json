@@ -31,6 +31,7 @@
     "test:agents": "node --test tests/agents.test.mjs tests/commands.test.mjs",
     "test:install": "node --test tests/install.test.mjs",
     "bench": "node benchmarks/run.mjs",
+    "bench:truthfulness": "node benchmarks/truthfulness.mjs",
     "bench:compare": "node benchmarks/comparison.mjs",
     "pack:check": "npm pack --dry-run",
     "audit": "npm audit --audit-level=moderate",

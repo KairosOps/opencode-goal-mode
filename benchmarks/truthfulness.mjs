@@ -4,6 +4,7 @@ import { evaluateCompletionClaim } from "../plugins/goal-guard/completion.js";
 import { refreshStickyGates } from "../plugins/goal-guard/gates.js";
 import { createState } from "../plugins/goal-guard/state.js";
 import { FALSE_COMPLETION_CORPUS } from "./completion-corpus.mjs";
+import { fileURLToPath } from "node:url";
 
 function buildState(def) {
   const state = createState("2026-01-01T00:00:00.000Z");
@@ -55,4 +56,9 @@ export function runTruthfulnessBenchmark(corpus = FALSE_COMPLETION_CORPUS) {
     validCompletionAllowRate: Number(((trueCompletionAllowed / trueCompletionCases.length) * 100).toFixed(1)),
     cases,
   };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const result = runTruthfulnessBenchmark();
+  console.log(JSON.stringify(result, null, 2));
 }
