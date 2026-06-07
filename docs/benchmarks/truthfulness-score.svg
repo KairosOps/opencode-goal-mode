@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="202" viewBox="0 0 720 202" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<rect width="720" height="202" fill="#ffffff"/>
+<text x="20" y="28" font-size="17" font-weight="700" fill="#1f2328">Benchmark Truthfulness Score</text>
+<text x="20" y="47" font-size="12" fill="#656d76">False Completion Dataset: 9 labeled completion-claim cases.</text>
+<text x="218" y="87" font-size="12" text-anchor="end" fill="#1f2328">Truthfulness score</text>
+<rect x="230" y="70" width="420" height="22" rx="3" fill="#eaeef2"/>
+<rect x="230" y="70" width="420.0" height="22" rx="3" fill="#2da44e"/>
+<text x="658.0" y="87" font-size="12" font-weight="600" fill="#1f2328">100.0%</text>
+<text x="218" y="125" font-size="12" text-anchor="end" fill="#1f2328">Decision accuracy</text>
+<rect x="230" y="108" width="420" height="22" rx="3" fill="#eaeef2"/>
+<rect x="230" y="108" width="420.0" height="22" rx="3" fill="#0969da"/>
+<text x="658.0" y="125" font-size="12" font-weight="600" fill="#1f2328">100.0%</text>
+<text x="218" y="163" font-size="12" text-anchor="end" fill="#1f2328">Reason accuracy</text>
+<rect x="230" y="146" width="420" height="22" rx="3" fill="#eaeef2"/>
+<rect x="230" y="146" width="420.0" height="22" rx="3" fill="#bf8700"/>
+<text x="658.0" y="163" font-size="12" font-weight="600" fill="#1f2328">100.0%</text>
+</svg>

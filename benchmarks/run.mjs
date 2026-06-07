@@ -19,6 +19,7 @@ import { CORPUS } from "./corpus.mjs";
 import * as current from "../plugins/goal-guard/shell.js";
 import * as legacy from "./legacy-analyzer.mjs";
 import { groupedBarChart, horizontalBarChart } from "./charts.mjs";
+import { runTruthfulnessBenchmark } from "./truthfulness.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const outDir = join(root, "docs", "benchmarks");
@@ -91,6 +92,7 @@ function fmt(n) {
 
 const legacyEval = evaluate(legacy);
 const currentEval = evaluate(current);
+const truthfulness = runTruthfulnessBenchmark();
 const legacyOps = throughput(legacy);
 const currentOps = throughput(current);
 const legacyUs = 1e6 / legacyOps;
@@ -114,6 +116,7 @@ const results = {
   safeCount: CORPUS.filter((c) => c.label === "safe").length,
   legacy: { ...legacyEval, opsPerSec: legacyOps, usPerCommand: Number(legacyUs.toFixed(2)) },
   current: { ...currentEval, opsPerSec: currentOps, usPerCommand: Number(currentUs.toFixed(2)) },
+  truthfulness,
 };
 
 writeFileSync(join(outDir, "results.json"), JSON.stringify(results, null, 2));
@@ -162,6 +165,21 @@ writeFileSync(
   }),
 );
 
+writeFileSync(
+  join(outDir, "truthfulness-score.svg"),
+  horizontalBarChart({
+    title: "Benchmark Truthfulness Score",
+    subtitle: `False Completion Dataset: ${truthfulness.corpusSize} labeled completion-claim cases.`,
+    unit: "%",
+    max: 100,
+    rows: [
+      { label: "Truthfulness score", value: truthfulness.score, display: `${truthfulness.score.toFixed(1)}%`, color: "#2da44e" },
+      { label: "Decision accuracy", value: truthfulness.decisionAccuracy, display: `${truthfulness.decisionAccuracy.toFixed(1)}%`, color: "#0969da" },
+      { label: "Reason accuracy", value: truthfulness.reasonAccuracy, display: `${truthfulness.reasonAccuracy.toFixed(1)}%`, color: "#bf8700" },
+    ],
+  }),
+);
+
 const pct = (n) => `${n.toFixed(1)}%`;
 console.log("Goal Mode shell-guard benchmark");
 console.log("================================");
@@ -170,10 +188,11 @@ console.log("");
 console.log(`Detection rate   legacy ${pct(legacyEval.detectionRate)}   →   Goal Mode ${pct(currentEval.detectionRate)}`);
 console.log(`False positives  legacy ${pct(legacyEval.falsePositiveRate)}   →   Goal Mode ${pct(currentEval.falsePositiveRate)}`);
 console.log(`Latency          legacy ${legacyUs.toFixed(2)} µs/cmd   →   Goal Mode ${currentUs.toFixed(2)} µs/cmd (${fmt(currentOps)}/s)`);
+console.log(`Truthfulness    False Completion Dataset score ${truthfulness.score.toFixed(1)}% (${truthfulness.corpusSize} cases)`);
 console.log("");
 console.log("By family (detection rate):");
 for (const f of detFamilies) {
   console.log(`  ${FAMILY_LABELS[f].padEnd(12)} legacy ${pct(familyRate(legacyEval, f)).padStart(6)}  →  Goal Mode ${pct(familyRate(currentEval, f)).padStart(6)}`);
 }
 console.log("");
-console.log(`Wrote results.json + 3 SVG charts to docs/benchmarks/`);
+console.log(`Wrote results.json + 4 SVG charts to docs/benchmarks/`);
