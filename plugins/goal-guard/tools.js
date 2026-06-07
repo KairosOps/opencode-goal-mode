@@ -12,7 +12,7 @@
  */
 
 import { tool } from "@opencode-ai/plugin";
-import { statusReport } from "./summary.js";
+import { evidenceMapReport, statusReport } from "./summary.js";
 import { recordEvidence } from "./events.js";
 import { refreshStickyGates } from "./gates.js";
 import { createState } from "./state.js";
@@ -42,6 +42,24 @@ export function createGoalTools({ store, config, persist }) {
           title: `Goal status: completion ${report.completionAllowed ? "allowed" : "blocked"}`,
           output: JSON.stringify(report, null, 2),
           metadata: { completionAllowed: report.completionAllowed, reviewCycles: report.reviewCycles },
+        };
+      },
+    }),
+
+    goal_evidence_map: tool({
+      description:
+        "Return an authoritative read-only evidence map for this session: each acceptance " +
+        "criterion, matching recorded evidence, required reviewer gate status, coverage status, " +
+        "gaps, and next action.",
+      args: {},
+      async execute(_args, ctx) {
+        const state = store.stateFor(ctx.sessionID);
+        const report = evidenceMapReport(state, config);
+        const covered = report.criteria.filter((item) => item.status === "covered").length;
+        return {
+          title: `Evidence map: ${covered}/${report.criteria.length} criteria covered`,
+          output: JSON.stringify(report, null, 2),
+          metadata: { criteriaCount: report.criteria.length, coveredCount: covered, missingGates: report.missingGates },
         };
       },
     }),

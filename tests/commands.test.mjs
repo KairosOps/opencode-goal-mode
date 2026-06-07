@@ -2,7 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { filesIn, readRepo, frontmatter, hasLine } from "./helpers.mjs";
 
-const requiredCommands = ["goal.md", "goal-contract.md", "goal-review.md", "goal-status.md", "goal-repair.md", "goal-final.md"];
+const requiredCommands = [
+  "goal.md",
+  "goal-contract.md",
+  "goal-review.md",
+  "goal-status.md",
+  "goal-repair.md",
+  "goal-final.md",
+  "goal-evidence-map.md",
+];
 
 test("all required commands exist", () => {
   const files = filesIn("commands");
@@ -34,4 +42,15 @@ test("commands bind to a goal agent", () => {
     const agent = (fm.match(/^agent:\s*(\S+)/m) || [])[1];
     assert.ok(agent && agent.startsWith("goal"), `${file} must bind to a goal agent`);
   }
+});
+
+test("evidence map command stays read-only and criteria-focused", () => {
+  const body = readRepo("commands/goal-evidence-map.md");
+  assert.match(body, /Do not edit files/);
+  assert.match(body, /Acceptance criterion/);
+  assert.match(body, /Recorded evidence/);
+  assert.match(body, /Reviewer status/);
+  assert.match(body, /goal_evidence_map/);
+  assert.match(body, /Verification command\/result summary/);
+  assert.match(body, /covered, partially covered, missing, or stale/);
 });

@@ -72,8 +72,8 @@ per-tool-call guard:
   discovery, verification planning, and reviews to subagents.
 - Strict review gates for prompt compliance, diff review, verification, security,
   UX, operations, data, API, performance, tests, docs, quality, and final audit.
-- Slash commands: `/goal`, `/goal-contract`, `/goal-review`, `/goal-status`,
-  `/goal-repair`, `/goal-final`.
+- Slash commands: `/goal`, `/goal-contract`, `/goal-review`,
+  `/goal-evidence-map`, `/goal-status`, `/goal-repair`, `/goal-final`.
 - The `goal-guard` plugin:
   - **Quote-aware shell analysis** that blocks destructive and remote-exec
     commands (including ones that evade naive regexes — `$(rm -rf …)`,
@@ -84,8 +84,8 @@ per-tool-call guard:
   - **Contextual gating**: the goal text and changed files determine which
     specialist reviewers are required.
   - **Disk persistence**: review ledgers survive OpenCode restarts.
-  - **Custom tools**: `goal_contract`, `goal_evidence`, `goal_status`,
-    `goal_reset`.
+  - **Custom tools**: `goal_contract`, `goal_evidence`, `goal_evidence_map`,
+    `goal_status`, `goal_reset`.
   - **Live state injection** into the system prompt so the model always knows
     what the guard requires.
 - A test suite validating the analyzer, plugin hooks, state store, install
@@ -155,13 +155,20 @@ Or via environment variables (`GOAL_GUARD_*`):
 
 ## Custom tools
 
-The plugin registers four tools the model can call directly:
+The plugin registers five tools the model can call directly:
 
 - `goal_contract` — record the Goal Contract (requirements, non-goals,
   acceptance criteria). Activates enforcement and fixes the required gates.
 - `goal_evidence` — record a verification command and result.
+- `goal_evidence_map` — return the acceptance-criteria evidence map with
+  reviewer status, gaps, and next actions.
 - `goal_status` — return the authoritative gate/dirty/completion status.
 - `goal_reset` — clear the session's goal state (requires `confirm: true`).
+
+Use `/goal-evidence-map` when you need a read-only matrix of each acceptance
+criterion against recorded evidence, reviewer status, gaps, and the next
+required action. The command is backed by the `goal_evidence_map` tool, so it
+uses persisted Goal Guard state rather than relying on transcript memory.
 
 ## Validation
 

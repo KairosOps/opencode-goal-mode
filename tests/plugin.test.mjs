@@ -302,7 +302,7 @@ test("compaction preserves concrete live state values", async () => {
 test("default export registers the goal_* tools", async () => {
   const hooks = await plugin({ client: { app: { log: async () => undefined } } });
   assert.ok(hooks.tool);
-  for (const name of ["goal_status", "goal_contract", "goal_evidence", "goal_reset"]) {
+  for (const name of ["goal_status", "goal_evidence_map", "goal_contract", "goal_evidence", "goal_reset"]) {
     assert.equal(typeof hooks.tool[name].execute, "function", `${name} missing`);
   }
 });
@@ -327,9 +327,58 @@ test("goal_status returns structured status", async () => {
   const tools = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
   await guard.hooks["chat.params"]({ sessionID: "stx", agent: "goal" }, {});
   const res = await tools.goal_status.execute({}, { sessionID: "stx" });
-  const report = JSON.parse(res.output);
+  let report = JSON.parse(res.output);
   assert.equal(report.active, true);
   assert.ok(Array.isArray(report.requiredGates));
+});
+
+test("goal_evidence_map maps criteria to evidence and reviewer status", async () => {
+  const guard = makeGuard();
+  const { createGoalTools } = await import("../plugins/goal-guard/tools.js");
+  const { requiredGates } = await import("../plugins/goal-guard/gates.js");
+  const tools = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
+  await tools.goal_contract.execute(
+    { original: "ship docs", acceptanceCriteria: ["README documents command", "package includes command"] },
+    { sessionID: "emap" },
+  );
+  await tools.goal_evidence.execute(
+    { command: "npm test", result: "passed", criteria: [" readme documents command "] },
+    { sessionID: "emap" },
+  );
+  await tools.goal_evidence.execute(
+    { command: "npm pack --dry-run", result: "packed", criteria: [] },
+    { sessionID: "emap" },
+  );
+  await guard.hooks["tool.execute.after"](
+    { tool: "task", sessionID: "emap", callID: "r", args: { subagent_type: "goal-reviewer" } },
+    { output: "Verdict: PASS", title: "", metadata: {} },
+  );
+  const res = await tools.goal_evidence_map.execute({}, { sessionID: "emap" });
+  let report = JSON.parse(res.output);
+  assert.equal(report.criteria.length, 2);
+  assert.equal(report.criteria[0].status, "partially covered");
+  assert.equal(report.criteria[0].evidence[0].command, "npm test");
+  assert.ok(report.criteria[0].reviewers.some((r) => r.agent === "goal-reviewer" && r.verdict === "PASS"));
+  assert.equal(report.criteria[1].status, "missing");
+  assert.equal(report.unmappedEvidence[0].command, "npm pack --dry-run");
+
+  const legacy = guard.store.stateFor("legacy-evidence");
+  legacy.active = true;
+  legacy.contract = { acceptanceCriteria: ["legacy criterion"] };
+  legacy.evidence.push({ command: "npm test", result: "passed", criteria: ["legacy criterion"], at: guard.store.nowIso() });
+  report = JSON.parse((await tools.goal_evidence_map.execute({}, { sessionID: "legacy-evidence" })).output);
+  assert.equal(report.criteria[0].status, "partially covered");
+
+  const st = guard.store.stateFor("emap");
+  for (const agent of requiredGates(st, guard.config)) {
+    st.latestVerdict[agent] = { agent, verdict: "PASS", at: guard.store.nowIso(), seq: guard.store.nextSeq() };
+  }
+  report = JSON.parse((await tools.goal_evidence_map.execute({}, { sessionID: "emap" })).output);
+  assert.equal(report.criteria[0].status, "covered");
+
+  await guard.hooks["tool.execute.after"]({ tool: "edit", sessionID: "emap", callID: "e", args: {} }, { output: "", title: "", metadata: {} });
+  report = JSON.parse((await tools.goal_evidence_map.execute({}, { sessionID: "emap" })).output);
+  assert.equal(report.criteria[0].status, "stale");
 });
 
 // ---------------------------------------------------------------------------

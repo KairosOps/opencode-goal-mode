@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "engines": {

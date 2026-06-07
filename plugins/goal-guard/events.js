@@ -29,6 +29,7 @@ export function markVerification(store, state) {
   state.lastVerificationAt = at;
   state.lastVerificationSeq = store.nextSeq();
   state.updatedAt = at;
+  return state.lastVerificationSeq;
 }
 
 export function markFileChanged(store, state, file) {
@@ -41,14 +42,16 @@ export function markFileChanged(store, state, file) {
 
 export function recordEvidence(store, state, command, result, criteria) {
   const at = store.nowIso();
-  state.evidence.push({
+  const entry = {
     command: String(command || ""),
     result: String(result || ""),
     criteria: Array.isArray(criteria) ? criteria.slice(0, 50) : [],
     at,
-  });
+    seq: 0,
+  };
+  state.evidence.push(entry);
   trim(state.evidence, 100);
-  markVerification(store, state);
+  entry.seq = markVerification(store, state);
   state.updatedAt = at;
 }
 

@@ -8,8 +8,9 @@ configuration directory:
    gates). Each is a Markdown file: YAML frontmatter (mode, permissions, color,
    temperature) over a system-prompt body.
 2. **Commands** (`commands/*.md`) — slash commands (`/goal`, `/goal-contract`,
-   `/goal-review`, `/goal-status`, `/goal-repair`, `/goal-final`) that bind a
-   prompt template to an agent, some forced to run as subtasks.
+   `/goal-review`, `/goal-evidence-map`, `/goal-status`, `/goal-repair`,
+   `/goal-final`) that bind a prompt template to an agent, some forced to run as
+   subtasks.
 3. **The `goal-guard` plugin** (`plugins/goal-guard.js` + `plugins/goal-guard/`)
    — a runtime guard that enforces review discipline, blocks destructive shell
    commands, preserves state across compaction and restarts, and exposes
@@ -45,9 +46,9 @@ as plugins. Each module is independently unit-tested.
 | `goal-guard/gates.js` | Required-gate computation and freshness. |
 | `goal-guard/completion.js` | `Goal Completed` claim evaluation. |
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
-| `goal-guard/summary.js` | State summaries and structured status reports. |
+| `goal-guard/summary.js` | State summaries, status reports, and evidence-map projections. |
 | `goal-guard/system.js` | Live state block injected into the system prompt. |
-| `goal-guard/tools.js` | The `goal_status` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
+| `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
 | `goal-guard/logger.js` | Best-effort logging/toasts over the OpenCode client. |
 
 ## Hooks used
@@ -137,11 +138,12 @@ or any required gate is missing/stale.
 
 ## Custom tools
 
-The `tool` hook registers four tools (names are verbatim object keys):
+The `tool` hook registers five tools (names are verbatim object keys):
 
 - `goal_contract` — record the Goal Contract; activates enforcement and fixes the
   required specialist gates.
 - `goal_evidence` — log a verification command + result into the ledger.
+- `goal_evidence_map` — return the acceptance-criteria evidence map with reviewer status and next actions.
 - `goal_status` — return the authoritative gate/dirty/completion status.
 - `goal_reset` — clear the session's goal state (requires `confirm: true`).
 
