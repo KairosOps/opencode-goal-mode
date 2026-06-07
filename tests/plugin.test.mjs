@@ -345,7 +345,8 @@ test("goal_reviewer_memory exposes unresolved and resolved findings", async () =
   );
   let report = JSON.parse((await tools.goal_reviewer_memory.execute({}, { sessionID: "mem" })).output);
   assert.equal(report.open.length, 1);
-  assert.match(report.open[0].finding, /Missing retry test|Blocking findings/);
+  assert.match(report.open[0].finding, /Missing retry test/);
+  assert.doesNotMatch(report.open[0].finding, /^Blocking findings$/);
 
   await guard.hooks["tool.execute.after"](
     { tool: "task", sessionID: "mem", callID: "r2", args: { subagent_type: "goal-reviewer" } },

@@ -69,10 +69,12 @@ export function latestVerdictFor(state, agent) {
 }
 
 function summarizeFinding(text) {
+  const headingRe = /^(blocking findings?|findings?|non-blocking findings?|open questions?|summary|verdict|blocking|issues?)[:\s]*$/i;
   const lines = String(text || "")
     .split(/\r?\n/)
     .map((line) => line.replace(/^[\s>*_-]+/, "").trim())
     .filter(Boolean)
+    .filter((line) => !headingRe.test(line))
     .filter((line) => !/^verdict:?\s*(pass|fail)\b/i.test(line));
   const blocking = lines.find((line) => /block|fail|finding|risk|missing|gap|regression/i.test(line));
   return String(blocking || lines[0] || "Reviewer reported a blocking finding.").slice(0, 240);

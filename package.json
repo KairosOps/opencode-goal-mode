@@ -12,6 +12,7 @@
   },
   "files": [
     "agents/",
+    "benchmarks/",
     "commands/",
     "docs/",
     "plugins/",

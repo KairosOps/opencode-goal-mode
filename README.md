@@ -62,9 +62,10 @@ per-tool-call guard:
 ![Per-command analysis latency](docs/benchmarks/latency.svg)
 
 Goal Mode also ships a **False Completion Dataset** for completion-claim
-truthfulness: `npm run bench` evaluates labeled premature and valid completion
-claims, including missing review-cycle lines, stale reviews after edits, missing
-contextual gates, inactive sessions, and custom completion markers.
+truthfulness: `npm run bench` regenerates the scorecard and
+`npm run bench:truthfulness` prints the labeled-case JSON for premature and valid
+completion claims, including missing review-cycle lines, stale reviews after
+edits, missing contextual gates, inactive sessions, and custom completion markers.
 
 ![Benchmark Truthfulness Score](docs/benchmarks/truthfulness-score.svg)
 
@@ -232,7 +233,7 @@ git push --follow-tags
 ```
 
 For a version that is already bumped and reviewed, commit the current tree, tag
-the reviewed version (for example `v0.2.2`), push the branch and tag, then create
+the reviewed version (for example `v0.2.4`), push the branch and tag, then create
 the GitHub Release. Ensure `NPM_TOKEN` has npm publish rights before publishing
 the release.
 

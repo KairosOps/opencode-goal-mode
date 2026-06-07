@@ -89,7 +89,8 @@ test("recordVerdict stores and resolves reviewer memory", () => {
   assert.equal(st.reviewerMemory.length, 1);
   assert.equal(st.reviewerMemory[0].agent, "goal-doc-reviewer");
   assert.equal(st.reviewerMemory[0].status, "open");
-  assert.match(st.reviewerMemory[0].finding, /Blocking findings|README missing/);
+  assert.match(st.reviewerMemory[0].finding, /README missing tool docs/);
+  assert.doesNotMatch(st.reviewerMemory[0].finding, /^Blocking findings$/);
 
   recordVerdict(store, st, "goal-doc-reviewer", "PASS", "Verdict: PASS");
   assert.equal(st.reviewerMemory[0].status, "resolved");
