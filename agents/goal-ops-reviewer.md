@@ -1,8 +1,6 @@
 ---
 description: Use for config-time changes, install scripts, restarts, migrations, environment assumptions, GitHub/CI operations, and deployment/release risk.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: warning
 permission:

@@ -1,8 +1,6 @@
 ---
 description: Use for frontend, copy, accessibility, docs, user-facing workflow, CLI usability, and product polish review.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: accent
 permission:

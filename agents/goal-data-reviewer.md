@@ -1,8 +1,6 @@
 ---
 description: Use proactively for data model review, database schema, migrations, seed data, constraints, indexes, consistency rules, and data integrity checks.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

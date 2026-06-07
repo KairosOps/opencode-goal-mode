@@ -1,8 +1,6 @@
 ---
 description: Use proactively for deep web research, external documentation, specs, RFCs, academic sources, competitor analysis, and authoritative references. Complements file/code research with full web-scale evidence gathering.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: info
 permission:

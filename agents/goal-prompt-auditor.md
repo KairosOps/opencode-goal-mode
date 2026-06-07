@@ -1,8 +1,6 @@
 ---
 description: Use in every Goal Mode review cycle to compare the original user prompt and Goal Contract against the delivered outcome with extreme strictness.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

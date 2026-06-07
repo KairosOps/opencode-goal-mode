@@ -1,8 +1,6 @@
 ---
 description: Use to run or plan exact verification commands, summarize outputs, and determine whether evidence proves the Goal is complete.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: success
 permission:

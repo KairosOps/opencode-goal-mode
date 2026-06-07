@@ -1,8 +1,6 @@
 ---
 description: Use proactively for performance, scalability, resource usage, latency, throughput, memory, CPU, I/O, algorithmic complexity, and observability review.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

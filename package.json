@@ -13,10 +13,9 @@
   "files": [
     "agents/",
     "commands/",
-    "docs/",
     "plugins/",
-    "scripts/",
-    "tests/",
+    "scripts/install.mjs",
+    "ARCHITECTURE.md",
     "LICENSE",
     "README.md"
   ],

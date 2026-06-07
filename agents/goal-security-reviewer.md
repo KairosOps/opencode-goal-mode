@@ -1,8 +1,6 @@
 ---
 description: Use for auth, secrets, permissions, shell risk, data exposure, destructive actions, network exposure, deployments, and operations risk.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

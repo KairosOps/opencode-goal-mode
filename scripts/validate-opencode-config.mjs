@@ -50,26 +50,58 @@ for (const dir of ["agents", "commands", "plugins"]) {
   }
 }
 
+/** Split a markdown component into [frontmatter, body], erroring on a missing fence. */
+function splitFrontmatter(file, text) {
+  const match = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  if (!match) throw new Error(`${file} missing or malformed YAML frontmatter`);
+  return [match[1], match[2]];
+}
+
+/** Detect content in the body that should have stayed in frontmatter, or leaked reasoning. */
+function assertCleanBody(file, body) {
+  if (/<\/?think>/.test(body)) throw new Error(`${file} body contains a leaked reasoning tag`);
+  if (/^ext_mcp_server_trust:/m.test(body)) throw new Error(`${file} leaks ext_mcp_server_trust into the body`);
+  // A body that opens with a YAML key + block list is almost certainly leaked frontmatter.
+  if (/^[a-z_]+:\s*\n(\s+-\s+\S+\n)+/.test(body.replace(/^\s+/, ""))) {
+    throw new Error(`${file} body opens with a YAML block that likely leaked from frontmatter`);
+  }
+}
+
+let primaryCount = 0;
 for (const file of agentFiles) {
   const text = readFileSync(join(root, "agents", file), "utf8");
-  if (!text.startsWith("---\n")) throw new Error(`${file} missing frontmatter`);
-  if (!/^description:/m.test(text)) throw new Error(`${file} missing description`);
-  if (!/^mode:\s+(primary|subagent|all)$/m.test(text)) throw new Error(`${file} has invalid mode`);
-  if (!/^permission:/m.test(text)) throw new Error(`${file} missing permission`);
+  const [fm, body] = splitFrontmatter(file, text);
+  if (!/^description:/m.test(fm)) throw new Error(`${file} missing description`);
+  const modeMatch = fm.match(/^mode:\s+(primary|subagent|all)\s*$/m);
+  if (!modeMatch) throw new Error(`${file} has invalid mode`);
+  if (modeMatch[1] === "primary") primaryCount += 1;
+  if (!/^permission:/m.test(fm)) throw new Error(`${file} missing permission`);
+  assertCleanBody(file, body);
+}
+if (primaryCount !== 1) throw new Error(`expected exactly one primary agent, found ${primaryCount}`);
+
+const reviewerNames = agentFiles.filter((f) => /(reviewer|auditor|verifier|quality-gate|completion-guard)/.test(f));
+for (const file of reviewerNames) {
+  const [fm] = splitFrontmatter(file, readFileSync(join(root, "agents", file), "utf8"));
+  if (!/edit:\s+deny/.test(fm)) throw new Error(`${file} (a review gate) must deny edit`);
+  if (!/task:\s+deny/.test(fm)) throw new Error(`${file} (a review gate) must deny task nesting`);
 }
 
 for (const file of commandFiles) {
   const text = readFileSync(join(root, "commands", file), "utf8");
-  if (!text.startsWith("---\n")) throw new Error(`${file} missing frontmatter`);
-  if (!/^description:/m.test(text)) throw new Error(`${file} missing description`);
-  if (!/^agent:/m.test(text)) throw new Error(`${file} missing agent`);
+  const [fm, body] = splitFrontmatter(file, text);
+  if (!/^description:/m.test(fm)) throw new Error(`${file} missing description`);
+  if (!/^agent:/m.test(fm)) throw new Error(`${file} missing agent`);
+  if (!body.includes("$ARGUMENTS")) throw new Error(`${file} command body must reference $ARGUMENTS`);
 }
 
 const plugin = await import(join(root, "plugins", "goal-guard.js"));
 if (typeof plugin.default !== "function") throw new Error("goal-guard plugin must default-export a function");
 const hooks = await plugin.default({ client: { app: { log: async () => undefined } } });
 for (const hook of [
+  "chat.message",
   "chat.params",
+  "experimental.chat.system.transform",
   "tool.execute.before",
   "tool.execute.after",
   "experimental.session.compacting",
@@ -77,6 +109,11 @@ for (const hook of [
   "event",
 ]) {
   if (typeof hooks?.[hook] !== "function") throw new Error(`goal-guard plugin missing ${hook} hook`);
+}
+if (hooks.tool && typeof hooks.tool === "object") {
+  for (const name of Object.keys(hooks.tool)) {
+    if (typeof hooks.tool[name]?.execute !== "function") throw new Error(`custom tool ${name} missing execute`);
+  }
 }
 
 console.log("OpenCode Goal Mode package validation passed");

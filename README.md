@@ -1,21 +1,43 @@
 # OpenCode Goal Mode
 
-Strict Goal Mode for OpenCode: a primary `goal` mode, specialized subagents, slash commands, and a guard plugin that preserves review discipline across long sessions.
+Strict Goal Mode for OpenCode: a primary `goal` agent, a matrix of specialized
+review subagents, slash commands, and a `goal-guard` plugin that enforces review
+discipline, blocks destructive shell commands, and preserves goal state across
+compaction **and** restarts.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the design.
 
 ## Requirements
 
 - Node.js 20.11 or newer.
 - OpenCode configured to load local agents, commands, and plugins.
 
-## What It Adds
+## What it adds
 
-- A primary `goal` agent that owns implementation but delegates research, discovery, verification planning, and reviews to subagents.
-- Strict review agents for prompt compliance, diff review, verification, security, UX, operations, and final completion.
-- Slash commands for `/goal`, `/goal-contract`, `/goal-review`, `/goal-status`, `/goal-repair`, and `/goal-final`.
-- A `goal-guard` OpenCode plugin that tracks dirty sessions, review cycles, review verdicts, and injects goal state into compaction.
-- Tests that validate agent frontmatter, command frontmatter, plugin behavior, install safety, and config compatibility.
+- A primary `goal` agent that owns implementation but delegates research,
+  discovery, verification planning, and reviews to subagents.
+- Strict review gates for prompt compliance, diff review, verification, security,
+  UX, operations, data, API, performance, tests, docs, quality, and final audit.
+- Slash commands: `/goal`, `/goal-contract`, `/goal-review`, `/goal-status`,
+  `/goal-repair`, `/goal-final`.
+- The `goal-guard` plugin:
+  - **Quote-aware shell analysis** that blocks destructive and remote-exec
+    commands (including ones that evade naive regexes — `$(rm -rf …)`,
+    `bash -c "…"`, `/bin/rm`, `git -C … reset --hard`, `curl | sh`) without
+    false-positiving harmless commands like `git checkout -b`.
+  - **Completion enforcement**: a premature `Goal Completed` is rewritten to
+    `Goal Not Completed` with the exact missing review gates.
+  - **Contextual gating**: the goal text and changed files determine which
+    specialist reviewers are required.
+  - **Disk persistence**: review ledgers survive OpenCode restarts.
+  - **Custom tools**: `goal_contract`, `goal_evidence`, `goal_status`,
+    `goal_reset`.
+  - **Live state injection** into the system prompt so the model always knows
+    what the guard requires.
+- A test suite validating the analyzer, plugin hooks, state store, install
+  safety, and config compatibility.
 
-## Install Globally
+## Install globally
 
 ```bash
 npm ci
@@ -23,9 +45,10 @@ npm run validate
 npm run install:global
 ```
 
-Restart OpenCode after installation. OpenCode loads agents, commands, and plugins at startup.
+Restart OpenCode after installation. OpenCode loads agents, commands, and
+plugins at startup.
 
-## Install Into One Project
+## Install into one project
 
 ```bash
 npm ci
@@ -35,15 +58,56 @@ npm run install:local
 
 This writes to `./.opencode` in the current project.
 
-## Installer Options
+## Installer options
 
 ```bash
 node scripts/install.mjs --dry-run
 node scripts/install.mjs --target /path/to/opencode-config
 node scripts/install.mjs --global --force
+node scripts/install.mjs --global --uninstall
 ```
 
-The installer refuses to overwrite changed destination files unless `--force` is passed.
+The installer records a manifest of the files it writes. On upgrade it replaces
+files it owns but refuses to clobber files you have locally modified unless
+`--force` is passed. `--uninstall` removes only the files it installed and leaves
+your local edits in place.
+
+## Configuration
+
+The guard works with zero configuration. To tune it, add options in
+`opencode.json`:
+
+```jsonc
+{
+  "plugin": [
+    ["./plugins/goal-guard.js", { "blockDestructive": true, "contextualGates": true }]
+  ]
+}
+```
+
+Or via environment variables (`GOAL_GUARD_*`):
+
+| Option / env | Default | Effect |
+| --- | --- | --- |
+| `blockDestructive` / `GOAL_GUARD_BLOCK_DESTRUCTIVE` | `true` | Block destructive bash before execution. |
+| `blockNetworkExec` / `GOAL_GUARD_BLOCK_NETWORK_EXEC` | `true` | Block `curl \| sh`-style remote execution. |
+| `enforceCompletion` / `GOAL_GUARD_ENFORCE_COMPLETION` | `true` | Rewrite premature `Goal Completed`. |
+| `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live state into the prompt. |
+| `persist` / `GOAL_GUARD_PERSIST` | `true` | Persist state under the XDG state dir. |
+| `contextualGates` / `GOAL_GUARD_CONTEXTUAL_GATES` | `true` | Require specialist gates by goal keywords. |
+| `maxSessions` / `GOAL_GUARD_MAX_SESSIONS` | `200` | Session cache size. |
+| `sessionTtlMs` / `GOAL_GUARD_SESSION_TTL_MS` | `86400000` | Idle session TTL. |
+| `toastOnBlock` / `GOAL_GUARD_TOAST_ON_BLOCK` | `true` | Toast when something is blocked. |
+
+## Custom tools
+
+The plugin registers four tools the model can call directly:
+
+- `goal_contract` — record the Goal Contract (requirements, non-goals,
+  acceptance criteria). Activates enforcement and fixes the required gates.
+- `goal_evidence` — record a verification command and result.
+- `goal_status` — return the authoritative gate/dirty/completion status.
+- `goal_reset` — clear the session's goal state (requires `confirm: true`).
 
 ## Validation
 
@@ -54,9 +118,27 @@ npm run audit
 npm run publish:check
 ```
 
-`npm run validate` runs the test suite, checks the OpenCode package structure, verifies the guard plugin hooks, and performs an npm package dry run.
+`npm run validate` runs the test suite, the structural config validator, the
+publish readiness check, and an `npm pack --dry-run`.
 
-## npm Publishing
+## Models
+
+Agents do not pin a provider-specific model, so they inherit the model OpenCode
+is configured to use. To give a particular agent a specific model, add a
+`model:` (and optional `variant:`) line to that agent's frontmatter in your
+installed copy.
+
+## Safety
+
+The installer copies only `agents/*.md`, `commands/*.md`, and the `plugins/`
+tree — never auth files, session files, tokens, or personal provider config.
+
+The guard blocks destructive shell commands, marks real file mutations dirty,
+keeps read-only inspection from dirtying the session, preserves goal state during
+compaction and across restarts, and blocks premature `Goal Completed` responses
+when review gates are missing or stale.
+
+## npm publishing
 
 Install from npm after the first publish:
 
@@ -65,29 +147,11 @@ npm install -g opencode-goal-mode
 opencode-goal-mode-install --global
 ```
 
-Publishing is handled by `.github/workflows/publish.yml`.
-
-First publish:
-
-```bash
-npm publish --access public --otp <2fa-code>
-```
-
-npm requires 2FA proof or a granular access token with bypass 2FA enabled for creating and publishing packages. After the package exists on npm, configure Trusted Publishing for tokenless releases:
-
-- Provider: GitHub Actions
-- Organization/user: `devinoldenburg`
-- Repository: `opencode-goal-mode`
-- Workflow filename: `publish.yml`
-- Allowed action: `npm publish`
-
-The workflow already has `id-token: write`, runs on Node 24, uses npm 11, and publishes with:
-
-```bash
-npm publish --access public
-```
-
-If you prefer token-based publishing instead of Trusted Publishing, add a repository secret named `NPM_TOKEN` with a granular npm token that has publish rights and bypass 2FA enabled.
+Publishing is handled by `.github/workflows/publish.yml`, which runs on Node 24
+with `id-token: write` for Trusted Publishing. The workflow validates the
+package, checks the tag matches `package.json`, verifies the version is not
+already on npm, then publishes. Manual workflow dispatch defaults to
+`npm publish --dry-run`.
 
 Release flow:
 
@@ -96,19 +160,9 @@ npm version patch
 git push --follow-tags
 ```
 
-Create a GitHub Release from the pushed tag, for example `v0.1.1`. The publish workflow validates the package, checks that the tag matches `package.json`, verifies that the version is not already on npm, then publishes to npm.
-
-Manual workflow dispatch defaults to `npm publish --dry-run`.
-
-## Safety
-
-This repository intentionally does not include auth files, session files, tokens, or personal OpenCode provider config. The installer copies only:
-
-- `agents/*.md`
-- `commands/*.md`
-- `plugins/goal-guard.js`
-
-The guard plugin blocks destructive shell commands, marks real file mutations dirty, avoids dirtying sessions for read-only inspection commands, preserves Goal state during compaction, and blocks premature `Goal Completed` responses when review gates are missing or stale.
+Then create a GitHub Release from the pushed tag (e.g. `v0.1.1`). For
+token-based publishing instead of Trusted Publishing, add a repository secret
+`NPM_TOKEN` with publish rights.
 
 ## Goal Completion Contract
 
@@ -116,6 +170,6 @@ The guard plugin blocks destructive shell commands, marks real file mutations di
 
 - All acceptance criteria are mapped to evidence.
 - Required verification passed or is credibly accounted for.
-- Latest edit is not newer than latest required review cycle.
+- No edit is newer than the latest required review cycle.
 - Required reviewers return `Verdict: PASS`.
-- Final answer includes `Review cycles: N`.
+- The final answer includes an accurate `Review cycles: N`.

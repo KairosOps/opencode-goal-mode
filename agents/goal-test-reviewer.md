@@ -1,8 +1,6 @@
 ---
 description: Use to identify missing tests, inadequate validation, flaky checks, and better verification commands for Goal Mode.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: success
 permission:

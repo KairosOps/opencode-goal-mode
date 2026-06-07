@@ -1,8 +1,6 @@
 ---
 description: Use proactively to orchestrate multiple subagents, manage dependencies, sequence parallel workstreams, aggregate results, and keep complex multi-part goals on track.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: info
 permission:

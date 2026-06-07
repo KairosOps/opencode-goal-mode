@@ -1,8 +1,6 @@
 ---
 description: Use proactively for API design review, endpoint contracts, request/response schemas, backward compatibility, versioning, authentication boundaries, and client impact.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

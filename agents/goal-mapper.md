@@ -1,8 +1,6 @@
 ---
 description: Use proactively for codebase structure mapping, entry points, dependency tracing, callgraph analysis, symbol resolution, test mapping, and configuration trail following.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: info
 permission:

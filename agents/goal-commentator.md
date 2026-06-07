@@ -1,8 +1,6 @@
 ---
 description: Use proactively to add, improve, or standardize code comments, inline documentation, parameter descriptions, and developer-facing annotations without changing behavior.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: info
 permission:

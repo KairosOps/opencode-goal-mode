@@ -1,8 +1,6 @@
 ---
 description: Use after any file change to inspect diffs, side effects, regressions, unintended edits, and scope creep.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: error
 permission:

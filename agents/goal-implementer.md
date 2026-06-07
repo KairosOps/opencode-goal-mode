@@ -1,8 +1,6 @@
 ---
 description: Use only for isolated bounded implementation subtasks when the main Goal agent explicitly delegates a narrow edit.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 color: warning
 hidden: true
 permission:

@@ -1,8 +1,6 @@
 ---
 description: Use at completion time to enforce that every required contextual review gate has passed after the latest edit and verification. Prevents premature Goal Completed claims.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

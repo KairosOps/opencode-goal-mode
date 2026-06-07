@@ -1,8 +1,6 @@
 ---
 description: Use proactively as the final quality gate before completion. Checks standards compliance, naming, style, deprecations, security hygiene, and project-specific quality rules.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

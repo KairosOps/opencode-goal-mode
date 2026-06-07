@@ -1,8 +1,6 @@
 ---
 description: Use as the final read-only completion gate before any Goal Mode answer may start with Goal Completed.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

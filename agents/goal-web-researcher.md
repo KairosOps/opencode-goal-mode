@@ -1,8 +1,6 @@
 ---
 description: Use proactively for fast web search, page fetching, link summarization, trend checks, package docs, error message lookup, and quick external context without deep analysis.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: info
 permission:

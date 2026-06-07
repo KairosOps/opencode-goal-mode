@@ -1,8 +1,6 @@
 ---
 description: Use proactively after implementation for extremely strict correctness, completeness, regression, maintainability, and acceptance-criteria review.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: error
 permission:

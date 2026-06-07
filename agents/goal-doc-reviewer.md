@@ -1,8 +1,6 @@
 ---
 description: Use for documentation, README, command help, install instructions, and maintainability of Goal Mode guidance.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: info
 permission:

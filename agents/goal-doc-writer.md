@@ -1,8 +1,6 @@
 ---
 description: Use proactively for generating, updating, and improving documentation: READMEs, API docs, manuals, runbooks, inline help, release notes, and ADRs.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: high
 temperature: 0
 color: info
 permission:

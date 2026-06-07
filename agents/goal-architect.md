@@ -1,8 +1,6 @@
 ---
 description: Use proactively for system design, architectural decision records, technology selection, tradeoff analysis, data flow, module boundaries, and integration contracts.
 mode: subagent
-model: ordis/chatgpt/gpt-5.5
-variant: xhigh
 temperature: 0
 color: info
 permission:
