@@ -384,6 +384,34 @@ test("a mid-text completion mention in an active session is not policed", async 
   assert.doesNotMatch(out.text, /Goal Not Completed/);
 });
 
+test("the rewrite flips the anchored claim line, not an unrelated earlier mention", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "rw", agent: "goal" }, {});
+  const out = { text: "Notes on the Goal Completed criteria first.\n\n## Goal Completed\n\nReview cycles: 0" };
+  await hooks["experimental.text.complete"]({ sessionID: "rw", messageID: "m", partID: "p" }, out);
+  // The heading (the real claim) is flipped; the prose sentence is preserved.
+  assert.match(out.text, /## Goal Not Completed/);
+  assert.match(out.text, /Notes on the Goal Completed criteria first\./);
+});
+
+test("a review subagent's own child session is never marked active", async () => {
+  const { hooks, store } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "child-reviewer", agent: "goal-reviewer" }, {});
+  assert.equal(store.stateFor("child-reviewer").active, false, "reviewer child session must not activate");
+});
+
+test("agent-path verdict records to the reviewer's own session only", async () => {
+  const { hooks, store } = makeGuard();
+  // Parent goal session.
+  await hooks["chat.params"]({ sessionID: "parent", agent: "goal" }, {});
+  // A separate child reviewer session reports a verdict in its own output.
+  await hooks["chat.params"]({ sessionID: "child", agent: "goal-reviewer" }, {});
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID: "child", callID: "c", args: { command: "git status" } }, { output: "Verdict: PASS", title: "", metadata: {} });
+  // It must not leak onto the parent (the parent is credited via the task path).
+  assert.equal(store.stateFor("parent").latestVerdict["goal-reviewer"], undefined);
+  assert.equal(store.stateFor("child").latestVerdict["goal-reviewer"]?.verdict, "PASS");
+});
+
 test("a custom completion marker with regex metacharacters is handled literally", async () => {
   const guard = __test.createGuard({ client: {} }, { completionMarker: "Done!! (final) [v2]" }, { persistence: noopPersistence });
   await guard.hooks["chat.params"]({ sessionID: "meta", agent: "goal" }, {});

@@ -23,7 +23,7 @@ import { createStore, createState } from "./goal-guard/state.js";
 import { createPersistence } from "./goal-guard/persistence.js";
 import { createLogger } from "./goal-guard/logger.js";
 import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./goal-guard/shell.js";
-import { isGoalAgent, isReviewAgent, CYCLE_CLOSING_AGENT } from "./goal-guard/agents.js";
+import { isPrimaryAgent, isReviewAgent, CYCLE_CLOSING_AGENT } from "./goal-guard/agents.js";
 import { textOf, parseVerdict, recordVerdict } from "./goal-guard/verdicts.js";
 import { completionAllowed, missingGates, refreshStickyGates } from "./goal-guard/gates.js";
 import { evaluateCompletionClaim } from "./goal-guard/completion.js";
@@ -83,25 +83,12 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
 
   const persist = () => persistence.save(() => store.snapshot());
 
-  /** Find the most-recently-touched active session (to attribute project-wide edits). */
-  function activeSession() {
-    let best = null;
-    let bestTouch = -1;
-    for (const st of store.sessions.values()) {
-      if (st.active && (st.touchedAt || 0) > bestTouch) {
-        bestTouch = st.touchedAt || 0;
-        best = st;
-      }
-    }
-    return best;
-  }
-
   const hooks = {
     async "chat.message"(inp, out) {
       try {
         if (!inp?.sessionID) return;
         const state = store.stateFor(inp.sessionID);
-        if (isGoalAgent(inp.agent)) state.active = true;
+        if (isPrimaryAgent(inp.agent)) state.active = true;
         const text = partsText(out?.parts);
         if (text && state.active) {
           // Accumulate goal text (bounded) so contextual gates can be derived.
@@ -123,7 +110,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (!normalized) return;
         const state = store.stateFor(normalized);
         state.currentAgent = inp.agent;
-        if (isGoalAgent(inp.agent)) state.active = true;
+        if (isPrimaryAgent(inp.agent)) state.active = true;
       } catch {
         /* ignore */
       }
@@ -184,13 +171,15 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           }
         }
 
-        // Verdict capture: task path (subagent reviewers, fires in the parent
-        // session) and agent path (a reviewer's own session). Split by tool type
-        // so the two never double-count the same call. Agent-path verdicts are
-        // attributed to the active goal session, since a reviewer subagent runs
-        // in a child session whose verdict belongs to the parent goal.
+        // Verdict capture. The PRIMARY mechanism is the task path: when the goal
+        // agent spawns a reviewer via the task tool, the parent session sees the
+        // subagent's result here and the verdict is recorded against the parent
+        // goal — correct cross-session attribution. The agent path is a fallback
+        // for a reviewer's verdict surfacing in its own session's tool output; it
+        // records against that same session (never another), so it can neither
+        // mis-credit a sibling session nor break the parent goal, which the task
+        // path already covers. Split by tool type so the two never double-count.
         let recordedAgent = null;
-        let recordedState = state;
         if (tool === "task") {
           const sub = normalizedSubagent(inp);
           if (isReviewAgent(sub)) {
@@ -203,14 +192,13 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         } else if (isReviewAgent(state.currentAgent)) {
           const verdict = parseVerdict(textOf(out));
           if (verdict) {
-            recordedState = activeSession() || state;
-            recordVerdict(store, recordedState, state.currentAgent, verdict);
+            recordVerdict(store, state, state.currentAgent, verdict);
             recordedAgent = state.currentAgent;
           }
         }
 
         if (recordedAgent === CYCLE_CLOSING_AGENT) {
-          maybeClearDirtyOnFinalPass(recordedState, config);
+          maybeClearDirtyOnFinalPass(state, config);
         }
         persist();
       } catch {

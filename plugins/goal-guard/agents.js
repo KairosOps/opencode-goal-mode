@@ -53,6 +53,16 @@ export function isGoalAgent(name) {
   return GOAL_SET.has(String(name || ""));
 }
 
+/** The primary Goal Mode agent. Only this agent's sessions are "goal sessions"
+ * the guard polices for completion — review/worker subagents run in their own
+ * child sessions and must not be activated (that would pollute attribution and
+ * the active-session population). */
+export const PRIMARY_AGENT = "goal";
+
+export function isPrimaryAgent(name) {
+  return String(name || "") === PRIMARY_AGENT;
+}
+
 /** Reviewers that always run for any meaningful goal. */
 export const BASE_GATES = Object.freeze([
   "goal-prompt-auditor",

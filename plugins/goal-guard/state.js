@@ -12,7 +12,9 @@
  *  2. The store is created PER PLUGIN INSTANCE (closure state), not as a module
  *     global, so concurrent OpenCode projects can no longer cross-contaminate
  *     each other's verdicts and dirty flags. Eviction is true LRU by last-touch
- *     time and never preferentially drops an active session.
+ *     time and PREFERS inactive sessions: an active session is only evicted when
+ *     every tracked session is active and the cap is exceeded, in which case the
+ *     least-recently-touched active one is dropped.
  */
 
 /** @returns a fresh per-session state record. */

@@ -789,10 +789,12 @@ function classifyAwk(args, depth, acc) {
  */
 const SCRIPT_DELETE_RE = /(os\.remove|os\.unlink|os\.rmdir|shutil\.rmtree|\.rmSync\b|\.rmdirSync\b|fs\.rm\(|fs\.rmSync|fs\.unlink|\.unlink\(|rimraf)/;
 const SCRIPT_WRITE_RE = /(writeFile|appendFile|copyFile|mkdir|createWriteStream|\.write_text|\.write_bytes|shutil\.copy|shutil\.move|open\s*\([^)]*['"][wax]\+?['"])/;
-/** Sinks where an interpreter shells out; the quoted argument is a real command. */
-const SCRIPT_EXEC_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|execSync|execFileSync|spawnSync|\bexecvp?\b|\bsystem|\bpopen|\bqx|`[^`]*`)/;
 
-const EXEC_SINK_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|execSync|execFileSync|spawnSync|execvp?|popen|system|qx)\s*\(/g;
+// Exec sinks must be CALL forms (an immediately following `(`), so a bare word
+// such as "system"/"popen" or a reference like `child_process.exec` without a
+// call is not treated as a shell-out. This prevents over-blocking benign
+// diagnostics like `python -c 'print(platform.system())'`.
+const EXEC_SINK_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|\.execSync|\.execFileSync|\.exec|\.execFile|\.spawnSync|\.spawn|\bexecSync|\bexecFileSync|\bspawnSync|\bexecvp?\b)\s*\(/g;
 
 /** Extract the shell command an exec sink runs (handles a string or an argv list). */
 function extractExecCommand(code) {
@@ -811,14 +813,13 @@ function extractExecCommand(code) {
 
 function inspectScriptString(code, depth, acc) {
   // Interpreter that shells out: pull the command out of the exec sink's own
-  // argument region (so unrelated quoted strings elsewhere are ignored).
-  if (SCRIPT_EXEC_RE.test(code)) {
-    const cmd = extractExecCommand(code);
-    if (cmd) analyzeInto(cmd, (depth || 0) + 1, acc);
-    else {
-      acc.destructive = true;
-      acc.reasons.push("interpreter shell-out");
-    }
+  // argument region (so unrelated quoted strings elsewhere are ignored). When no
+  // literal command can be extracted (e.g. a dynamic variable), fail OPEN — do
+  // not blanket-block. The host's own permission rules still apply, and
+  // false-blocking benign one-liners is worse than this rare miss.
+  const execCmd = extractExecCommand(code);
+  if (execCmd) {
+    analyzeInto(execCmd, (depth || 0) + 1, acc);
     return;
   }
   if (SCRIPT_DELETE_RE.test(code)) {
@@ -904,8 +905,12 @@ function classifyGit(args, depth, acc) {
       // command that runs on later invocation; analyze the embedded command.
       const shellVal = rest.find((a) => a.startsWith("!"));
       if (shellVal) analyzeInto(shellVal.slice(1), (depth || 0) + 1, acc);
-      acc.mutating = true;
-      acc.reasons.push("git config");
+      // Read-only queries change nothing and must not dirty the session.
+      const readOnly = rest.some((a) => /^(--get|--get-all|--get-regexp|--get-urlmatch|--list|-l)$/.test(a));
+      if (!readOnly) {
+        acc.mutating = true;
+        acc.reasons.push("git config");
+      }
       return;
     }
     case "reflog":

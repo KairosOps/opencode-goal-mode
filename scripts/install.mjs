@@ -103,6 +103,8 @@ function pruneEmptyDirs(targetRoot, relFiles) {
   // Deepest first so parents become empty after their children are removed.
   for (const rel of [...dirs].sort((a, b) => b.length - a.length)) {
     const abs = join(targetRoot, rel);
+    // Containment guard: never touch anything resolving outside the target.
+    if (relative(targetRoot, abs).startsWith("..")) continue;
     try {
       if (existsSync(abs) && statSync(abs).isDirectory() && readdirSync(abs).length === 0) rmdirSync(abs);
     } catch {

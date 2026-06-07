@@ -52,10 +52,13 @@ export function evaluateCompletionClaim(state, config, text) {
   if (!reason) return { blocked: false, claimedCycles };
 
   const blockedMarker = config.blockedMarker || "Goal Not Completed";
-  // Replace only the marker word itself, preserving any leading markdown/prefix.
-  const markerWordRe = new RegExp(escaped, "i");
+  // Rewrite the SAME anchored line that triggered detection (preserving its
+  // leading markdown prefix), not merely the first occurrence of the phrase —
+  // otherwise an unrelated earlier mention would be mangled while the real
+  // completion-claim heading stayed unflipped.
+  const markerLineRe = new RegExp(`^([\\s>*_#-]*)${escaped}`, "im");
   const replacement =
-    text.replace(markerWordRe, blockedMarker) +
+    text.replace(markerLineRe, (_m, prefix) => `${prefix}${blockedMarker}`) +
     `\n\nGoal Guard blocked completion: ${reason}. State: ${summary}`;
   return { blocked: true, reason, replacement, claimedCycles };
 }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="164" viewBox="0 0 720 164" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<rect width="720" height="164" fill="#ffffff"/>
+<text x="20" y="28" font-size="17" font-weight="700" fill="#1f2328">Per-command analysis latency</text>
+<text x="20" y="47" font-size="12" fill="#656d76">Microseconds to classify one command. Both are negligible for a tool-call guard.</text>
+<text x="218" y="87" font-size="12" text-anchor="end" fill="#1f2328">Legacy regex guard</text>
+<rect x="230" y="70" width="420" height="22" rx="3" fill="#eaeef2"/>
+<rect x="230" y="70" width="194.8" height="22" rx="3" fill="#9aa0a6"/>
+<text x="432.8" y="87" font-size="12" font-weight="600" fill="#1f2328">1.26 µs</text>
+<text x="218" y="125" font-size="12" text-anchor="end" fill="#1f2328">Goal Mode analyzer</text>
+<rect x="230" y="108" width="420" height="22" rx="3" fill="#eaeef2"/>
+<rect x="230" y="108" width="300.0" height="22" rx="3" fill="#2da44e"/>
+<text x="538.0" y="125" font-size="12" font-weight="600" fill="#1f2328">1.94 µs</text>
+</svg>

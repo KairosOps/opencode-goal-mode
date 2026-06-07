@@ -1,0 +1,77 @@
+{
+  "corpusSize": 71,
+  "destructiveCount": 48,
+  "safeCount": 23,
+  "legacy": {
+    "detectionRate": 20.833333333333336,
+    "falsePositiveRate": 21.73913043478261,
+    "destCaught": 10,
+    "destTotal": 48,
+    "safeFalsePos": 5,
+    "safeTotal": 23,
+    "families": {
+      "classic": {
+        "destTotal": 10,
+        "destCaught": 10,
+        "safeTotal": 0,
+        "safeFalsePos": 0
+      },
+      "bypass": {
+        "destTotal": 35,
+        "destCaught": 0,
+        "safeTotal": 0,
+        "safeFalsePos": 0
+      },
+      "remote-exec": {
+        "destTotal": 3,
+        "destCaught": 0,
+        "safeTotal": 0,
+        "safeFalsePos": 0
+      },
+      "safe": {
+        "destTotal": 0,
+        "destCaught": 0,
+        "safeTotal": 23,
+        "safeFalsePos": 5
+      }
+    },
+    "opsPerSec": 792538,
+    "usPerCommand": 1.26
+  },
+  "current": {
+    "detectionRate": 100,
+    "falsePositiveRate": 0,
+    "destCaught": 48,
+    "destTotal": 48,
+    "safeFalsePos": 0,
+    "safeTotal": 23,
+    "families": {
+      "classic": {
+        "destTotal": 10,
+        "destCaught": 10,
+        "safeTotal": 0,
+        "safeFalsePos": 0
+      },
+      "bypass": {
+        "destTotal": 35,
+        "destCaught": 35,
+        "safeTotal": 0,
+        "safeFalsePos": 0
+      },
+      "remote-exec": {
+        "destTotal": 3,
+        "destCaught": 3,
+        "safeTotal": 0,
+        "safeFalsePos": 0
+      },
+      "safe": {
+        "destTotal": 0,
+        "destCaught": 0,
+        "safeTotal": 23,
+        "safeFalsePos": 0
+      }
+    },
+    "opsPerSec": 514516,
+    "usPerCommand": 1.94
+  }
+}

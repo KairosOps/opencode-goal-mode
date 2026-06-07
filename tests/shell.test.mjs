@@ -118,6 +118,32 @@ test("printf %b format piped into a shell is caught", () => {
   assert.equal(looksLikeDestructiveBash("printf %b 'rm -rf /' | sh"), true);
 });
 
+test("benign interpreter one-liners are NOT over-blocked", () => {
+  for (const cmd of [
+    "python -c 'import platform; print(platform.system())'",
+    "python3 -c \"print(platform.system())\"",
+    "node -e \"console.log('system info:', process.platform)\"",
+    "ruby -e 'puts \"the operating system\"'",
+    "node -e 'typeof child_process.exec'",
+    "perl -e 'my $sql = \"select qx from t\"'",
+  ]) {
+    assert.equal(looksLikeDestructiveBash(cmd), false, `${cmd} must not be blocked`);
+  }
+});
+
+test("interpreter exec sinks are still caught when they actually call out", () => {
+  assert.equal(looksLikeDestructiveBash("python -c \"import os; os.system('rm -rf /')\""), true);
+  assert.equal(looksLikeDestructiveBash("node -e \"require('child_process').execSync('rm -rf /')\""), true);
+  assert.equal(looksLikeDestructiveBash("node -e \"require('child_process').exec('rm -rf /')\""), true);
+});
+
+test("read-only git config queries do not dirty the session", () => {
+  for (const cmd of ["git config --get user.email", "git config --list", "git config -l", "git config --get-regexp alias"]) {
+    assert.equal(looksLikeMutatingBash(cmd), false, `${cmd} is read-only`);
+  }
+  assert.equal(looksLikeMutatingBash("git config user.name foo"), true, "writing config is mutating");
+});
+
 test("a '#' comment is not parsed as a command (no false positive)", () => {
   assert.equal(looksLikeDestructiveBash("true #; rm -rf /tmp/x"), false);
   assert.equal(looksLikeDestructiveBash("ls # rm -rf /"), false);
