@@ -35,8 +35,8 @@
         "safeFalsePos": 5
       }
     },
-    "opsPerSec": 792538,
-    "usPerCommand": 1.26
+    "opsPerSec": 381490,
+    "usPerCommand": 2.62
   },
   "current": {
     "detectionRate": 100,
@@ -71,7 +71,7 @@
         "safeFalsePos": 0
       }
     },
-    "opsPerSec": 514516,
-    "usPerCommand": 1.94
+    "opsPerSec": 256879,
+    "usPerCommand": 3.89
   }
 }

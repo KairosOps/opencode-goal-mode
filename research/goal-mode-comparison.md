@@ -2,17 +2,18 @@
 
 How OpenCode Goal Mode's **mechanically-enforced** goal discipline compares to
 Anthropic's Claude Code and OpenAI's Codex. Sourced from Claude Code docs
-(`code.claude.com/docs`) and OpenAI Codex docs, cross-checked against this
-plugin's source. The emphasis throughout is *mechanical enforcement* — what the
-harness guarantees — versus *prompt-driven* behavior the model is asked to do.
+(`https://docs.anthropic.com/en/docs/claude-code/hooks` and `/security`) and
+OpenAI Codex docs (`https://developers.openai.com/codex/cli` and `/cloud`),
+cross-checked against this plugin's source. The emphasis throughout is
+*mechanical enforcement* — what the harness guarantees — versus *prompt-driven*
+behavior the model is asked to do.
 
 ## The distinction that matters
 
-All three tools run a **model-driven** agentic loop. None of them mechanically
-forces the model to "keep going" by default; Claude Code's `/goal` and Codex's
-`/goal` add cross-turn continuation, but the "is it done?" decision is judged
-from the transcript (Claude's evaluator runs no tools). Goal Mode's loop is
-prompt-only too.
+All three tools run a **model-driven** agentic loop. Public docs reviewed do not
+describe a default mechanical proof that forces the model to keep working until
+all project-specific acceptance criteria are externally verified. Goal Mode's
+loop is prompt-only too.
 
 What separates the three is what happens at the **completion boundary** and the
 **tool boundary**:
@@ -22,10 +23,10 @@ What separates the three is what happens at the **completion boundary** and the
   review and completion enforcement are **opt-in**, requiring user-authored
   hooks. Out of the box, review is prompt-driven and the model stops when it
   judges the work done.
-- **Codex** enforces at the **OS-sandbox** layer (Seatbelt/bubblewrap/seccomp,
-  network off by default) — a genuinely strong, mode-level boundary Goal Mode
-  does not have — but its code review is **advisory** (GitHub comments), never a
-  blocking gate, and there is no harness-level completion block.
+- **Codex** has approval modes, local code review, and cloud environments that
+  isolate work from the user's machine — genuinely strong mode-level boundaries
+  Goal Mode does not claim — but public docs do not describe a harness-level
+  `Goal Completed` blocker or stale-review invalidation invariant.
 - **Goal Mode** ships a coherent **completion contract** and **command guard**
   enforced at the harness layer by default, for the goal-completion use case.
 
@@ -37,8 +38,8 @@ See `docs/benchmarks/capability-matrix.svg` for the visual. Levels: **Enforced**
 
 | Capability | Goal Mode | Claude Code | Codex |
 | --- | --- | --- | --- |
-| Autonomous goal loop | Prompt-only | Partial (`/goal`) | Partial (`/goal`) |
-| Review gate before "done" | **Enforced** | Partial (Stop hook) | None (advisory) |
+| Autonomous goal loop | Prompt-only | Partial | Partial |
+| Review gate before "done" | **Enforced** | Partial (Stop hook) | Prompt-only |
 | Contextual specialist reviews | **Enforced** | Prompt-only | Prompt-only |
 | Stale-review invalidation on edit | **Enforced** | None | None |
 | Completion-claim enforcement | **Enforced** | Partial (Stop hook) | None |
@@ -64,8 +65,9 @@ See `docs/benchmarks/capability-matrix.svg` for the visual. Levels: **Enforced**
    than `lastEditSeq`. Any edit — file write, mutating bash command, or a
    subagent `file.edited` event — bumps the counter, so a `PASS` can never be
    credited against an edit it did not actually follow. Integer ordering means
-   two same-millisecond events can't tie. Neither Claude Code nor Codex ships an
-   equivalent "an edit invalidates prior approvals" invariant.
+   two same-millisecond events can't tie. The public Claude Code and Codex docs
+   reviewed do not describe an equivalent "an edit invalidates prior approvals"
+   invariant.
 
 3. **Contextual specialist reviews are required, not suggested.** A whole-word
    keyword scan of the goal text + Goal Contract + changed-file names selects
@@ -77,17 +79,19 @@ See `docs/benchmarks/capability-matrix.svg` for the visual. Levels: **Enforced**
    `sudo`/`env`/`timeout`/`xargs`, recurses into `$(…)`/backticks and
    `bash -c`/`eval`, resolves `/bin/rm` to its basename, parses `git -C` and
    weaponized `git -c alias='!rm -rf /'`, and inspects interpreter sinks. Claude
-   Code's own docs call Bash argument-matching **"fragile"** and do not unwrap
-   these classes without a user-authored PreToolUse hook.
+   Code's own docs warn that Bash argument-matching can be **"fragile"** for
+   hard enforcement and recommend permissions for hard allow/deny policy; these
+   classes are not unwrapped unless a user-authored PreToolUse hook does it.
 
 ## Honest caveats
 
 - **The autonomous loop is prompt-only**, like Claude's and Codex's. What is
   mechanical is the *completion gate* and the *command guard*, not the model's
   decision to keep working.
-- **Codex's OS sandbox is a stronger isolation boundary** than a tool-layer
-  classifier. Goal Mode's guard falls back to "not blocked" on a parse failure
-  (deferring to the host's permission rules); it is defense-in-depth, not a jail.
+- **Codex's isolated execution model is a stronger boundary** than a tool-layer
+  classifier where it applies. Goal Mode's guard falls back to "not blocked" on a
+  parse failure (deferring to the host's permission rules); it is
+  defense-in-depth, not a jail.
 - **Claude Code can do equivalent enforcement** when a user wires Stop/PreToolUse
   hooks themselves. Goal Mode's advantage is that a coherent set ships working
   out of the box for this use case.

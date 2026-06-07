@@ -2,7 +2,15 @@
 
 Facts verified against `@opencode-ai/plugin@1.15.13` (the installed type
 definitions) and the `sst/opencode` source at tag `v1.15.13`. This is the
-ground truth the `goal-guard` plugin is engineered against.
+pinned runtime reference the `goal-guard` plugin is engineered against; the npm
+latest was `1.16.2` when this document was refreshed, so claims below are
+version-scoped unless explicitly called out as current-docs behavior.
+
+Primary sources: OpenCode schema (`https://opencode.ai/config.json`), OpenCode
+config/agents/plugins docs (`https://opencode.ai/docs/config/`,
+`https://opencode.ai/docs/agents/`, `https://opencode.ai/docs/plugins/`),
+plugin source at `https://raw.githubusercontent.com/sst/opencode/v1.15.13/`,
+and npm metadata for `@opencode-ai/plugin`.
 
 ## Plugin discovery
 
@@ -18,6 +26,8 @@ ground truth the `goal-guard` plugin is engineered against.
 - The config `plugin` array also accepts npm package names and `["spec", options]`
   tuples; the second tuple element arrives as the plugin factory's second arg.
   Auto-discovered plugins receive `options === undefined`.
+- Current OpenCode docs prefer plural config directories such as
+  `.opencode/plugins/`; singular directories are backward-compatible.
 
 ## Hooks (the ones Goal Mode uses)
 
@@ -52,6 +62,9 @@ ground truth the `goal-guard` plugin is engineered against.
 - **Command frontmatter** (`{command,commands}/**/*.md`): `template`,
   `description`, `agent`, `model`, `variant`, `subtask`. Unlike agents, a
   **command with an unknown key throws** a parse error.
+- **Current built-in agents include `build`, `plan`, `general`, `explore`, and
+  `scout`.** Goal Mode allows delegation to the stock `explore`, `general`, and
+  `scout` subagents from its primary agent.
 - **Permissions** are last-matching-rule-wins; `deny` from any scope beats
   `allow`. Per-tool pattern maps are supported for `bash`, `task`,
   `external_directory`, etc.

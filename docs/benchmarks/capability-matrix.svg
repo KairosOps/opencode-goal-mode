@@ -17,8 +17,8 @@
 <text x="374.0" y="131" font-size="11" font-weight="600" text-anchor="middle" fill="#ffffff">Enforced</text>
 <rect x="452.0" y="112" width="140.0" height="30" rx="4" fill="#d4a72c"/>
 <text x="522.0" y="131" font-size="11" font-weight="600" text-anchor="middle" fill="#1f2328">Partial</text>
-<rect x="600.0" y="112" width="140.0" height="30" rx="4" fill="#eaeef2"/>
-<text x="670.0" y="131" font-size="11" font-weight="600" text-anchor="middle" fill="#656d76">None</text>
+<rect x="600.0" y="112" width="140.0" height="30" rx="4" fill="#dbe9d5"/>
+<text x="670.0" y="131" font-size="11" font-weight="600" text-anchor="middle" fill="#1f2328">Prompt-only</text>
 <text x="286" y="169" font-size="12" text-anchor="end" fill="#1f2328">Contextual specialist reviews</text>
 <rect x="304.0" y="150" width="140.0" height="30" rx="4" fill="#2da44e"/>
 <text x="374.0" y="169" font-size="11" font-weight="600" text-anchor="middle" fill="#ffffff">Enforced</text>

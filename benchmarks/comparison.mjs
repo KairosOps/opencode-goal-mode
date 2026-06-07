@@ -5,8 +5,9 @@
  * The classification reflects published, verifiable behavior as of the research
  * in research/goal-mode-comparison.md (Claude Code docs at code.claude.com,
  * OpenAI Codex docs). It is deliberately conservative and honest: where Claude
- * Code or Codex are genuinely strong (custom hooks, OS sandbox) that is marked,
- * and Goal Mode's prompt-only autonomous loop is NOT claimed as enforced.
+ * Code or Codex are genuinely strong (custom hooks, approval modes, isolation)
+ * that is noted in the research, and Goal Mode's prompt-only autonomous loop is
+ * NOT claimed as enforced.
  *
  *   node benchmarks/comparison.mjs
  */
@@ -23,7 +24,7 @@ mkdirSync(outDir, { recursive: true });
 // columns: Goal Mode, Claude Code, Codex
 const ROWS = [
   { capability: "Autonomous goal loop", cells: ["Prompt-only", "Partial", "Partial"] },
-  { capability: "Review gate before “done”", cells: ["Enforced", "Partial", "None"] },
+  { capability: "Review gate before “done”", cells: ["Enforced", "Partial", "Prompt-only"] },
   { capability: "Contextual specialist reviews", cells: ["Enforced", "Prompt-only", "Prompt-only"] },
   { capability: "Stale-review invalidation on edit", cells: ["Enforced", "None", "None"] },
   { capability: "Completion-claim enforcement", cells: ["Enforced", "Partial", "None"] },

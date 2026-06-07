@@ -14,7 +14,8 @@ Most "goal mode" / agentic setups are **prompt-only**: the model is *asked* to
 review its work and to keep going until done. Goal Mode adds a guard plugin that
 makes that discipline **mechanical at the harness layer** — the model cannot
 declare `Goal Completed` until the required reviews actually passed, and it
-cannot run a destructive command that a regex guard would miss.
+is blocked from the benchmarked destructive-command bypasses that a regex guard
+would miss.
 
 ![Mechanically-enforced goal discipline vs. Claude Code and Codex](docs/benchmarks/capability-matrix.svg)
 
@@ -29,8 +30,8 @@ honest caveats, in [research/goal-mode-comparison.md](research/goal-mode-compari
   code review is advisory.
 - **An edit automatically invalidates prior approvals.** A reviewer gate counts
   only when its PASS is newer (by a monotonic integer sequence) than the last
-  edit — so any change forces the relevant reviews to re-run. Neither Claude Code
-  nor Codex ships this stale-review invariant.
+  edit — so any change forces the relevant reviews to re-run. The public Claude
+  Code and Codex docs reviewed do not describe this stale-review invariant.
 - **Required specialist reviews are auto-selected and enforced** (security, api,
   data, performance …) from the goal text, contract, and changed files — not left
   to the model's discretion.
@@ -40,7 +41,7 @@ honest caveats, in [research/goal-mode-comparison.md](research/goal-mode-compari
 ### Benchmark: shell-guard accuracy
 
 The guard replaced a boundary-anchored regex classifier. On a labeled corpus of
-71 real commands (`npm run bench`, reproducible — see
+71 real commands (`npm run bench` from a repository checkout, reproducible — see
 [research/benchmarks.md](research/benchmarks.md)):
 
 ![Destructive-command detection rate by family](docs/benchmarks/detection-by-family.svg)
@@ -54,8 +55,9 @@ The guard replaced a boundary-anchored regex classifier. On a labeled corpus of
 | Obfuscated bypasses caught (`$(…)`, `bash -c`, `sudo -u`, interpreters) | 0% | 100% |
 | Remote exec (`curl \| sh`) caught | 0% | 100% |
 
-The deeper analysis costs ~0.6 µs more per command (~500,000 classifications/
-second) — negligible for a per-tool-call guard:
+The deeper analysis costs a few microseconds per command on this machine
+(hundreds of thousands of classifications per second) — negligible for a
+per-tool-call guard:
 
 ![Per-command analysis latency](docs/benchmarks/latency.svg)
 
@@ -200,21 +202,22 @@ opencode-goal-mode-install --global
 ```
 
 Publishing is handled by `.github/workflows/publish.yml`, which runs on Node 24
-with `id-token: write` for Trusted Publishing. The workflow validates the
+and publishes with the `NPM_TOKEN` repository secret. The workflow validates the
 package, checks the tag matches `package.json`, verifies the version is not
 already on npm, then publishes. Manual workflow dispatch defaults to
 `npm publish --dry-run`.
 
-Release flow:
+Release flow for a new version:
 
 ```bash
 npm version patch
 git push --follow-tags
 ```
 
-Then create a GitHub Release from the pushed tag (e.g. `v0.1.1`). For
-token-based publishing instead of Trusted Publishing, add a repository secret
-`NPM_TOKEN` with publish rights.
+For a version that is already bumped and reviewed, commit the current tree, tag
+the reviewed version (for example `v0.2.2`), push the branch and tag, then create
+the GitHub Release. Ensure `NPM_TOKEN` has npm publish rights before publishing
+the release.
 
 ## Goal Completion Contract
 

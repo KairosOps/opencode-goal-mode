@@ -1,6 +1,7 @@
 # Benchmarks
 
-Reproducible measurement of the destructive-command guard. Run:
+Reproducible measurement of the destructive-command guard from a repository
+checkout. Run:
 
 ```bash
 npm run bench          # detection / false-positive / latency benchmark
@@ -30,7 +31,7 @@ README embeds.
 
 ## Results
 
-Representative run (Node 24, single-threaded; latency varies by machine, the
+Representative run (Node 22, single-threaded; latency varies by machine, the
 accuracy figures do not):
 
 | Metric | Legacy regex guard | Goal Mode analyzer |
@@ -40,13 +41,13 @@ accuracy figures do not):
 | Detection — classic | 100% | 100% |
 | Detection — obfuscated | 0% (0/35) | 100% (35/35) |
 | Detection — remote-exec | 0% (0/3) | 100% (3/3) |
-| Latency per command | ~1.3 µs | ~1.9 µs |
+| Latency per command | ~2.3 µs | ~3.8 µs |
 
 The legacy guard catches only the *classic* family and misses every obfuscated
 and remote-execution command, while wrongly blocking 1-in-5 benign commands. The
 tokenizer catches the entire corpus with zero false positives, for an extra
-~0.6 µs per command — negligible for a per-tool-call guard (still ~500,000
-classifications/second).
+~1.5 µs per command on this run — negligible for a per-tool-call guard (still
+hundreds of thousands of classifications per second).
 
 ## Honesty notes
 
@@ -55,7 +56,8 @@ classifications/second).
   (the analyzer fails open on un-analyzable dynamic commands — see
   [shell-hardening.md](shell-hardening.md)).
 - The latency comparison is intentionally shown even though the new analyzer is
-  slower: the win is accuracy, and the parse cost is sub-microsecond.
+  slower: the win is accuracy, and the parse cost is still only a few
+  microseconds per tool-call candidate.
 - "100% on this corpus" means 100% of the labeled set; new bypass classes that
   are discovered get added to the corpus and fixed (that is how the second-wave
   findings — `sudo -u`, `pnpm dlx`, interpreter shell-out — entered it).

@@ -146,7 +146,7 @@ writeFileSync(
   }),
 );
 
-// Chart 3: per-command latency — the deeper analysis costs ~1 microsecond more,
+// Chart 3: per-command latency — the deeper analysis costs a few microseconds,
 // which is negligible for a tool-call guard. Shown for honesty, not as a "win".
 writeFileSync(
   join(outDir, "latency.svg"),
