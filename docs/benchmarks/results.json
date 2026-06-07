@@ -35,8 +35,8 @@
         "safeFalsePos": 5
       }
     },
-    "opsPerSec": 434799,
-    "usPerCommand": 2.3
+    "opsPerSec": 445671,
+    "usPerCommand": 2.24
   },
   "current": {
     "detectionRate": 100,
@@ -71,8 +71,8 @@
         "safeFalsePos": 0
       }
     },
-    "opsPerSec": 264899,
-    "usPerCommand": 3.78
+    "opsPerSec": 266556,
+    "usPerCommand": 3.75
   },
   "truthfulness": {
     "name": "False Completion Dataset",
