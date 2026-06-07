@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "../plugins/goal-guard/state.js";
-import { requiredGates, gatePassedFresh, missingGates, completionAllowed } from "../plugins/goal-guard/gates.js";
-import { BASE_GATES } from "../plugins/goal-guard/agents.js";
+import { requiredGates, gatePassedFresh, missingGates, completionAllowed, refreshStickyGates } from "../plugins/goal-guard/gates.js";
+import { BASE_GATES, CONTEXTUAL_GATES } from "../plugins/goal-guard/agents.js";
 
 const cfg = { contextualGates: true };
 
@@ -84,4 +84,37 @@ test("completionAllowed requires active and no missing gates", () => {
   assert.equal(completionAllowed(st, cfg), false, "inactive blocks completion");
   st.active = true;
   assert.equal(completionAllowed(st, cfg), true);
+});
+
+test("every contextual keyword pulls its mapped reviewer in isolation", () => {
+  for (const [keyword, agent] of Object.entries(CONTEXTUAL_GATES)) {
+    const st = createState();
+    st.goalText = `please handle the ${keyword} concern`;
+    assert.ok(requiredGates(st, cfg).includes(agent), `keyword '${keyword}' should require ${agent}`);
+  }
+});
+
+test("filename tokenization: 'api-gateway.js' pulls api, 'contest.js' does not pull test", () => {
+  const apiState = createState();
+  apiState.changedFiles = ["src/api-gateway.js"];
+  assert.ok(requiredGates(apiState, cfg).includes("goal-api-reviewer"));
+
+  const contestState = createState();
+  contestState.changedFiles = ["src/contest.js"];
+  assert.equal(requiredGates(contestState, cfg).includes("goal-test-reviewer"), false, "'contest' must not match 'test'");
+});
+
+test("'contract' is no longer an over-broad api trigger", () => {
+  const st = createState();
+  st.goalText = "honor the rental contract terms";
+  assert.equal(requiredGates(st, cfg).includes("goal-api-reviewer"), false);
+});
+
+test("refreshStickyGates persists a gate even after the keyword disappears", () => {
+  const st = createState();
+  st.goalText = "fix the migration script";
+  refreshStickyGates(st);
+  assert.ok(st.stickyGates.includes("goal-data-reviewer"));
+  st.goalText = "rename a variable";
+  assert.ok(requiredGates(st, cfg).includes("goal-data-reviewer"), "sticky gate survives keyword loss");
 });

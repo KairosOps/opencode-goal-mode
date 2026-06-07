@@ -131,6 +131,19 @@ test("snapshot survives a simulated restart (new guard rehydrates)", () => {
   assert.equal(s2.active, true);
 });
 
+test("createGuard tolerates a valid-JSON-but-wrong-shape state file", () => {
+  const env = tempEnv();
+  const worktree = "/wrong-shape";
+  const p = createPersistence({ worktree, env });
+  mkdirSync(stateBaseDir(env), { recursive: true });
+  writeFileSync(p.file, JSON.stringify({ totally: "wrong", sessions: { not: "an array" } }), "utf8");
+  let guard;
+  assert.doesNotThrow(() => {
+    guard = createGuard({ client: {}, worktree }, {}, { env });
+  });
+  assert.equal(guard.store.size(), 0);
+});
+
 test("two different worktrees persist independently", () => {
   const env = tempEnv();
   const a = createStore();

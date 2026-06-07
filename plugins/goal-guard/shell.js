@@ -53,6 +53,20 @@ const DASH_C_INTERPRETERS = new Set(["sh", "bash", "zsh", "dash", "ksh", "ash", 
 /** Shells that execute whatever is piped into them on stdin. */
 const STDIN_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "ash"]);
 
+/**
+ * Wrapper options that consume the FOLLOWING token as their value, so the value
+ * is not mistaken for the wrapped command (e.g. `sudo -u root rm -rf /` — `root`
+ * is the value of `-u`, not the command).
+ */
+const WRAPPER_VALUE_OPTS = {
+  sudo: new Set(["-u", "-g", "-U", "-C", "-p", "-r", "-T", "-h", "--user", "--group", "--prompt", "--role", "--type", "--host", "--close-from", "--other-user"]),
+  doas: new Set(["-u", "-C"]),
+  nice: new Set(["-n", "--adjustment"]),
+  ionice: new Set(["-c", "-n", "-p"]),
+  stdbuf: new Set(["-i", "-o", "-e"]),
+  timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+};
+
 /** Commands that fetch remote content; piping them into a shell is remote code execution. */
 const NETWORK_FETCHERS = new Set(["curl", "wget", "fetch", "http", "https", "aria2c"]);
 
@@ -187,6 +201,12 @@ function lex(input) {
     if (c === "(" || c === ")" || c === "{" || c === "}") {
       pushOp(c);
       i += 1;
+      continue;
+    }
+
+    // A '#' at a word boundary starts a comment that runs to end of line.
+    if (c === "#" && !wordActive) {
+      while (i < n && input[i] !== "\n") i += 1;
       continue;
     }
 
@@ -340,6 +360,51 @@ function nonFlagArgs(args) {
   return args.filter((a) => !a.startsWith("-"));
 }
 
+/** Index of the first non-option token for a wrapper, honoring value-taking options. */
+function skipWrapperOptions(bin, args) {
+  const valueOpts = WRAPPER_VALUE_OPTS[bin] || new Set();
+  let j = 0;
+  while (j < args.length) {
+    const a = args[j];
+    if (a === "--") {
+      j += 1;
+      break;
+    }
+    if (a.startsWith("-")) {
+      // `--opt=value` carries its own value; otherwise a value-taking option
+      // consumes the next token.
+      if (!a.includes("=") && valueOpts.has(a)) j += 1;
+      j += 1;
+      continue;
+    }
+    if (/^\d+$/.test(a) && valueOpts.size === 0) {
+      // Bare numeric option value for wrappers with no declared value-opts.
+      j += 1;
+      continue;
+    }
+    break;
+  }
+  return j;
+}
+
+/** Decode `$'...'` ANSI-C quoting into a plain single-quoted literal so the
+ * lexer cannot be evaded by hex/octal/escape-encoded command names. */
+function decodeAnsiCQuotes(input) {
+  return input.replace(/\$'((?:[^'\\]|\\.)*)'/g, (_m, body) => {
+    const decoded = body
+      .replace(/\\x([0-9a-fA-F]{1,2})/g, (_s, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\0([0-7]{1,3})/g, (_s, o) => String.fromCharCode(parseInt(o, 8)))
+      .replace(/\\([0-7]{1,3})/g, (_s, o) => String.fromCharCode(parseInt(o, 8)))
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r")
+      .replace(/\\\\/g, "\\")
+      .replace(/\\'/g, "'")
+      .replace(/\\"/g, '"');
+    return `'${decoded.replace(/'/g, "'\\''")}'`;
+  });
+}
+
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun", "pip", "pip3", "pipenv", "poetry", "cargo", "go", "gem", "bundle", "composer", "apt", "apt-get", "brew", "gradle", "mvn", "dotnet", "deno"]);
 const PKG_MUTATING_SUBCMDS = new Set(["install", "i", "ci", "add", "remove", "rm", "uninstall", "update", "upgrade", "link", "unlink", "prune", "dedupe", "rebuild", "get", "tidy"]);
 const PKG_SCRIPT_RUNNERS = new Set(["run", "run-script", "exec"]);
@@ -380,21 +445,20 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
-  // Simple wrappers: skip the wrapper's own options (and their numeric values,
-  // e.g. `nice -n 10 cmd`, `ionice -c2 cmd`), then the next token is the real
-  // command.
+  // Simple wrappers: skip the wrapper's own options — including the values of
+  // value-taking options (e.g. `sudo -u root cmd`, `nice -n 10 cmd`) — then the
+  // next token is the real command.
   if (SIMPLE_WRAPPERS.has(bin)) {
-    let j = 0;
-    while (j < args.length && (args[j].startsWith("-") || /^\d+$/.test(args[j]))) j += 1;
+    const j = skipWrapperOptions(bin, args);
     if (j < args.length) return classifyCommand(args.slice(j), [], depth + 1, acc, pipelineCmds, indexInPipeline);
     return;
   }
 
-  // timeout [opts] DURATION cmd... — skip its own options and the duration.
+  // timeout [opts] DURATION cmd... — skip value-aware options, then the
+  // duration token, then classify the remainder.
   if (bin === "timeout") {
-    let j = 0;
-    while (j < args.length && args[j].startsWith("-")) j += 1;
-    j += 1; // duration
+    let j = skipWrapperOptions("timeout", args);
+    j += 1; // duration token
     if (j < args.length) return classifyCommand(args.slice(j), [], depth + 1, acc, pipelineCmds, indexInPipeline);
     return;
   }
@@ -429,17 +493,17 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
   }
 
   if (bin === "node" || bin === "nodejs" || bin === "deno") {
-    classifyInterpreterScript(bin, args, acc);
+    classifyInterpreterScript(bin, args, depth, acc);
     // deno also has subcommands; fall through handled in classifyInterpreterScript
     if (bin === "deno") classifyDeno(args, acc);
     return;
   }
   if (bin === "python" || bin === "python3" || bin === "python2") {
-    classifyPython(args, acc);
+    classifyPython(args, depth, acc);
     return;
   }
   if (bin === "perl" || bin === "ruby") {
-    classifyPerlRuby(bin, args, acc);
+    classifyPerlRuby(bin, args, depth, acc);
     return;
   }
   if (bin === "awk" || bin === "gawk" || bin === "mawk") {
@@ -447,15 +511,17 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
-  // rm
+  // rm. Recursive/force/wildcard/root deletions are irreversible (blocked); a
+  // plain single- or multi-file rm only marks the session dirty (the host's own
+  // `rm *` permission rule decides whether to prompt).
   if (bin === "rm") {
     const recursive = hasFlag(args, ["-r", "-R", "--recursive"]);
     const force = hasFlag(args, ["-f", "--force"]);
     const targets = nonFlagArgs(args);
     const wildcard = targets.some((t) => /[*?]/.test(t) || t === "/" || t === "~" || t.endsWith("/*"));
-    if (recursive || force || wildcard || targets.length > 1) {
+    if (recursive || force || wildcard) {
       acc.destructive = true;
-      acc.reasons.push(`rm with ${recursive ? "recursive " : ""}${force ? "force " : ""}deletion`);
+      acc.reasons.push(`rm with ${recursive ? "recursive " : ""}${force ? "force " : ""}deletion`.replace(/\s+/g, " ").trim());
     } else {
       acc.mutating = true;
       acc.reasons.push("rm file deletion");
@@ -465,7 +531,7 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
 
   // git
   if (bin === "git") {
-    classifyGit(args, acc);
+    classifyGit(args, depth, acc);
     return;
   }
 
@@ -494,7 +560,14 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
         if (args[k] === ";" || args[k] === "+" || args[k] === "\\;") break;
         rest.push(args[k]);
       }
-      if (rest.length) classifyCommand(rest, [], depth + 1, acc, [], 0);
+      // An -exec body runs once per match, so even a single-target rm deletes a
+      // whole match set: treat any rm under -exec as destructive.
+      if (rest.length && baseName(rest[0]) === "rm") {
+        acc.destructive = true;
+        acc.reasons.push("find -exec rm over a match set");
+      } else if (rest.length) {
+        classifyCommand(rest, [], depth + 1, acc, [], 0);
+      }
     }
     return;
   }
@@ -515,12 +588,14 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
-  // chmod/chown recursive on root → destructive; otherwise mutating
+  // chmod/chown recursive on a system path → destructive; otherwise mutating.
+  // The first non-flag operand is the mode/owner; the rest are paths.
   if (bin === "chmod" || bin === "chown" || bin === "chgrp") {
-    const targets = nonFlagArgs(args).slice(1);
-    if (hasFlag(args, ["-R", "--recursive"]) && targets.some((t) => t === "/" || t.startsWith("/ "))) {
+    const paths = nonFlagArgs(args).slice(1);
+    const systemPath = (t) => t === "/" || t === "~" || /^\/(etc|usr|bin|sbin|boot|var|lib|lib64|sys|root|dev|proc)\b/.test(t);
+    if (hasFlag(args, ["-R", "--recursive"]) && paths.some(systemPath)) {
       acc.destructive = true;
-      acc.reasons.push(`${bin} -R on root`);
+      acc.reasons.push(`${bin} -R on a system path`);
     } else {
       acc.mutating = true;
       acc.reasons.push(bin);
@@ -541,26 +616,9 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
-  // npx / pnpm dlx / yarn dlx run an arbitrary binary.
-  if (bin === "npx" || bin === "pnpx") {
-    const target = args.find((a) => !a.startsWith("-"));
-    if (target) {
-      const tbin = baseName(target);
-      if (FORMATTERS.has(tbin)) {
-        if (hasFlag(args, ["-w", "--write", "--fix"])) {
-          acc.mutating = true;
-          acc.reasons.push(`${tbin} --write/--fix`);
-        }
-        return;
-      }
-      // Recurse for npx <pkg> being e.g. rimraf
-      if (tbin === "rimraf" || tbin === "del" || tbin === "del-cli") {
-        acc.destructive = true;
-        acc.reasons.push(`${tbin} via npx`);
-        return;
-      }
-      if (DIRECT_TEST_BINS.has(tbin)) acc.verification = true;
-    }
+  // npx / bunx run an arbitrary binary directly.
+  if (bin === "npx" || bin === "pnpx" || bin === "bunx") {
+    classifyRunner(args, acc);
     return;
   }
 
@@ -581,10 +639,10 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
-  // make <target>
+  // make <target>. Signal writes are monotonic (OR-accumulated): never assign
+  // false, which would clobber a `true` set by an earlier command in the chain.
   if (bin === "make" || bin === "gmake") {
     const target = nonFlagArgs(args)[0] || "";
-    if (TEST_SCRIPT_WORDS.has(target) || target === "") acc.verification = TEST_SCRIPT_WORDS.has(target);
     if (TEST_SCRIPT_WORDS.has(target)) acc.verification = true;
     if (["install", "clean", "distclean", "uninstall"].includes(target)) {
       acc.mutating = true;
@@ -624,27 +682,55 @@ function handlePipedShell(shellBin, args, pipelineCmds, indexInPipeline, depth, 
     const upstream = pipelineCmds[k];
     const uhead = baseName((upstream.words || []).find((w) => !ENV_ASSIGN.test(w)) || "");
     if (NETWORK_FETCHERS.has(uhead)) {
+      // Remote code execution. Kept distinct from `destructive` so it can be
+      // toggled independently via config.blockNetworkExec.
       acc.networkExec = true;
-      acc.destructive = true;
       acc.reasons.push(`piping ${uhead} into ${shellBin}`);
       return;
     }
     if (uhead === "echo" || uhead === "printf") {
-      // Analyze the echoed literal as a command.
-      const literal = (upstream.words || []).slice(1).filter((w) => !w.startsWith("-")).join(" ");
+      const literal = echoCommandLiteral(uhead, upstream.words || []);
       if (literal) analyzeInto(literal, depth + 1, acc);
       return;
     }
   }
 }
 
-function classifyInterpreterScript(bin, args, acc) {
+/** Classify the binary an ad-hoc runner (npx/bunx/pnpm dlx/yarn dlx) executes. */
+function classifyRunner(args, acc) {
+  // Skip runner flags and the optional `-p pkg` / `--package pkg` selectors.
+  let i = 0;
+  while (i < args.length && args[i].startsWith("-")) {
+    if (["-p", "--package", "-c", "--call"].includes(args[i])) i += 1;
+    i += 1;
+  }
+  const target = args.slice(i).find((a) => !a.startsWith("-"));
+  if (!target) return;
+  const tbin = baseName(target);
+  if (tbin === "rimraf" || tbin === "del" || tbin === "del-cli" || tbin === "trash") {
+    acc.destructive = true;
+    acc.reasons.push(`${tbin} via runner`);
+    return;
+  }
+  if (FORMATTERS.has(tbin)) {
+    if (hasFlag(args, ["-w", "--write", "--fix", "-i"])) {
+      acc.mutating = true;
+      acc.reasons.push(`${tbin} --write/--fix`);
+    } else {
+      acc.verification = true;
+    }
+    return;
+  }
+  if (DIRECT_TEST_BINS.has(tbin)) acc.verification = true;
+}
+
+function classifyInterpreterScript(bin, args, depth, acc) {
   if (args.includes("--test") || args.includes("--test-only")) {
     acc.verification = true;
   }
   const ei = args.findIndex((a) => a === "-e" || a === "--eval" || a === "-p" || a === "--print");
   if (ei >= 0 && args[ei + 1] !== undefined) {
-    inspectScriptString(args[ei + 1], acc);
+    inspectScriptString(args[ei + 1], depth, acc);
   }
 }
 
@@ -657,7 +743,7 @@ function classifyDeno(args, acc) {
   }
 }
 
-function classifyPython(args, acc) {
+function classifyPython(args, depth, acc) {
   const mi = args.findIndex((a) => a === "-m");
   if (mi >= 0) {
     const mod = args[mi + 1];
@@ -671,16 +757,16 @@ function classifyPython(args, acc) {
     }
   }
   const ci = args.findIndex((a) => a === "-c");
-  if (ci >= 0 && args[ci + 1] !== undefined) inspectScriptString(args[ci + 1], acc);
+  if (ci >= 0 && args[ci + 1] !== undefined) inspectScriptString(args[ci + 1], depth, acc);
 }
 
-function classifyPerlRuby(bin, args, acc) {
+function classifyPerlRuby(bin, args, depth, acc) {
   if (bin === "perl" && args.some((a) => /^-.*i/.test(a) && /^-.*p/.test(a))) {
     acc.mutating = true;
     acc.reasons.push("perl -pi in-place");
   }
   const ei = args.findIndex((a) => a === "-e" || a === "-E");
-  if (ei >= 0 && args[ei + 1] !== undefined) inspectScriptString(args[ei + 1], acc);
+  if (ei >= 0 && args[ei + 1] !== undefined) inspectScriptString(args[ei + 1], depth, acc);
 }
 
 function classifyAwk(args, depth, acc) {
@@ -703,8 +789,38 @@ function classifyAwk(args, depth, acc) {
  */
 const SCRIPT_DELETE_RE = /(os\.remove|os\.unlink|os\.rmdir|shutil\.rmtree|\.rmSync\b|\.rmdirSync\b|fs\.rm\(|fs\.rmSync|fs\.unlink|\.unlink\(|rimraf)/;
 const SCRIPT_WRITE_RE = /(writeFile|appendFile|copyFile|mkdir|createWriteStream|\.write_text|\.write_bytes|shutil\.copy|shutil\.move|open\s*\([^)]*['"][wax]\+?['"])/;
+/** Sinks where an interpreter shells out; the quoted argument is a real command. */
+const SCRIPT_EXEC_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|execSync|execFileSync|spawnSync|\bexecvp?\b|\bsystem|\bpopen|\bqx|`[^`]*`)/;
 
-function inspectScriptString(code, acc) {
+const EXEC_SINK_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|execSync|execFileSync|spawnSync|execvp?|popen|system|qx)\s*\(/g;
+
+/** Extract the shell command an exec sink runs (handles a string or an argv list). */
+function extractExecCommand(code) {
+  // Perl/Ruby backticks: `cmd`.
+  const bt = code.match(/`([^`]+)`/);
+  if (bt) return bt[1];
+  EXEC_SINK_RE.lastIndex = 0;
+  const m = EXEC_SINK_RE.exec(code);
+  if (!m) return null;
+  const [region] = readBalanced(code, m.index + m[0].length, "(", ")");
+  const quoted = [...region.matchAll(/["']([^"']*)["']/g)].map((q) => q[1]).filter(Boolean);
+  if (!quoted.length) return null;
+  // argv list (`["rm","-rf","/"]`) → join; single string → use as-is.
+  return /^\s*\[/.test(region) ? quoted.join(" ") : quoted[0];
+}
+
+function inspectScriptString(code, depth, acc) {
+  // Interpreter that shells out: pull the command out of the exec sink's own
+  // argument region (so unrelated quoted strings elsewhere are ignored).
+  if (SCRIPT_EXEC_RE.test(code)) {
+    const cmd = extractExecCommand(code);
+    if (cmd) analyzeInto(cmd, (depth || 0) + 1, acc);
+    else {
+      acc.destructive = true;
+      acc.reasons.push("interpreter shell-out");
+    }
+    return;
+  }
   if (SCRIPT_DELETE_RE.test(code)) {
     acc.destructive = true;
     acc.reasons.push("interpreter filesystem deletion");
@@ -735,6 +851,12 @@ function classifyPackageManager(bin, args, acc) {
     return;
   }
 
+  // pnpm dlx / yarn dlx / bun x — run an arbitrary fetched binary.
+  if (sub === "dlx" || (bin === "bun" && sub === "x")) {
+    classifyRunner(args.slice(args.indexOf(sub) + 1), acc);
+    return;
+  }
+
   // npm/pnpm/yarn/bun
   if (PKG_MUTATING_SUBCMDS.has(sub)) {
     acc.mutating = true;
@@ -758,18 +880,72 @@ function classifyPackageManager(bin, args, acc) {
   if (bin === "bun" && sub === "test") acc.verification = true;
 }
 
-function classifyGit(args, acc) {
-  // Skip leading global options: -C <dir>, -c key=val, --git-dir=, --work-tree=, -P, --no-pager, --paginate
+function classifyGit(args, depth, acc) {
+  // Skip leading global options: -C <dir>, -c key=val, --git-dir=, etc.
+  // A `-c` config override can weaponize git: `git -c alias.x='!rm -rf /' x`
+  // or `git -c core.pager='!cmd' log` runs an embedded shell command.
   let i = 0;
   while (i < args.length && args[i].startsWith("-")) {
-    if (args[i] === "-C" || args[i] === "-c") i += 2;
-    else i += 1;
+    if (args[i] === "-C") i += 2;
+    else if (args[i] === "-c") {
+      const kv = args[i + 1] || "";
+      const val = kv.slice(kv.indexOf("=") + 1);
+      if (val.startsWith("!")) analyzeInto(val.slice(1), (depth || 0) + 1, acc);
+      i += 2;
+    } else i += 1;
   }
   const sub = args[i];
   const rest = args.slice(i + 1);
   if (!sub) return;
 
   switch (sub) {
+    case "config": {
+      // `git config alias.x '!rm -rf /'` (or core.pager etc.) stores a shell
+      // command that runs on later invocation; analyze the embedded command.
+      const shellVal = rest.find((a) => a.startsWith("!"));
+      if (shellVal) analyzeInto(shellVal.slice(1), (depth || 0) + 1, acc);
+      acc.mutating = true;
+      acc.reasons.push("git config");
+      return;
+    }
+    case "reflog":
+      if (rest[0] === "expire" || rest[0] === "delete") {
+        acc.destructive = true;
+        acc.reasons.push(`git reflog ${rest[0]}`);
+      }
+      return;
+    case "gc":
+      if (rest.some((a) => a === "--prune=now" || a.startsWith("--prune=") || a === "--aggressive")) {
+        acc.destructive = true;
+        acc.reasons.push("git gc --prune");
+      }
+      return;
+    case "filter-branch":
+    case "filter-repo":
+      acc.destructive = true;
+      acc.reasons.push(`git ${sub}`);
+      return;
+    case "worktree":
+      if (rest[0] === "remove" || rest[0] === "prune") {
+        acc.destructive = true;
+        acc.reasons.push(`git worktree ${rest[0]}`);
+      } else {
+        acc.mutating = true;
+        acc.reasons.push("git worktree");
+      }
+      return;
+    case "remote":
+      if (rest[0] === "remove" || rest[0] === "rm" || rest[0] === "prune") {
+        acc.mutating = true;
+        acc.reasons.push(`git remote ${rest[0]}`);
+      }
+      return;
+    case "notes":
+      if (rest[0] === "prune" || rest[0] === "remove") {
+        acc.mutating = true;
+        acc.reasons.push(`git notes ${rest[0]}`);
+      }
+      return;
     case "reset":
       if (hasFlag(rest, ["--hard", "--merge", "--keep"]) || rest.some((a) => a === "--hard")) {
         acc.destructive = true;
@@ -786,12 +962,16 @@ function classifyGit(args, acc) {
       }
       return;
     case "checkout":
-      // Destructive only when discarding changes: `--` pathspec, -f/--force, or `.`
+      // Destructive when explicitly discarding changes: `--` pathspec, -f/--force, or `.`.
+      // KNOWN HEURISTIC GAP: `git checkout <file>` (a bare pathspec) also discards
+      // that file's uncommitted edits, but a bare arg is indistinguishable from a
+      // branch/ref switch (`git checkout main`) without repo state, so we do not
+      // block it to avoid false-positiving the far more common branch switch. Use
+      // `git restore`/`git checkout -- <file>` to make the intent explicit.
       if (rest.includes("--") || hasFlag(rest, ["-f", "--force"]) || rest.includes(".")) {
         acc.destructive = true;
         acc.reasons.push("git checkout discarding changes");
       }
-      // `git checkout -b/-B newbranch` and `git checkout <ref>` are not destructive.
       return;
     case "switch":
       if (hasFlag(rest, ["-f", "--force", "--discard-changes"])) {
@@ -804,7 +984,7 @@ function classifyGit(args, acc) {
       acc.reasons.push("git restore discards worktree changes");
       return;
     case "branch":
-      if (hasFlag(rest, ["-D"]) || rest.includes("-D") || rest.includes("--delete")) {
+      if (hasFlag(rest, ["-D", "-d"]) || rest.includes("-D") || rest.includes("-d") || rest.includes("--delete")) {
         acc.destructive = true;
         acc.reasons.push("git branch delete");
       }
@@ -864,9 +1044,49 @@ function applyRedirects(redirects, acc) {
   }
 }
 
+/** Does any top-level command in these pipelines invoke a bare shell interpreter? */
+function hasBareShell(pipelines) {
+  for (const pipeline of pipelines) {
+    for (const cmd of pipeline) {
+      let k = 0;
+      const words = cmd.words || [];
+      while (k < words.length && ENV_ASSIGN.test(words[k])) k += 1;
+      const head = baseName(words[k] || "");
+      if (STDIN_SHELLS.has(head) && !words.includes("-c")) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Extract the literal text emitted by an `echo`/`printf` word list, dropping
+ * only echo's own leading flags (-n/-e/-E) and printf's format string — NOT the
+ * inner command's flags (so `echo rm -rf x` yields `rm -rf x`, not `rm x`).
+ */
+function echoCommandLiteral(head, words) {
+  let parts = words.slice(1);
+  if (head === "echo") {
+    while (parts.length && /^-[neE]+$/.test(parts[0])) parts = parts.slice(1);
+  } else if (head === "printf" && parts.length && /%/.test(parts[0])) {
+    parts = parts.slice(1);
+  }
+  return parts.join(" ") || null;
+}
+
+/** If a substitution is `echo X`/`printf X`, return X (a candidate script). */
+function echoLiteralOf(substString) {
+  const { pipelines } = structure(lex(substString));
+  if (pipelines.length !== 1 || pipelines[0].length !== 1) return null;
+  const words = pipelines[0][0].words || [];
+  const head = baseName(words[0] || "");
+  if (head !== "echo" && head !== "printf") return null;
+  return echoCommandLiteral(head, words);
+}
+
 /** Analyze a command string, merging results into `acc`. */
-function analyzeInto(input, depth, acc) {
-  if (depth > MAX_DEPTH || typeof input !== "string" || input.length === 0) return;
+function analyzeInto(rawInput, depth, acc) {
+  if (depth > MAX_DEPTH || typeof rawInput !== "string" || rawInput.length === 0) return;
+  const input = decodeAnsiCQuotes(rawInput);
 
   // Fork-bomb detection at the raw level.
   if (/:\s*\(\s*\)\s*\{[^}]*\|\s*:\s*&[^}]*\}\s*;\s*:/.test(input) || /\}\s*;\s*:\s*$/.test(input.replace(/\s+/g, " "))) {
@@ -883,8 +1103,19 @@ function analyzeInto(input, depth, acc) {
       classifyCommand(cmd.words, cmd.redirects, depth, acc, pipeline, indexInPipeline);
     });
   }
-  // Recurse into every command substitution discovered anywhere.
-  for (const s of substs) analyzeInto(s, depth + 1, acc);
+  // When a bare shell interpreter is present (e.g. `bash <(echo rm -rf /)`), an
+  // echoed substitution is a script fed to that shell — analyze its literal as code.
+  const shellPresent = hasBareShell(pipelines);
+  for (const s of substs) {
+    if (shellPresent) {
+      const literal = echoLiteralOf(s);
+      if (literal) {
+        analyzeInto(literal, depth + 1, acc);
+        continue;
+      }
+    }
+    analyzeInto(s, depth + 1, acc);
+  }
 }
 
 /**

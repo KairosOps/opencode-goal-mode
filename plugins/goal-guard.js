@@ -25,7 +25,7 @@ import { createLogger } from "./goal-guard/logger.js";
 import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./goal-guard/shell.js";
 import { isGoalAgent, isReviewAgent, CYCLE_CLOSING_AGENT } from "./goal-guard/agents.js";
 import { textOf, parseVerdict, recordVerdict } from "./goal-guard/verdicts.js";
-import { completionAllowed, missingGates } from "./goal-guard/gates.js";
+import { completionAllowed, missingGates, refreshStickyGates } from "./goal-guard/gates.js";
 import { evaluateCompletionClaim } from "./goal-guard/completion.js";
 import { summarizeState } from "./goal-guard/summary.js";
 import { buildSystemInjection } from "./goal-guard/system.js";
@@ -106,6 +106,9 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (text && state.active) {
           // Accumulate goal text (bounded) so contextual gates can be derived.
           state.goalText = `${state.goalText} ${text}`.trim().slice(-8000);
+          // Resolve contextual gates eagerly into the sticky set so truncating
+          // the rolling buffer later cannot drop an already-required gate.
+          refreshStickyGates(state);
           persist();
         }
       } catch {
@@ -164,7 +167,9 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         const tool = inp?.tool;
         const isReviewing = isReviewAgent(state.currentAgent);
 
-        if (tool === "write" || tool === "edit" || tool === "apply_patch") {
+        // Edits dirty the session (a read-only reviewer never edits, but guard
+        // symmetrically with the bash path so review-time writes don't dirty it).
+        if ((tool === "write" || tool === "edit" || tool === "apply_patch") && !isReviewing) {
           markEdit(store, state, `${tool} at ${store.nowIso()}`);
         }
 
@@ -179,10 +184,13 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           }
         }
 
-        // Verdict capture: task path (subagent reviewers) and agent path (the
-        // reviewer's own session). The two never apply to the same call because
-        // they are split by tool type, so no double counting.
+        // Verdict capture: task path (subagent reviewers, fires in the parent
+        // session) and agent path (a reviewer's own session). Split by tool type
+        // so the two never double-count the same call. Agent-path verdicts are
+        // attributed to the active goal session, since a reviewer subagent runs
+        // in a child session whose verdict belongs to the parent goal.
         let recordedAgent = null;
+        let recordedState = state;
         if (tool === "task") {
           const sub = normalizedSubagent(inp);
           if (isReviewAgent(sub)) {
@@ -195,13 +203,14 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         } else if (isReviewAgent(state.currentAgent)) {
           const verdict = parseVerdict(textOf(out));
           if (verdict) {
-            recordVerdict(store, state, state.currentAgent, verdict);
+            recordedState = activeSession() || state;
+            recordVerdict(store, recordedState, state.currentAgent, verdict);
             recordedAgent = state.currentAgent;
           }
         }
 
         if (recordedAgent === CYCLE_CLOSING_AGENT) {
-          maybeClearDirtyOnFinalPass(state, config);
+          maybeClearDirtyOnFinalPass(recordedState, config);
         }
         persist();
       } catch {
@@ -246,11 +255,19 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (!event) return;
         if (event.type === "file.edited") {
           const file = event.properties?.file || event.properties?.path || event.properties?.filename;
-          const target = activeSession();
-          if (target && file) {
-            markFileChanged(store, target, file);
-            persist();
+          if (!file) return;
+          // The event is project-scoped and carries no sessionID, so attribute
+          // it to every active goal session in this project (a subagent edit in
+          // a child session must still dirty the goal it serves).
+          let touched = false;
+          for (const st of store.sessions.values()) {
+            if (st.active) {
+              markFileChanged(store, st, file);
+              refreshStickyGates(st);
+              touched = true;
+            }
           }
+          if (touched) persist();
           return;
         }
         if (event.type === "session.idle" && event.properties?.sessionID) {

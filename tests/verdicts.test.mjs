@@ -19,6 +19,20 @@ test("parseVerdict prefers line-anchored conclusions over inline mentions", () =
   assert.equal(parseVerdict(text), "FAIL");
 });
 
+test("REGRESSION: an anchored PASS followed by a later inline FAIL resolves to FAIL", () => {
+  // The earlier "prefer the anchored set" logic returned PASS here, letting a
+  // failing final review complete the goal. The textually-last verdict must win.
+  assert.equal(parseVerdict("Verdict: PASS happy path\nHowever, Verdict: FAIL — blocking"), "FAIL");
+  assert.equal(parseVerdict("Verdict: PASS for the common case.\nFinal Verdict: FAIL"), "FAIL");
+  assert.equal(parseVerdict("Verdict: PASS\n1. Verdict: FAIL on edge cases"), "FAIL");
+});
+
+test("PASSED/FAILED do not register (strict PASS/FAIL only)", () => {
+  assert.equal(parseVerdict("Verdict: PASSED"), null);
+  assert.equal(parseVerdict("Verdict: FAILED"), null);
+  assert.equal(parseVerdict("Verdict: FAILURE"), null);
+});
+
 test("parseVerdict tolerates markdown emphasis and leading markers", () => {
   assert.equal(parseVerdict("- **Verdict:** PASS"), "PASS");
   assert.equal(parseVerdict("> Verdict: FAIL"), "FAIL");

@@ -23,7 +23,11 @@ const CYCLES_RE = /Review cycles:\s*(\d+)/i;
  */
 export function evaluateCompletionClaim(state, config, text) {
   const marker = config.completionMarker || "Goal Completed";
-  const markerRe = new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The completion contract requires the message to START with the marker (the
+  // final response begins with "Goal Completed"). Anchor to the first non-space
+  // of the message or of any line, so a mid-sentence mention is not policed.
+  const markerRe = new RegExp(`^[\\s>*_#-]*${escaped}`, "im");
 
   if (!text || !markerRe.test(text)) return { blocked: false };
   // Only police active goal sessions.
@@ -48,8 +52,10 @@ export function evaluateCompletionClaim(state, config, text) {
   if (!reason) return { blocked: false, claimedCycles };
 
   const blockedMarker = config.blockedMarker || "Goal Not Completed";
+  // Replace only the marker word itself, preserving any leading markdown/prefix.
+  const markerWordRe = new RegExp(escaped, "i");
   const replacement =
-    text.replace(markerRe, blockedMarker) +
+    text.replace(markerWordRe, blockedMarker) +
     `\n\nGoal Guard blocked completion: ${reason}. State: ${summary}`;
   return { blocked: true, reason, replacement, claimedCycles };
 }

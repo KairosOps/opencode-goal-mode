@@ -33,18 +33,37 @@ function wordSet(text) {
   return set;
 }
 
+/** The specialist reviewers implied by the current goal text/contract/files. */
+export function contextualGatesFor(state) {
+  const found = [];
+  const text = [state.goalText, contractText(state.contract), (state.changedFiles || []).join(" ")].join(" ");
+  const words = wordSet(text);
+  for (const [keyword, agent] of Object.entries(CONTEXTUAL_GATES)) {
+    if (words.has(keyword) && !found.includes(agent)) found.push(agent);
+  }
+  return found;
+}
+
+/**
+ * Union the currently-implied contextual gates into the session's sticky set.
+ * Gates are sticky so a long session whose rolling goalText buffer later drops
+ * the triggering keyword does not silently lose a required specialist review.
+ */
+export function refreshStickyGates(state) {
+  if (!Array.isArray(state.stickyGates)) state.stickyGates = [];
+  for (const agent of contextualGatesFor(state)) {
+    if (!state.stickyGates.includes(agent)) state.stickyGates.push(agent);
+  }
+  return state.stickyGates;
+}
+
 /** The reviewers that must PASS for this state, given config. */
 export function requiredGates(state, config) {
   const gates = [...BASE_GATES];
   if (!config || config.contextualGates) {
-    const text = [
-      state.goalText,
-      contractText(state.contract),
-      (state.changedFiles || []).join(" "),
-    ].join(" ");
-    const words = wordSet(text);
-    for (const [keyword, agent] of Object.entries(CONTEXTUAL_GATES)) {
-      if (words.has(keyword) && !gates.includes(agent)) gates.push(agent);
+    const contextual = new Set([...(state.stickyGates || []), ...contextualGatesFor(state)]);
+    for (const agent of contextual) {
+      if (!gates.includes(agent)) gates.push(agent);
     }
   }
   return gates;

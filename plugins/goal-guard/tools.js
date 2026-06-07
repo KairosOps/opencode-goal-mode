@@ -14,6 +14,7 @@
 import { tool } from "@opencode-ai/plugin";
 import { statusReport } from "./summary.js";
 import { recordEvidence } from "./events.js";
+import { refreshStickyGates } from "./gates.js";
 import { createState } from "./state.js";
 
 const s = tool.schema;
@@ -71,6 +72,7 @@ export function createGoalTools({ store, config, persist }) {
           at: store.nowIso(),
         };
         state.goalText = [state.goalText, state.contract.original].filter(Boolean).join(" ");
+        refreshStickyGates(state);
         state.updatedAt = store.nowIso();
         save();
         const report = statusReport(state, config);

@@ -5,6 +5,8 @@ import {
   copyFileSync,
   readdirSync,
   statSync,
+  lstatSync,
+  rmdirSync,
   existsSync,
   readFileSync,
   writeFileSync,
@@ -73,16 +75,40 @@ function fileHash(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 16);
 }
 
-/** Recursively list files under a directory, returning paths relative to `base`. */
+/** Recursively list regular files under a directory, returning paths relative to
+ * `base`. Uses lstat and skips symlinks so the installer only copies files it can
+ * reason about (no following links outside the package tree). */
 function listFiles(dir, base = dir, out = []) {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     const abs = join(dir, entry);
-    const st = statSync(abs);
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink()) continue;
     if (st.isDirectory()) listFiles(abs, base, out);
     else if (st.isFile()) out.push(relative(base, abs));
   }
   return out;
+}
+
+/** Remove directories left empty by file removal, bottom-up, within the target. */
+function pruneEmptyDirs(targetRoot, relFiles) {
+  const dirs = new Set();
+  for (const rel of relFiles) {
+    let d = dirname(rel);
+    while (d && d !== "." && d !== "/") {
+      dirs.add(d);
+      d = dirname(d);
+    }
+  }
+  // Deepest first so parents become empty after their children are removed.
+  for (const rel of [...dirs].sort((a, b) => b.length - a.length)) {
+    const abs = join(targetRoot, rel);
+    try {
+      if (existsSync(abs) && statSync(abs).isDirectory() && readdirSync(abs).length === 0) rmdirSync(abs);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 const target = resolveTarget();
@@ -116,6 +142,7 @@ if (values.uninstall) {
     }
   }
   if (!values["dry-run"] && existsSync(manifestPath)) rmSync(manifestPath, { force: true });
+  if (!values["dry-run"]) pruneEmptyDirs(target, Object.keys(manifest.files));
   const verb = values["dry-run"] ? "Would remove" : "Removed";
   console.log(`${verb} ${removed.length} Goal Mode files from ${target}.`);
   if (kept.length) {
@@ -185,9 +212,10 @@ for (const [relKey, oldHash] of Object.entries(manifest.files)) {
   if (!existsSync(dest)) continue;
   if (fileHash(dest) === oldHash) {
     if (!values["dry-run"]) rmSync(dest, { force: true });
-    summary.pruned.push(dest);
+    summary.pruned.push(relKey);
   }
 }
+if (!values["dry-run"] && summary.pruned.length) pruneEmptyDirs(target, summary.pruned);
 
 if (summary.conflicts.length) {
   throw new Error(

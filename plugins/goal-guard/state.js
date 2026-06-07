@@ -22,6 +22,7 @@ export function createState(nowIso) {
     active: false,
     goalText: "",
     contract: null,
+    stickyGates: [],
     dirty: false,
     dirtyReasons: [],
     changedFiles: [],
@@ -136,11 +137,32 @@ export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.n
     if (Number.isFinite(data.seq)) seq = Math.max(seq, data.seq);
     if (Number.isFinite(data.touchCounter)) touchCounter = Math.max(touchCounter, data.touchCounter);
     if (Array.isArray(data.sessions)) {
+      const wall = clock();
       for (const entry of data.sessions) {
         if (!Array.isArray(entry) || entry.length !== 2) continue;
         const [key, raw] = entry;
-        sessions.set(String(key), reviveState(raw));
+        const st = reviveState(raw);
+        // Seed a wall time so restored sessions are subject to TTL eviction
+        // (otherwise undefined touchedWall makes them immortal).
+        if (st.touchedWall === undefined) st.touchedWall = wall;
+        sessions.set(String(key), st);
       }
+    }
+    // Restoring a snapshot must respect the configured cap, or a persisted
+    // oversized store would exceed maxSessions forever (and a later add could
+    // evict a live active session in one burst).
+    while (sessions.size > maxSessions) {
+      let oldestKey = null;
+      let oldest = Infinity;
+      for (const [key, st] of sessions) {
+        const rank = (st.active ? Number.MAX_SAFE_INTEGER / 2 : 0) + (st.touchedAt || 0);
+        if (rank < oldest) {
+          oldest = rank;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey === null) break;
+      sessions.delete(oldestKey);
     }
   }
 

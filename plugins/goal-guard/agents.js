@@ -97,7 +97,6 @@ export const CONTEXTUAL_GATES = Object.freeze({
   endpoint: "goal-api-reviewer",
   endpoints: "goal-api-reviewer",
   schema: "goal-api-reviewer",
-  contract: "goal-api-reviewer",
   data: "goal-data-reviewer",
   database: "goal-data-reviewer",
   migration: "goal-data-reviewer",

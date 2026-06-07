@@ -121,3 +121,32 @@ test("restore never lowers the seq counter", () => {
   store.restore({ seq: 5 });
   assert.equal(store.seqValue(), 20);
 });
+
+test("REGRESSION: restore respects maxSessions and keeps active sessions", () => {
+  const store = createStore({ maxSessions: 3 });
+  const sessions = [];
+  for (let i = 0; i < 10; i += 1) sessions.push([`s${i}`, { active: i === 9, touchedAt: i }]);
+  store.restore({ version: 1, seq: 1, sessions });
+  assert.ok(store.size() <= 3, "restore must not exceed the cap");
+  assert.equal(store.sessions.has("s9"), true, "the active session must survive the trim");
+});
+
+test("restored sessions are subject to TTL eviction (touchedWall seeded)", () => {
+  let now = 10_000;
+  const store = createStore({ maxSessions: 100, ttlMs: 1000, clock: () => now });
+  store.restore({ version: 1, seq: 1, sessions: [["old", { active: false }]] });
+  now += 5000; // past TTL
+  store.stateFor("trigger"); // triggers the TTL sweep
+  assert.equal(store.sessions.has("old"), false, "restored idle session must be TTL-reapable");
+});
+
+test("eviction with all sessions active still holds the cap and drops the LRU active one", () => {
+  const store = createStore({ maxSessions: 3 });
+  for (const id of ["a", "b", "c"]) store.stateFor(id).active = true;
+  // Re-touch b and c so a is the LRU active session.
+  store.stateFor("b");
+  store.stateFor("c");
+  store.stateFor("d").active = true; // forces eviction among all-active
+  assert.ok(store.size() <= 3);
+  assert.equal(store.sessions.has("a"), false, "LRU active session is the victim when all are active");
+});

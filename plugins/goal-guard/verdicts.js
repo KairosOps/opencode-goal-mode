@@ -33,14 +33,31 @@ export function textOf(output) {
 
 /**
  * Extract the final verdict from a body of text.
+ *
+ * True textual last-wins: a reviewer's FINAL `Verdict: …` line is its
+ * conclusion. We scan ALL matches (loose) and take the one with the greatest
+ * position, using line-anchored matches only as a tiebreak when an anchored and
+ * a loose match share the same end position. The earlier "prefer the anchored
+ * set whenever any anchored match exists" logic was a critical bug: a transcript
+ * like "Verdict: PASS (happy path)\nHowever, Verdict: FAIL — blocking" has only
+ * the early PASS anchored (the FAIL line starts with "However,"), so it wrongly
+ * returned PASS and let a failing final review complete the goal.
+ *
  * @returns {"PASS"|"FAIL"|null}
  */
 export function parseVerdict(text) {
   if (typeof text !== "string" || !text) return null;
+  const loose = [...text.matchAll(LOOSE_RE)];
+  if (!loose.length) return null;
+  const lastLoose = loose[loose.length - 1];
   const anchored = [...text.matchAll(ANCHORED_RE)];
-  const matches = anchored.length ? anchored : [...text.matchAll(LOOSE_RE)];
-  if (!matches.length) return null;
-  return matches[matches.length - 1][1].toUpperCase();
+  const lastAnchored = anchored.length ? anchored[anchored.length - 1] : null;
+  // Prefer whichever genuinely occurs last in the text; on a tie, the anchored
+  // (conclusion-formatted) one wins.
+  const lastAnchoredEnd = lastAnchored ? lastAnchored.index + lastAnchored[0].length : -1;
+  const lastLooseEnd = lastLoose.index + lastLoose[0].length;
+  const chosen = lastAnchoredEnd >= lastLooseEnd && lastAnchored ? lastAnchored : lastLoose;
+  return chosen[1].toUpperCase();
 }
 
 export function hasVerdict(text) {
