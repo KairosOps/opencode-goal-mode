@@ -21,3 +21,17 @@ test("review and final commands run as subtasks", () => {
   assert.match(frontmatter(readRepo("commands/goal-review.md")), /subtask:\s+true/);
   assert.match(frontmatter(readRepo("commands/goal-final.md")), /subtask:\s+true/);
 });
+
+test("every command body forwards user input via $ARGUMENTS", () => {
+  for (const file of requiredCommands) {
+    assert.ok(readRepo(`commands/${file}`).includes("$ARGUMENTS"), `${file} must reference $ARGUMENTS`);
+  }
+});
+
+test("commands bind to a goal agent", () => {
+  for (const file of requiredCommands) {
+    const fm = frontmatter(readRepo(`commands/${file}`));
+    const agent = (fm.match(/^agent:\s*(\S+)/m) || [])[1];
+    assert.ok(agent && agent.startsWith("goal"), `${file} must bind to a goal agent`);
+  }
+});

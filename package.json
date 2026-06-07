@@ -21,10 +21,12 @@
   ],
   "scripts": {
     "test": "node --test",
-    "test:agents": "node tests/agents.test.mjs",
-    "test:commands": "node tests/commands.test.mjs",
-    "test:plugin": "node tests/plugin.test.mjs",
-    "test:install": "node tests/install.test.mjs",
+    "test:coverage": "node --experimental-test-coverage --test",
+    "test:shell": "node --test tests/shell.test.mjs tests/shell.property.test.mjs",
+    "test:plugin": "node --test tests/plugin.test.mjs tests/integration.test.mjs",
+    "test:unit": "node --test tests/state.test.mjs tests/gates.test.mjs tests/verdicts.test.mjs tests/config.test.mjs tests/persistence.test.mjs",
+    "test:agents": "node --test tests/agents.test.mjs tests/commands.test.mjs",
+    "test:install": "node --test tests/install.test.mjs",
     "pack:check": "npm pack --dry-run",
     "audit": "npm audit --audit-level=moderate",
     "publish:check": "node scripts/check-npm-publish-ready.mjs",
@@ -55,6 +57,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "1.15.13"
+    "@opencode-ai/plugin": "1.15.13",
+    "fast-check": "^4.8.0"
   }
 }

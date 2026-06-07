@@ -15,8 +15,8 @@
 import { CYCLE_CLOSING_AGENT } from "./agents.js";
 
 const TASK_RESULT_RE = /<task_result>([\s\S]*?)<\/task_result>/i;
-const ANCHORED_RE = /^[ \t>*_-]*Verdict:\s*\*{0,2}(PASS|FAIL)\b/gim;
-const LOOSE_RE = /Verdict:\s*\*{0,2}(PASS|FAIL)\b/gi;
+const ANCHORED_RE = /^[ \t>*_-]*\*{0,2}Verdict:?\*{0,2}[\s*_]*(PASS|FAIL)\b/gim;
+const LOOSE_RE = /Verdict:?\*{0,2}[\s*_]*(PASS|FAIL)\b/gi;
 
 /** Pull the human-readable text out of a tool/subagent output object. */
 export function textOf(output) {

@@ -61,10 +61,50 @@ test("primary goal enforces review artifacts and final contract", () => {
   }
 });
 
-test("reviewers are read-only", () => {
-  for (const file of requiredAgents.filter((name) => name.includes("reviewer") || name.includes("auditor") || name.includes("verifier"))) {
+test("all review gates are read-only and cannot nest tasks", () => {
+  const reviewers = requiredAgents.filter((name) =>
+    /(reviewer|auditor|verifier|quality-gate|completion-guard)/.test(name),
+  );
+  assert.ok(reviewers.length >= 10, "expected the full reviewer matrix");
+  for (const file of reviewers) {
     const fm = frontmatter(readRepo(`agents/${file}`));
     assert.match(fm, /edit:\s+deny/, `${file} must deny edit`);
     assert.match(fm, /task:\s+deny/, `${file} must deny task nesting`);
+  }
+});
+
+test("exactly one primary agent exists", () => {
+  let primaries = 0;
+  for (const file of filesIn("agents")) {
+    if (/^mode:\s+primary\s*$/m.test(frontmatter(readRepo(`agents/${file}`)))) primaries += 1;
+  }
+  assert.equal(primaries, 1);
+});
+
+test("agents do not pin a non-portable provider model", () => {
+  for (const file of filesIn("agents")) {
+    const text = readRepo(`agents/${file}`);
+    assert.doesNotMatch(text, /^model:\s*ordis\//m, `${file} pins a non-portable model`);
+  }
+});
+
+test("agent bodies are free of leaked frontmatter or reasoning", () => {
+  for (const file of filesIn("agents")) {
+    const text = readRepo(`agents/${file}`);
+    const body = text.replace(/^---\n[\s\S]*?\n---\n/, "");
+    assert.doesNotMatch(body, /<\/?think>/, `${file} body leaks a reasoning tag`);
+    assert.doesNotMatch(body, /^ext_mcp_server_trust:/m, `${file} leaks ext_mcp_server_trust`);
+  }
+});
+
+test("reviewers require an explicit PASS/FAIL verdict in their output contract", () => {
+  const reviewers = requiredAgents.filter((name) =>
+    /(reviewer|auditor|verifier|quality-gate|completion-guard)/.test(name),
+  );
+  for (const file of reviewers) {
+    const body = readRepo(`agents/${file}`).replace(/^---\n[\s\S]*?\n---\n/, "");
+    assert.match(body, /Verdict/, `${file} must define a Verdict in its output`);
+    assert.match(body, /PASS/, `${file} must mention PASS`);
+    assert.match(body, /FAIL/, `${file} must mention FAIL`);
   }
 });

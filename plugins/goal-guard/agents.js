@@ -70,6 +70,8 @@ export const BASE_GATES = Object.freeze([
  */
 export const CONTEXTUAL_GATES = Object.freeze({
   security: "goal-security-reviewer",
+  secure: "goal-security-reviewer",
+  vulnerability: "goal-security-reviewer",
   secret: "goal-security-reviewer",
   secrets: "goal-security-reviewer",
   password: "goal-security-reviewer",
