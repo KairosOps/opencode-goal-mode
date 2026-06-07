@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 
-import { mkdirSync, copyFileSync, readdirSync, statSync, existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import {
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
+  statSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
+import { join, resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { parseArgs } from "node:util";
@@ -11,6 +20,7 @@ const { values } = parseArgs({
     global: { type: "boolean", default: false },
     force: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
+    uninstall: { type: "boolean", default: false },
     target: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
@@ -18,19 +28,30 @@ const { values } = parseArgs({
 });
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+
+/** Component directories installed into an OpenCode config dir. */
+const COMPONENT_DIRS = ["agents", "commands", "plugins"];
+const MANIFEST_NAME = ".goal-mode-manifest.json";
 
 if (values.help) {
-  console.log(`Install OpenCode Goal Mode components.
+  console.log(`Install or remove OpenCode Goal Mode components.
 
 Usage:
   node scripts/install.mjs [--global | --target <dir>] [--force] [--dry-run]
+  node scripts/install.mjs --uninstall [--global | --target <dir>] [--dry-run]
 
 Options:
   --global       Install into ~/.config/opencode.
   --target DIR   Install into a specific OpenCode config directory.
-  --force        Replace changed destination files.
-  --dry-run      Show planned copies without writing files.
-  -h, --help     Show this help text.`);
+  --force        Replace destination files even if locally modified.
+  --uninstall    Remove files this installer previously wrote (per manifest).
+  --dry-run      Show planned changes without writing.
+  -h, --help     Show this help text.
+
+The installer records a manifest of the files it writes so that a later
+upgrade can distinguish files it owns (safe to replace) from files you have
+locally customized (left untouched unless --force).`);
   process.exit(0);
 }
 
@@ -49,48 +70,124 @@ function resolveTarget() {
 }
 
 function fileHash(path) {
-  const data = readFileSync(path);
-  return createHash("sha256").update(data).digest("hex").slice(0, 16);
+  return createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 16);
 }
 
-function copyDirFiles(from, to, summary) {
-  if (!values["dry-run"]) mkdirSync(to, { recursive: true });
-  for (const entry of readdirSync(from)) {
-    const source = join(from, entry);
-    const dest = join(to, entry);
-    if (!statSync(source).isFile()) continue;
+/** Recursively list files under a directory, returning paths relative to `base`. */
+function listFiles(dir, base = dir, out = []) {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry);
+    const st = statSync(abs);
+    if (st.isDirectory()) listFiles(abs, base, out);
+    else if (st.isFile()) out.push(relative(base, abs));
+  }
+  return out;
+}
+
+const target = resolveTarget();
+const manifestPath = join(target, MANIFEST_NAME);
+
+function loadManifest() {
+  try {
+    const data = JSON.parse(readFileSync(manifestPath, "utf8"));
+    return data && typeof data === "object" && data.files ? data : { version: null, files: {} };
+  } catch {
+    return { version: null, files: {} };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Uninstall
+// ---------------------------------------------------------------------------
+
+if (values.uninstall) {
+  const manifest = loadManifest();
+  const removed = [];
+  const kept = [];
+  for (const [rel, hash] of Object.entries(manifest.files)) {
+    const dest = join(target, rel);
+    if (!existsSync(dest)) continue;
+    if (fileHash(dest) === hash) {
+      if (!values["dry-run"]) rmSync(dest, { force: true });
+      removed.push(rel);
+    } else {
+      kept.push(rel);
+    }
+  }
+  if (!values["dry-run"] && existsSync(manifestPath)) rmSync(manifestPath, { force: true });
+  const verb = values["dry-run"] ? "Would remove" : "Removed";
+  console.log(`${verb} ${removed.length} Goal Mode files from ${target}.`);
+  if (kept.length) {
+    console.log(`Left ${kept.length} locally-modified file(s) in place:`);
+    for (const rel of kept) console.log(`- ${rel}`);
+  }
+  console.log("Restart OpenCode to unload the components.");
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Install
+// ---------------------------------------------------------------------------
+
+const manifest = loadManifest();
+const summary = { copied: [], unchanged: [], conflicts: [], pruned: [] };
+const newManifestFiles = {};
+
+for (const dir of COMPONENT_DIRS) {
+  const from = join(root, dir);
+  for (const rel of listFiles(from)) {
+    const relKey = join(dir, rel);
+    const source = join(from, rel);
+    const dest = join(target, relKey);
+    const srcHash = fileHash(source);
+    newManifestFiles[relKey] = srcHash;
+
     if (existsSync(dest) && !statSync(dest).isFile()) {
       summary.conflicts.push(`${dest} exists but is not a file`);
       continue;
     }
-    if (values.force) {
-      if (!values["dry-run"]) copyFileSync(source, dest);
+
+    if (!existsSync(dest)) {
+      if (!values["dry-run"]) {
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(source, dest);
+      }
       summary.copied.push(dest);
       continue;
     }
-    if (existsSync(dest)) {
-      const srcHash = fileHash(source);
-      const dstHash = fileHash(dest);
-      if (srcHash === dstHash) {
-        summary.unchanged.push(dest);
-        continue;
-      }
-      summary.conflicts.push(`${dest} differs from packaged ${entry}`);
+
+    const dstHash = fileHash(dest);
+    if (dstHash === srcHash) {
+      summary.unchanged.push(dest);
       continue;
     }
-    if (!values["dry-run"]) {
-      copyFileSync(source, dest);
+
+    const ownedHash = manifest.files[relKey];
+    const weOwnIt = ownedHash !== undefined && ownedHash === dstHash;
+    if (values.force || weOwnIt) {
+      if (!values["dry-run"]) {
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(source, dest);
+      }
+      summary.copied.push(dest);
+      continue;
     }
-    summary.copied.push(dest);
+    summary.conflicts.push(`${dest} differs from packaged ${relKey} and was locally modified`);
   }
 }
 
-const target = resolveTarget();
-const summary = { copied: [], unchanged: [], conflicts: [] };
-
-copyDirFiles(join(root, "agents"), join(target, "agents"), summary);
-copyDirFiles(join(root, "commands"), join(target, "commands"), summary);
-copyDirFiles(join(root, "plugins"), join(target, "plugins"), summary);
+// Prune files we installed in a previous version that no longer ship (e.g. a
+// plugin split into modules), but only if the user hasn't modified them.
+for (const [relKey, oldHash] of Object.entries(manifest.files)) {
+  if (newManifestFiles[relKey] !== undefined) continue;
+  const dest = join(target, relKey);
+  if (!existsSync(dest)) continue;
+  if (fileHash(dest) === oldHash) {
+    if (!values["dry-run"]) rmSync(dest, { force: true });
+    summary.pruned.push(dest);
+  }
+}
 
 if (summary.conflicts.length) {
   throw new Error(
@@ -98,11 +195,18 @@ if (summary.conflicts.length) {
       "Refusing to overwrite changed OpenCode component files.",
       ...summary.conflicts.map((conflict) => `- ${conflict}`),
       "Use --force to replace them or remove the conflicting files manually.",
-    ].join("\n")
+    ].join("\n"),
   );
 }
 
+if (!values["dry-run"]) {
+  mkdirSync(target, { recursive: true });
+  writeFileSync(manifestPath, JSON.stringify({ version: pkg.version, files: newManifestFiles }, null, 2), "utf8");
+}
+
 const verb = values["dry-run"] ? "Would install" : "Installed";
-console.log(`${verb} OpenCode Goal Mode into ${target}`);
-console.log(`Files copied: ${summary.copied.length}; unchanged: ${summary.unchanged.length}`);
+console.log(`${verb} OpenCode Goal Mode ${pkg.version} into ${target}`);
+console.log(
+  `Files copied: ${summary.copied.length}; unchanged: ${summary.unchanged.length}; pruned: ${summary.pruned.length}`,
+);
 console.log("Restart OpenCode for agents, commands, and plugins to load.");

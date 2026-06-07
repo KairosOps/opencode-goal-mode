@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -8,13 +9,16 @@ import { execFileSync } from "node:child_process";
 import { readRepo } from "./helpers.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const installer = join(repoRoot, "scripts", "install.mjs");
 
-test("installer copies only safe OpenCode component directories", () => {
+function run(args, opts = {}) {
+  return execFileSync("node", [installer, ...args], { stdio: "pipe", encoding: "utf8", ...opts });
+}
+
+test("installer source only references safe component directories", () => {
   const text = readRepo("scripts/install.mjs");
-  assert.match(text, /copyDirFiles\(join\(root, "agents"\)/);
-  assert.match(text, /copyDirFiles\(join\(root, "commands"\)/);
-  assert.match(text, /copyDirFiles\(join\(root, "plugins"\)/);
-  assert.doesNotMatch(text, /auth|sessions|preauth|failures|hosts\.yml/);
+  assert.match(text, /COMPONENT_DIRS = \["agents", "commands", "plugins"\]/);
+  assert.doesNotMatch(text, /auth|sessions|preauth|hosts\.yml/);
 });
 
 test("gitignore excludes secrets and dependencies", () => {
@@ -22,43 +26,97 @@ test("gitignore excludes secrets and dependencies", () => {
   for (const pattern of ["node_modules/", ".env", ".env.*"]) assert.ok(text.includes(pattern));
 });
 
-test("installer functionally copies components to project .opencode", () => {
+test("installer copies components, including the nested plugin module directory", () => {
   const temp = mkdtempSync(join(tmpdir(), "goal-install-"));
-  execFileSync("node", [join(repoRoot, "scripts", "install.mjs")], { cwd: temp, stdio: "pipe" });
-  assert.equal(existsSync(join(temp, ".opencode", "agents", "goal.md")), true);
-  assert.equal(existsSync(join(temp, ".opencode", "commands", "goal.md")), true);
-  assert.equal(existsSync(join(temp, ".opencode", "plugins", "goal-guard.js")), true);
+  run(["--target", join(temp, "cfg")]);
+  const cfg = join(temp, "cfg");
+  assert.equal(existsSync(join(cfg, "agents", "goal.md")), true);
+  assert.equal(existsSync(join(cfg, "commands", "goal.md")), true);
+  assert.equal(existsSync(join(cfg, "plugins", "goal-guard.js")), true);
+  // The multi-file plugin's modules must be copied too, or imports break.
+  assert.equal(existsSync(join(cfg, "plugins", "goal-guard", "shell.js")), true);
+  assert.equal(existsSync(join(cfg, "plugins", "goal-guard", "state.js")), true);
+  assert.equal(existsSync(join(cfg, ".goal-mode-manifest.json")), true);
+});
+
+test("installed plugin actually loads from its target location", async () => {
+  const temp = mkdtempSync(join(tmpdir(), "goal-install-load-"));
+  const cfg = join(temp, "cfg");
+  run(["--target", cfg]);
+  const mod = await import(join(cfg, "plugins", "goal-guard.js"));
+  const hooks = await mod.default({ client: { app: { log: async () => undefined } } });
+  for (const hook of ["tool.execute.before", "tool.execute.after", "experimental.text.complete"]) {
+    assert.equal(typeof hooks[hook], "function", `${hook} missing in installed plugin`);
+  }
 });
 
 test("installer dry run does not write files", () => {
   const temp = mkdtempSync(join(tmpdir(), "goal-install-dry-"));
-  execFileSync("node", [join(repoRoot, "scripts", "install.mjs"), "--dry-run"], { cwd: temp, stdio: "pipe" });
-  assert.equal(existsSync(join(temp, ".opencode")), false);
+  run(["--target", join(temp, "cfg"), "--dry-run"]);
+  assert.equal(existsSync(join(temp, "cfg")), false);
 });
 
-test("installer refuses to overwrite changed destination files", () => {
+test("installer is idempotent (second run reports all unchanged)", () => {
+  const temp = mkdtempSync(join(tmpdir(), "goal-install-idem-"));
+  const cfg = join(temp, "cfg");
+  run(["--target", cfg]);
+  const out = run(["--target", cfg]);
+  assert.match(out, /Files copied: 0/);
+});
+
+test("installer refuses to overwrite a locally-modified file", () => {
   const temp = mkdtempSync(join(tmpdir(), "goal-install-conflict-"));
-  mkdirSync(join(temp, ".opencode", "agents"), { recursive: true });
-  writeFileSync(join(temp, ".opencode", "agents", "goal.md"), "local change\n");
-  assert.throws(
-    () => execFileSync("node", [join(repoRoot, "scripts", "install.mjs")], { cwd: temp, stdio: "pipe" }),
-    /Refusing to overwrite changed OpenCode component files/
-  );
+  const cfg = join(temp, "cfg");
+  mkdirSync(join(cfg, "agents"), { recursive: true });
+  writeFileSync(join(cfg, "agents", "goal.md"), "local change\n");
+  assert.throws(() => run(["--target", cfg], { stdio: "pipe" }), /Refusing to overwrite/);
 });
 
-test("installer force replaces changed destination files", () => {
+test("installer force replaces a locally-modified file", () => {
   const temp = mkdtempSync(join(tmpdir(), "goal-install-force-"));
-  mkdirSync(join(temp, ".opencode", "agents"), { recursive: true });
-  const dest = join(temp, ".opencode", "agents", "goal.md");
+  const cfg = join(temp, "cfg");
+  mkdirSync(join(cfg, "agents"), { recursive: true });
+  const dest = join(cfg, "agents", "goal.md");
   writeFileSync(dest, "local change\n");
-  execFileSync("node", [join(repoRoot, "scripts", "install.mjs"), "--force"], { cwd: temp, stdio: "pipe" });
+  run(["--target", cfg, "--force"]);
   assert.equal(readFileSync(dest, "utf8"), readFileSync(join(repoRoot, "agents", "goal.md"), "utf8"));
 });
 
-test("installer supports explicit target directory", () => {
+test("installer can upgrade a file it owns without --force", () => {
+  const temp = mkdtempSync(join(tmpdir(), "goal-install-upgrade-"));
+  const cfg = join(temp, "cfg");
+  run(["--target", cfg]);
+  // Simulate a previously-shipped version: dest matches a stale manifest hash.
+  const dest = join(cfg, "plugins", "goal-guard.js");
+  const manifestPath = join(cfg, ".goal-mode-manifest.json");
+  writeFileSync(dest, "// previous shipped version\n");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  manifest.files["plugins/goal-guard.js"] = createHash("sha256")
+    .update("// previous shipped version\n")
+    .digest("hex")
+    .slice(0, 16);
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  const out = run(["--target", cfg]);
+  assert.match(out, /Files copied: 1/);
+  assert.equal(readFileSync(dest, "utf8"), readFileSync(join(repoRoot, "plugins", "goal-guard.js"), "utf8"));
+});
+
+test("installer supports an explicit target directory", () => {
   const temp = mkdtempSync(join(tmpdir(), "goal-install-target-"));
   const target = join(temp, "custom-opencode");
-  execFileSync("node", [join(repoRoot, "scripts", "install.mjs"), "--target", target], { cwd: temp, stdio: "pipe" });
+  run(["--target", target]);
   assert.equal(existsSync(join(target, "agents", "goal.md")), true);
-  assert.equal(existsSync(join(target, "plugins", "goal-guard.js")), true);
+  assert.equal(existsSync(join(target, "plugins", "goal-guard", "gates.js")), true);
+});
+
+test("uninstall removes installed files but keeps locally-modified ones", () => {
+  const temp = mkdtempSync(join(tmpdir(), "goal-uninstall-"));
+  const cfg = join(temp, "cfg");
+  run(["--target", cfg]);
+  const modified = join(cfg, "agents", "goal.md");
+  writeFileSync(modified, "my local edits\n");
+  const out = run(["--target", cfg, "--uninstall"]);
+  assert.match(out, /Left 1 locally-modified file/);
+  assert.equal(existsSync(modified), true, "user-modified file must be preserved");
+  assert.equal(existsSync(join(cfg, "plugins", "goal-guard", "shell.js")), false, "owned files removed");
 });

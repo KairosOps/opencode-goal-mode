@@ -1,0 +1,158 @@
+/**
+ * Per-session guard state and the store that owns it.
+ *
+ * Two correctness fixes versus the original design live here:
+ *
+ *  1. A monotonic `seq` counter (project-scoped) orders every state-changing
+ *     event. Staleness ("is this review newer than the latest edit?") is
+ *     decided by comparing seq numbers, not millisecond ISO strings, so two
+ *     events in the same millisecond can never tie and a review can never be
+ *     accepted as fresh against an edit it did not actually post-date.
+ *
+ *  2. The store is created PER PLUGIN INSTANCE (closure state), not as a module
+ *     global, so concurrent OpenCode projects can no longer cross-contaminate
+ *     each other's verdicts and dirty flags. Eviction is true LRU by last-touch
+ *     time and never preferentially drops an active session.
+ */
+
+/** @returns a fresh per-session state record. */
+export function createState(nowIso) {
+  const at = nowIso || new Date(0).toISOString();
+  return {
+    active: false,
+    goalText: "",
+    contract: null,
+    dirty: false,
+    dirtyReasons: [],
+    changedFiles: [],
+    reviewCycles: 0,
+    lastEditSeq: 0,
+    lastVerificationSeq: 0,
+    lastReviewSeq: 0,
+    lastEditAt: null,
+    lastReviewAt: null,
+    lastVerificationAt: null,
+    verdicts: [],
+    evidence: [],
+    latestVerdict: {},
+    currentAgent: undefined,
+    completedBlocked: 0,
+    completionRejections: [],
+    verificationSeen: false,
+    lastCompletionRejectAt: null,
+    createdAt: at,
+    updatedAt: at,
+    touchedAt: 0,
+  };
+}
+
+const KNOWN_FIELDS = Object.keys(createState());
+
+/** Rebuild a state object from persisted JSON, dropping unknown fields. */
+function reviveState(raw) {
+  const base = createState();
+  if (!raw || typeof raw !== "object") return base;
+  for (const field of KNOWN_FIELDS) {
+    if (raw[field] !== undefined) base[field] = raw[field];
+  }
+  // Defensive normalisation of array/object shapes.
+  for (const arrField of ["dirtyReasons", "changedFiles", "verdicts", "evidence", "completionRejections"]) {
+    if (!Array.isArray(base[arrField])) base[arrField] = [];
+  }
+  if (!base.latestVerdict || typeof base.latestVerdict !== "object") base.latestVerdict = {};
+  return base;
+}
+
+/**
+ * Create a guard store.
+ *
+ * @param {object} opts
+ * @param {number} [opts.maxSessions=200]
+ * @param {number} [opts.ttlMs=0]  Idle TTL in ms (0 disables).
+ * @param {() => number} [opts.clock]  Monotonic-ish wall clock for touch/TTL.
+ */
+export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.now() } = {}) {
+  const sessions = new Map();
+  let seq = 0;
+  let touchCounter = 0;
+
+  const nowIso = () => new Date(clock()).toISOString();
+  const nextSeq = () => (seq += 1);
+
+  function evictIfNeeded() {
+    // Drop TTL-expired idle sessions first.
+    if (ttlMs > 0) {
+      const cutoff = clock() - ttlMs;
+      for (const [key, st] of sessions) {
+        if (st.touchedWall !== undefined && st.touchedWall < cutoff && !st.active) {
+          sessions.delete(key);
+        }
+      }
+    }
+    while (sessions.size >= maxSessions) {
+      let oldestKey = null;
+      let oldest = Infinity;
+      for (const [key, st] of sessions) {
+        // Prefer evicting inactive sessions; only evict active ones if nothing else.
+        const rank = (st.active ? Number.MAX_SAFE_INTEGER / 2 : 0) + (st.touchedAt || 0);
+        if (rank < oldest) {
+          oldest = rank;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey === null) break;
+      sessions.delete(oldestKey);
+    }
+  }
+
+  function touch(st) {
+    st.touchedAt = (touchCounter += 1);
+    st.touchedWall = clock();
+  }
+
+  function stateFor(sessionID) {
+    const key = String(sessionID || "default").trim() || "default";
+    let st = sessions.get(key);
+    if (!st) {
+      evictIfNeeded();
+      st = createState(nowIso());
+      sessions.set(key, st);
+    }
+    touch(st);
+    return st;
+  }
+
+  function snapshot() {
+    return {
+      version: 1,
+      seq,
+      touchCounter,
+      sessions: Array.from(sessions.entries()).map(([key, st]) => [key, st]),
+    };
+  }
+
+  function restore(data) {
+    if (!data || typeof data !== "object") return;
+    if (Number.isFinite(data.seq)) seq = Math.max(seq, data.seq);
+    if (Number.isFinite(data.touchCounter)) touchCounter = Math.max(touchCounter, data.touchCounter);
+    if (Array.isArray(data.sessions)) {
+      for (const entry of data.sessions) {
+        if (!Array.isArray(entry) || entry.length !== 2) continue;
+        const [key, raw] = entry;
+        sessions.set(String(key), reviveState(raw));
+      }
+    }
+  }
+
+  return {
+    sessions,
+    stateFor,
+    nowIso,
+    nextSeq,
+    seqValue: () => seq,
+    snapshot,
+    restore,
+    size: () => sessions.size,
+    clear: () => sessions.clear(),
+  };
+}

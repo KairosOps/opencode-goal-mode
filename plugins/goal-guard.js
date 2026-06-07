@@ -1,426 +1,309 @@
-import { createHash } from "node:crypto";
+/**
+ * Goal Guard — OpenCode plugin entry point.
+ *
+ * This thin module wires the focused modules under `goal-guard/` into the
+ * OpenCode plugin hooks. All real logic (shell analysis, gating, verdicts,
+ * persistence, completion enforcement) lives in those modules and is unit
+ * tested in isolation; the entry is just orchestration.
+ *
+ * Design notes (verified against @opencode-ai/plugin@1.15.13 source):
+ *  - State is created PER PLUGIN INSTANCE (no module globals), so concurrent
+ *    projects cannot cross-contaminate, and is persisted to the XDG state dir
+ *    so it survives OpenCode restarts.
+ *  - Destructive bash is blocked by THROWING in `tool.execute.before` (the
+ *    `permission.ask` hook is dormant in this version and cannot be relied on).
+ *  - `chat.message` captures the goal text that drives contextual review gates;
+ *    `file.edited` events catch edits made inside subagent child sessions.
+ *  - `experimental.chat.system.transform` injects live gate state into the
+ *    prompt; custom `goal_*` tools give the model structured control.
+ */
 
-const WRITE_TOOLS = new Set(["edit", "write", "apply_patch"]);
+import { resolveConfig } from "./goal-guard/config.js";
+import { createStore, createState } from "./goal-guard/state.js";
+import { createPersistence } from "./goal-guard/persistence.js";
+import { createLogger } from "./goal-guard/logger.js";
+import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./goal-guard/shell.js";
+import { isGoalAgent, isReviewAgent, CYCLE_CLOSING_AGENT } from "./goal-guard/agents.js";
+import { textOf, parseVerdict, recordVerdict } from "./goal-guard/verdicts.js";
+import { completionAllowed, missingGates } from "./goal-guard/gates.js";
+import { evaluateCompletionClaim } from "./goal-guard/completion.js";
+import { summarizeState } from "./goal-guard/summary.js";
+import { buildSystemInjection } from "./goal-guard/system.js";
+import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass } from "./goal-guard/events.js";
 
-const MUTATING_BASH_PATTERNS = [
-  /(^|&&|;|\|\|)\s*(sudo\s+)?(rm|mv|cp|mkdir|rmdir|touch|ln)\b/i,
-  /(^|&&|;|\|\|)\s*(sudo\s+)?(tee|xargs\s+(rm|mv|cp))\b/i,
-  /(^|&&|;|\|\|)\s*[^|]*\s(>|>>)\s*(?!\/dev\/null\b)\S+/i,
-  /(^|&&|;|\|\|)\s*(perl\s+-pi|sed\s+-i)\b/i,
-  /(^|&&|;|\|\|)\s*(npm|pnpm|yarn|bun)\s+(install|ci|add|remove|update)\b/i,
-  /(^|&&|;|\|\|)\s*(npm|pnpm|yarn|bun)\s+(run\s+)?(format|fix|lint:fix)\b/i,
-  /\b((npx|pnpm\s+exec|yarn)\s+)?(prettier|eslint)\b.*\s(--write|--fix)\b/i,
-  /\b(node|python3?)\b.*\b(writeFile|appendFile|copyFile|rename|unlink|rmSync|mkdir|rmdir|openSync)\b/i,
-];
-
-const REVIEW_AGENTS = new Set([
-  "goal-reviewer",
-  "goal-prompt-auditor",
-  "goal-diff-reviewer",
-  "goal-verifier",
-  "goal-test-reviewer",
-  "goal-security-reviewer",
-  "goal-ux-reviewer",
-  "goal-ops-reviewer",
-  "goal-doc-reviewer",
-  "goal-final-auditor",
-  "goal-api-reviewer",
-  "goal-data-reviewer",
-  "goal-perf-reviewer",
-  "goal-quality-gate",
-]);
-
-const GOAL_AGENTS = new Set([
-  "goal",
-  "goal-implementer",
-  "goal-reviewer",
-  "goal-prompt-auditor",
-  "goal-diff-reviewer",
-  "goal-verifier",
-  "goal-test-reviewer",
-  "goal-security-reviewer",
-  "goal-ux-reviewer",
-  "goal-ops-reviewer",
-  "goal-doc-reviewer",
-  "goal-final-auditor",
-  "goal-deep-researcher",
-  "goal-web-researcher",
-  "goal-architect",
-  "goal-mapper",
-  "goal-planner",
-  "goal-coordinator",
-  "goal-doc-writer",
-  "goal-commentator",
-  "goal-api-reviewer",
-  "goal-data-reviewer",
-  "goal-perf-reviewer",
-  "goal-quality-gate",
-]);
-
-function normalizedAgent(input) {
+function normalizedSubagent(input) {
   if (!input) return undefined;
   const agent = String(input.agent || input.args?.subagent_type || "").trim();
   return agent || undefined;
 }
 
-function createState() {
-  return {
-    active: false,
-    dirty: false,
-    dirtyReasons: [],
-    reviewCycles: 0,
-    lastReviewAt: null,
-    lastEditAt: null,
-    lastVerificationAt: null,
-    verdicts: [],
-    latestVerdict: {},
-    currentAgent: undefined,
-    completedBlocked: 0,
-    verificationSeen: false,
-    lastCompletionRejectAt: null,
-  };
+function commandOf(input, output) {
+  return String(output?.args?.command ?? input?.args?.command ?? "");
 }
 
-const sessions = new Map();
-const MAX_SESSIONS = 200;
+function partsText(parts) {
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .filter((p) => p && (p.type === "text" || typeof p.text === "string"))
+    .map((p) => p.text || "")
+    .join(" ")
+    .trim();
+}
 
-function evictOldestSession() {
-  if (sessions.size < MAX_SESSIONS) return;
-  let oldestKey = null;
-  let oldestTime = Infinity;
-  for (const [key, state] of sessions) {
-    const t = new Date(state.lastEditAt || state.lastReviewAt || 0).getTime();
-    if (t < oldestTime) {
-      oldestTime = t;
-      oldestKey = key;
+/**
+ * Build a guard instance. Exposed for tests; the default export wraps it.
+ *
+ * @param {object} input  PluginInput ({ client, directory, worktree, ... }).
+ * @param {object} options  Plugin options (2nd factory arg).
+ * @param {object} overrides  Test seams: { config, store, persistence, env, clock, setTimer, clearTimer }.
+ */
+export function createGuard(input = {}, options = {}, overrides = {}) {
+  const config = overrides.config || resolveConfig(options, overrides.env);
+  const store =
+    overrides.store ||
+    createStore({ maxSessions: config.maxSessions, ttlMs: config.sessionTtlMs, clock: overrides.clock });
+  const logger = createLogger(input.client);
+  const persistence =
+    overrides.persistence ||
+    createPersistence({
+      worktree: input.worktree || input.directory,
+      enabled: config.persist,
+      env: overrides.env,
+      setTimer: overrides.setTimer,
+      clearTimer: overrides.clearTimer,
+    });
+
+  // Rehydrate any prior state for this project.
+  try {
+    const data = persistence.load();
+    if (data) store.restore(data);
+  } catch {
+    /* ignore corrupt state */
+  }
+
+  const persist = () => persistence.save(() => store.snapshot());
+
+  /** Find the most-recently-touched active session (to attribute project-wide edits). */
+  function activeSession() {
+    let best = null;
+    let bestTouch = -1;
+    for (const st of store.sessions.values()) {
+      if (st.active && (st.touchedAt || 0) > bestTouch) {
+        bestTouch = st.touchedAt || 0;
+        best = st;
+      }
     }
+    return best;
   }
-  if (oldestKey) sessions.delete(oldestKey);
-}
 
-function stateFor(sessionID) {
-  const key = String(sessionID || "default").trim() || "default";
-  if (!sessions.has(key)) {
-    while (sessions.size >= MAX_SESSIONS) evictOldestSession();
-    sessions.set(key, createState());
-  }
-  return sessions.get(key);
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function textOf(output) {
-  const raw = output?.output || output?.text || output?.message || "";
-  if (typeof raw === "string") return raw;
-  if (typeof raw === "object" && raw?.output) return String(raw.output);
-  if (typeof raw === "object" && raw?.text) return String(raw.text);
-  return JSON.stringify(raw || "");
-}
-
-function isPass(text) {
-  return /Verdict:\s*PASS\b/i.test(text);
-}
-
-function isFail(text) {
-  return /Verdict:\s*FAIL\b/i.test(text);
-}
-
-function isVerification(command) {
-  const normalized = String(command || "").trim();
-  return [
-    /\bnpm\s+test\b/,
-    /\bnpm\s+run\s+test\b/,
-    /\bnpm\s+run\s+validate\b/,
-    /\bnpm\s+run\s+check\b/,
-    /\bnpm\s+run\s+lint\b/,
-    /\bnpm\s+run\s+typecheck\b/,
-    /\bnpm\s+run\s+build\b/,
-    /\bnpm\s+run\s+unit\b/,
-    /\bnpm\s+run\s+integration\b/,
-    /\bjest\b/,
-    /\bmocha\b/,
-    /\bvite\s+test\b/,
-    /\bvitest\b/,
-    /\bpnpm\s+test\b/,
-    /\byarn\s+test\b/,
-    /\bbun\s+test\b/,
-    /\bgo\s+test\b/,
-    /\bcargo\s+test\b/,
-    /\bpytest\b/,
-    /\bpython\s+-m\s+pytest\b/,
-    /\bpython\s+-m\s+unittest\b/,
-    /\bphpunit\b/,
-    /\bmake\s+test\b/,
-    /\bmake\s+check\b/,
-    /\bmake\s+validate\b/,
-  ].some((pattern) => pattern.test(normalized));
-}
-
-function looksLikeDestructiveBash(command) {
-  const normalized = String(command || "").trim();
-  return [
-    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+-[a-zA-Z]*[rR][a-zA-Z]*[rfRF]?\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?rm\s+(--recursive|--force|--recursive\s+--force|-rf|-fr|-r)\b/,
-    /(^|&&|;|\|\|)\s*git\s+reset\b/,
-    /(^|&&|;|\|\|)\s*git\s+clean\b/,
-    /(^|&&|;|\|\|)\s*git\s+checkout\b/,
-    /(^|&&|;|\|\|)\s*git\s+restore\b/,
-    /(^|&&|;|\|\|)\s*git\s+switch\b/,
-    /(^|&&|;|\|\|)\s*git\s+push\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?find\b.*\s-delete\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?find\b.*\s-exec\s+rm\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?dd\b.*\bof=\/dev\//,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?mkfs(\.|\s|$)/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?shred\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?truncate\b/,
-    /(^|&&|;|\|\|)\s*(sudo\s+)?chmod\s+-[a-zA-Z]*[rR][a-zA-Z]*[wW][a-zA-Z]*[xX][a-zA-Z]*\s+\/\b/,
-  ].some((pattern) => pattern.test(normalized));
-}
-
-function looksLikeMutatingBash(command) {
-  const normalized = String(command || "").trim();
-  if (!normalized) return false;
-  if (looksLikeDestructiveBash(normalized)) return true;
-  return MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-
-function commandFingerprint(command) {
-  return createHash("sha256").update(String(command || "")).digest("hex").slice(0, 12);
-}
-
-function latestVerdictFor(state, agent) {
-  const entries = state.verdicts.filter((entry) => entry.agent === agent);
-  if (!entries.length) return null;
-  return entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))[0];
-}
-
-function recordReviewVerdict(state, agent, verdict, at) {
-  state.verdicts.push({ agent, verdict, at });
-  state.latestVerdict[agent] = { verdict, at };
-  state.lastReviewAt = at;
-  if (agent === "goal-final-auditor") {
-    state.reviewCycles += 1;
-  }
-}
-
-function verdictAfter(state, agent, since) {
-  const latest = latestVerdictFor(state, agent);
-  if (!latest) return false;
-  if (latest.verdict !== "PASS") return false;
-  if (!since) return true;
-  return latest.at >= since;
-}
-
-const BASE_GATES = [
-  "goal-prompt-auditor",
-  "goal-reviewer",
-  "goal-diff-reviewer",
-  "goal-verifier",
-  "goal-final-auditor",
-];
-
-const CONTEXTUAL_GATES = {
-  security: "goal-security-reviewer",
-  permissions: "goal-security-reviewer",
-  auth: "goal-security-reviewer",
-  shell: "goal-security-reviewer",
-  test: "goal-test-reviewer",
-  coverage: "goal-test-reviewer",
-  ops: "goal-ops-reviewer",
-  restart: "goal-ops-reviewer",
-  install: "goal-ops-reviewer",
-  api: "goal-api-reviewer",
-  endpoint: "goal-api-reviewer",
-  schema: "goal-api-reviewer",
-  data: "goal-data-reviewer",
-  database: "goal-data-reviewer",
-  migration: "goal-data-reviewer",
-  performance: "goal-perf-reviewer",
-  latency: "goal-perf-reviewer",
-  quality: "goal-quality-gate",
-  standard: "goal-quality-gate",
-};
-
-function requiredGates(state, promptText, changedFilesText) {
-  const since = [state.lastEditAt, state.lastVerificationAt].filter(Boolean).sort().at(-1);
-  const text = `${promptText || ""} ${(changedFilesText || state.dirtyReasons.join(" ") || "")}`.toLowerCase();
-  const gates = [...BASE_GATES];
-  for (const [keyword, agent] of Object.entries(CONTEXTUAL_GATES)) {
-    if (text.includes(keyword) && !gates.includes(agent)) gates.push(agent);
-  }
-  return { since, gates };
-}
-
-function missingGates(state) {
-  const { since, gates } = requiredGates(state);
-  return gates.filter((agent) => !verdictAfter(state, agent, since));
-}
-
-function completionAllowed(state) {
-  return state.active && missingGates(state).length === 0;
-}
-
-function summarizeState(state) {
-  const verdictSummary = state.verdicts.slice(-8).map((v) => `${v.agent}:${v.verdict}`).join(", ") || "none";
-  return [
-    `dirty=${state.dirty}`,
-    `reviewCycles=${state.reviewCycles}`,
-    `lastEditAt=${state.lastEditAt || "none"}`,
-    `lastReviewAt=${state.lastReviewAt || "none"}`,
-    `recentVerdicts=${verdictSummary}`,
-    `dirtyReasons=${state.dirtyReasons.slice(-5).join(" | ") || "none"}`,
-  ].join("; ");
-}
-
-export async function GoalGuardPlugin({ client }) {
-  return {
-    async "chat.params"(input) {
-      if (!input?.sessionID || typeof input.sessionID !== "string") return;
-      const normalized = input.sessionID.trim();
-      if (!normalized) return;
-      const state = stateFor(normalized);
-      state.currentAgent = input.agent;
-      if (GOAL_AGENTS.has(input.agent)) state.active = true;
+  const hooks = {
+    async "chat.message"(inp, out) {
+      try {
+        if (!inp?.sessionID) return;
+        const state = store.stateFor(inp.sessionID);
+        if (isGoalAgent(inp.agent)) state.active = true;
+        const text = partsText(out?.parts);
+        if (text && state.active) {
+          // Accumulate goal text (bounded) so contextual gates can be derived.
+          state.goalText = `${state.goalText} ${text}`.trim().slice(-8000);
+          persist();
+        }
+      } catch {
+        /* never break a turn */
+      }
     },
 
-    async "tool.execute.before"(input, output) {
-      const state = stateFor(input.sessionID);
-      const command = output?.args?.command || input?.args?.command;
-      if (input.tool === "bash" && looksLikeDestructiveBash(command)) {
-        state.active = true;
-        state.dirtyReasons.push(`blocked risky bash fingerprint:${commandFingerprint(command)}`);
-        throw new Error(
-          "Goal Guard blocked a destructive or high-risk bash command. Ask the user or use a safer command."
+    async "chat.params"(inp) {
+      try {
+        if (!inp?.sessionID || typeof inp.sessionID !== "string") return;
+        const normalized = inp.sessionID.trim();
+        if (!normalized) return;
+        const state = store.stateFor(normalized);
+        state.currentAgent = inp.agent;
+        if (isGoalAgent(inp.agent)) state.active = true;
+      } catch {
+        /* ignore */
+      }
+    },
+
+    async "experimental.chat.system.transform"(inp, out) {
+      try {
+        if (!config.injectSystemState) return;
+        if (!inp?.sessionID || !out || !Array.isArray(out.system)) return;
+        const state = store.stateFor(inp.sessionID);
+        const block = buildSystemInjection(state, config);
+        if (block) out.system.push(block);
+      } catch {
+        /* ignore */
+      }
+    },
+
+    async "tool.execute.before"(inp, out) {
+      const state = store.stateFor(inp?.sessionID);
+      if (inp?.tool === "bash") {
+        const command = commandOf(inp, out);
+        const analysis = analyzeCommand(command);
+        const blockDestructive = config.blockDestructive && analysis.destructive;
+        const blockNetwork = config.blockNetworkExec && analysis.networkExec;
+        if (blockDestructive || blockNetwork) {
+          state.active = true;
+          state.dirtyReasons.push(`blocked risky bash: ${analysis.reasons.join("; ") || "destructive"}`);
+          if (config.toastOnBlock) logger.toast("Goal Guard blocked a destructive command", "error");
+          persist();
+          throw new Error(
+            `Goal Guard blocked a destructive or high-risk bash command (${analysis.reasons.join("; ") || "destructive"}). ` +
+              "Use a safer, reversible command or ask the user to confirm.",
+          );
+        }
+      }
+    },
+
+    async "tool.execute.after"(inp, out) {
+      try {
+        const state = store.stateFor(inp?.sessionID);
+        const tool = inp?.tool;
+        const isReviewing = isReviewAgent(state.currentAgent);
+
+        if (tool === "write" || tool === "edit" || tool === "apply_patch") {
+          markEdit(store, state, `${tool} at ${store.nowIso()}`);
+        }
+
+        if (tool === "bash") {
+          const command = String(inp?.args?.command || "");
+          const analysis = analyzeCommand(command);
+          if (analysis.verification && !isReviewing) {
+            markVerification(store, state);
+          }
+          if ((analysis.destructive || analysis.mutating) && !isReviewing) {
+            markEdit(store, state, `bash mutation: ${analysis.reasons.join("; ") || "mutation"}`);
+          }
+        }
+
+        // Verdict capture: task path (subagent reviewers) and agent path (the
+        // reviewer's own session). The two never apply to the same call because
+        // they are split by tool type, so no double counting.
+        let recordedAgent = null;
+        if (tool === "task") {
+          const sub = normalizedSubagent(inp);
+          if (isReviewAgent(sub)) {
+            const verdict = parseVerdict(textOf(out));
+            if (verdict) {
+              recordVerdict(store, state, sub, verdict);
+              recordedAgent = sub;
+            }
+          }
+        } else if (isReviewAgent(state.currentAgent)) {
+          const verdict = parseVerdict(textOf(out));
+          if (verdict) {
+            recordVerdict(store, state, state.currentAgent, verdict);
+            recordedAgent = state.currentAgent;
+          }
+        }
+
+        if (recordedAgent === CYCLE_CLOSING_AGENT) {
+          maybeClearDirtyOnFinalPass(state, config);
+        }
+        persist();
+      } catch {
+        /* never break a turn */
+      }
+    },
+
+    async "experimental.text.complete"(inp, out) {
+      try {
+        if (!config.enforceCompletion) return;
+        if (!inp?.sessionID || !out || typeof out.text !== "string") return;
+        const state = store.stateFor(inp.sessionID);
+        const decision = evaluateCompletionClaim(state, config, out.text);
+        if (decision.blocked) {
+          state.completedBlocked += 1;
+          state.lastCompletionRejectAt = store.nowIso();
+          state.completionRejections.push({ at: state.lastCompletionRejectAt, reason: decision.reason });
+          out.text = decision.replacement;
+          if (config.toastOnBlock) logger.toast(`Goal Guard blocked premature completion: ${decision.reason}`, "warning");
+          persist();
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+
+    async "experimental.session.compacting"(inp, out) {
+      try {
+        if (!inp?.sessionID || !out || !Array.isArray(out.context)) return;
+        const state = store.stateFor(inp.sessionID);
+        out.context.push(
+          `Goal Guard state: ${summarizeState(state, config)}. Preserve Goal Contract, Verification Ledger, ` +
+            `Review Ledger, review cycle count, dirty state, and open findings across compaction.`,
         );
-      }
-      if (input.tool === "write" || input.tool === "edit" || input.tool === "apply_patch") {
-        state.dirty = true;
-        state.lastEditAt = nowIso();
-        state.dirtyReasons.push(`${input.tool} at ${state.lastEditAt}`);
+      } catch {
+        /* ignore */
       }
     },
 
-    async "tool.execute.after"(input, output) {
-      const state = stateFor(input.sessionID);
-      const agent = state.currentAgent;
-      const invokedReviewAgent = normalizedAgent(input);
-      const at = nowIso();
-      let recordedReviewAgent = null;
-
-      if (agent && GOAL_AGENTS.has(agent)) state.active = true;
-
-      if (WRITE_TOOLS.has(input.tool)) {
-        state.dirty = true;
-        state.lastEditAt = at;
-        state.dirtyReasons.push(`${input.tool} at ${at}`);
-      }
-
-      const isReviewing = REVIEW_AGENTS.has(state.currentAgent);
-      if (input.tool === "bash") {
-        const command = String(input?.args?.command || "");
-        if (isVerification(command) && !isReviewing) {
-          state.verificationSeen = true;
-          state.lastVerificationAt = at;
+    async event({ event } = {}) {
+      try {
+        if (!event) return;
+        if (event.type === "file.edited") {
+          const file = event.properties?.file || event.properties?.path || event.properties?.filename;
+          const target = activeSession();
+          if (target && file) {
+            markFileChanged(store, target, file);
+            persist();
+          }
+          return;
         }
-        if (!looksLikeDestructiveBash(command) && looksLikeMutatingBash(command) && !isReviewing) {
-          state.dirty = true;
-          state.lastEditAt = at;
-          state.dirtyReasons.push(`bash mutation fingerprint:${commandFingerprint(command)}`);
+        if (event.type === "session.idle" && event.properties?.sessionID) {
+          const state = store.stateFor(event.properties.sessionID);
+          persistence.flush(() => store.snapshot());
+          if (state.dirty) {
+            await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
+          }
         }
-      }
-
-      if (input.tool === "task" && REVIEW_AGENTS.has(invokedReviewAgent)) {
-        const out = textOf(output);
-        const failFirst = isFail(out);
-        const passAfter = isPass(out) && !failFirst;
-        if (!failFirst && !passAfter) return;
-        const verdict = passAfter ? "PASS" : "FAIL";
-        recordReviewVerdict(state, invokedReviewAgent, verdict, at);
-        recordedReviewAgent = invokedReviewAgent;
-      }
-
-      if (agent && REVIEW_AGENTS.has(agent)) {
-        const out = textOf(output);
-        if (/Verdict:\s*(PASS|FAIL)\b/i.test(out)) {
-          const failFirst = isFail(out);
-          const passAfter = isPass(out) && !failFirst;
-          if (!failFirst && !passAfter) return;
-          const verdict = passAfter ? "PASS" : "FAIL";
-          recordReviewVerdict(state, agent, verdict, at);
-          recordedReviewAgent = agent;
-        }
-      }
-
-      if (
-        recordedReviewAgent === "goal-final-auditor" &&
-        latestVerdictFor(state, recordedReviewAgent)?.verdict === "PASS" &&
-        completionAllowed(state)
-      ) {
-        state.dirty = false;
-        state.dirtyReasons = [];
+      } catch {
+        /* ignore */
       }
     },
 
-    async "experimental.session.compacting"(input, output) {
-      const state = stateFor(input.sessionID);
-      output.context.push(`Goal Guard state: ${summarizeState(state)}. Preserve Goal Contract, Verification Ledger, Review Ledger, review cycle count, dirty state, and open findings across compaction.`);
-    },
-
-    async "experimental.text.complete"(input, output) {
-      const state = stateFor(input.sessionID);
-      const text = output.text || "";
-      const claimsCompletion = /Goal Completed/i.test(text);
-      const completedMatch = text.match(/Review cycles:\s*(\d+)/i);
-      const claimedCycles = completedMatch ? parseInt(completedMatch[1], 10) : -1;
-
-      if (!claimsCompletion) return;
-
-      if (claimedCycles < 0) {
-        state.completedBlocked += 1;
-        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
-        output.text += `\n\nGoal Guard blocked completion: missing required Review cycles line. State: ${summarizeState(state)}`;
-      } else if (state.reviewCycles === 0) {
-        state.completedBlocked += 1;
-        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
-        output.text += `\n\nGoal Guard blocked completion: no review cycles recorded. State: ${summarizeState(state)}`;
-      } else if (claimedCycles !== state.reviewCycles) {
-        state.completedBlocked += 1;
-        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
-        output.text += `\n\nGoal Guard blocked completion: claimed review cycles (${claimedCycles}) do not match recorded review cycles (${state.reviewCycles}). State: ${summarizeState(state)}`;
-      } else if (!completionAllowed(state)) {
-        state.completedBlocked += 1;
-        output.text = text.replace(/Goal Completed/i, "Goal Not Completed");
-        output.text += `\n\nGoal Guard blocked completion: required review gates are missing or stale (${missingGates(state).join(", ") || "goal session not active"}). State: ${summarizeState(state)}`;
-      }
-    },
-
-    async event({ event }) {
-      if (event?.type === "session.idle" && event?.properties?.sessionID) {
-        const state = stateFor(event.properties.sessionID);
-        if (state.dirty) {
-          await client.app.log({
-            body: {
-              service: "goal-guard",
-              level: "warn",
-              message: "Goal session idle while dirty or review-stale",
-              extra: { state: summarizeState(state) },
-            },
-          });
-        }
+    async dispose() {
+      try {
+        persistence.flush(() => store.snapshot());
+      } catch {
+        /* ignore */
       }
     },
   };
+
+  return { hooks, store, config, persistence, logger, persist };
+}
+
+/** OpenCode plugin factory (default export). */
+export async function GoalGuardPlugin(input, options) {
+  const guard = createGuard(input || {}, options || {});
+  // Register custom goal_* tools, isolated so a resolution failure of
+  // @opencode-ai/plugin cannot prevent the core guard hooks from loading.
+  try {
+    const { createGoalTools } = await import("./goal-guard/tools.js");
+    guard.hooks.tool = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
+  } catch {
+    /* tools are optional */
+  }
+  return guard.hooks;
 }
 
 export default GoalGuardPlugin;
+
+/** Stable test surface. */
 export const __test = {
+  createGuard,
+  createStore,
   createState,
-  stateFor,
-  sessions,
+  resolveConfig,
+  analyzeCommand,
   looksLikeDestructiveBash,
   looksLikeMutatingBash,
   isVerification,
   summarizeState,
+  completionAllowed,
+  missingGates,
 };
