@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "engines": {
@@ -48,9 +48,24 @@
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
+    "opencode-tui-plugin",
     "goal-mode",
     "agents",
-    "review",
+    "ai-agents",
+    "agentic",
+    "subagents",
+    "code-review",
+    "review-gates",
+    "guardrails",
+    "completion-enforcement",
+    "shell-guard",
+    "destructive-command",
+    "tui",
+    "llm",
+    "claude",
+    "coding-agent",
+    "developer-tools",
     "plugin"
   ],
   "repository": {

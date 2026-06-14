@@ -73,11 +73,16 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Build release notes from CHANGELOG
+        if: github.event_name == 'push'
+        run: node scripts/release-notes.mjs > RELEASE_NOTES.md
+
       - name: Create matching GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
           generate_release_notes: true
           fail_on_unmatched_files: false

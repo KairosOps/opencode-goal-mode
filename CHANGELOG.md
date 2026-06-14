@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.3
+
+- Release notes: the GitHub Release body is now generated from the matching
+  `CHANGELOG.md` section (`scripts/release-notes.mjs`), so releases always ship
+  real notes instead of an empty auto-summary.
+- Richer repository: README badges (npm version/downloads, CI, release, license,
+  node), a quick-links bar, and a terminal-style sidebar demo
+  (`docs/sidebar-demo.svg`); a descriptive repo summary and topics; and
+  community health files (CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue and PR
+  templates).
+- Stronger npm discoverability: expanded `keywords` (opencode-plugin,
+  opencode-tui-plugin, guardrails, review-gates, completion-enforcement, …).
+
 ## v0.3.2
 
 - Only the `goal` agent is user-selectable. The structural validator now requires

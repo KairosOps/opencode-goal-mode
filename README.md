@@ -1,9 +1,24 @@
 # OpenCode Goal Mode
 
+[![npm version](https://img.shields.io/npm/v/opencode-goal-mode?color=2da44e&label=npm)](https://www.npmjs.com/package/opencode-goal-mode)
+[![npm downloads](https://img.shields.io/npm/dm/opencode-goal-mode?color=2da44e)](https://www.npmjs.com/package/opencode-goal-mode)
+[![CI](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml)
+[![Release](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml)
+[![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
+[![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
+
 Strict Goal Mode for OpenCode: a primary `goal` agent, a matrix of specialized
 review subagents, slash commands, and a `goal-guard` plugin that enforces review
 discipline, blocks destructive shell commands, and preserves goal state across
 compaction **and** restarts.
+
+```bash
+npm install -g opencode-goal-mode && opencode-goal-mode-install --global
+```
+
+![OpenCode Goal Mode sidebar banner](docs/sidebar-demo.svg)
+
+**[Install](#install) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and [research/](research/)
 for the platform reference, comparison, and threat model.
