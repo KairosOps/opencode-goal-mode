@@ -30,8 +30,10 @@ function normalize(record) {
 }
 
 /**
- * Choose which session's goal to show: the most-recently-touched ACTIVE session
- * (optionally preferring an explicit sessionId when it is present and active).
+ * Choose which session's goal to show. When OpenCode gives us a concrete session
+ * id, never fall back to another session: Build/non-Goal sessions must not show a
+ * Goal from the same worktree. The most-recent active fallback is only for
+ * no-session contexts such as initial sidebar registration polling.
  */
 export function pickSession(snapshot, sessionId) {
   if (!snapshot || !Array.isArray(snapshot.sessions)) return null;
@@ -41,6 +43,7 @@ export function pickSession(snapshot, sessionId) {
   if (sessionId) {
     const direct = records.find(([key, st]) => key === sessionId && st.active);
     if (direct) return direct[1];
+    return null;
   }
   const active = records.filter(([, st]) => st.active);
   if (active.length === 0) return null;

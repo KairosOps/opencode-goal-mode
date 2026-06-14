@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.11
+
+- Fixed Goal sidebar/status isolation so an explicit Build or other non-Goal
+  session never falls back to another active Goal session in the same worktree.
+- Blocked mutating `goal_*` tools from activating Goal Guard state in non-Goal
+  sessions; read-only tools remain strictly scoped to the current session.
+- Added regression coverage for mixed Goal/Build persisted snapshots, session-scoped
+  status/evidence/memory reads, and Build-mode tool calls.
+
 ## v0.3.10
 
 - Clarified the recommended install command to use a persistent global npm install

@@ -99,8 +99,36 @@ test("pickSession returns the most-recently-touched active session", () => {
   };
   assert.equal(pickSession(snapshot, undefined).goalText, "new goal");
   assert.equal(pickSession(snapshot, "old").goalText, "old goal");
-  // An explicit but inactive id falls back to the active pick.
-  assert.equal(pickSession(snapshot, "idle").goalText, "new goal");
+  // An explicit inactive/non-Goal session must not fall back to another Goal.
+  assert.equal(pickSession(snapshot, "idle"), null);
+  assert.equal(pickSession(snapshot, "missing"), null);
+});
+
+test("readSidebarModel is strictly session-scoped in mixed Goal/Build snapshots", () => {
+  const dir = mkdtempSync(join(tmpdir(), "goal-sidebar-mixed-"));
+  try {
+    const env = { XDG_STATE_HOME: dir };
+    const worktree = "/mixed/project";
+    const file = sidebarStateFile(worktree, env);
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        version: 1,
+        sessions: [
+          ["goal-session", activeState({ contract: { title: "Real Goal" }, touchedAt: 9 })],
+          ["build-session", Object.assign(createState(), { active: false, touchedAt: 10 })],
+        ],
+      }),
+    );
+
+    assert.equal(readSidebarModel({ worktree, sessionId: "goal-session", env }).goal, "Real Goal");
+    assert.equal(readSidebarModel({ worktree, sessionId: "build-session", env }).state, "none");
+    assert.equal(readSidebarModel({ worktree, sessionId: "unknown-session", env }).state, "none");
+    assert.equal(readSidebarModel({ worktree, env }).goal, "Real Goal", "fallback is only for no-session polling");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("readSidebarModel reads the guard's persisted snapshot for a worktree", () => {

@@ -16,6 +16,7 @@ import { evidenceMapReport, reviewerMemoryReport, statusReport } from "./summary
 import { recordEvidence } from "./events.js";
 import { refreshStickyGates } from "./gates.js";
 import { createState } from "./state.js";
+import { isPrimaryAgent } from "./agents.js";
 
 const s = tool.schema;
 
@@ -27,6 +28,18 @@ const s = tool.schema;
  */
 export function createGoalTools({ store, config, persist }) {
   const save = typeof persist === "function" ? persist : () => {};
+
+  function requireGoalMode(state) {
+    return Boolean(state?.active || isPrimaryAgent(state?.currentAgent));
+  }
+
+  function goalModeOnlyResult() {
+    return {
+      title: "Goal Mode required",
+      output: "This goal_* tool can only mutate Goal Guard state from an active Goal session. Switch to the `goal` agent or start with /goal.",
+      metadata: { blocked: true, reason: "not_goal_mode" },
+    };
+  }
 
   return {
     goal_status: tool({
@@ -109,6 +122,7 @@ export function createGoalTools({ store, config, persist }) {
       },
       async execute(args, ctx) {
         const state = store.stateFor(ctx.sessionID);
+        if (!requireGoalMode(state)) return goalModeOnlyResult();
         state.active = true;
         state.contract = {
           title: String(args.title || "").replace(/\s+/g, " ").trim(),
@@ -145,6 +159,7 @@ export function createGoalTools({ store, config, persist }) {
       },
       async execute(args, ctx) {
         const state = store.stateFor(ctx.sessionID);
+        if (!requireGoalMode(state)) return goalModeOnlyResult();
         state.active = true;
         recordEvidence(store, state, args.command, args.result, args.criteria);
         save();
@@ -164,6 +179,8 @@ export function createGoalTools({ store, config, persist }) {
         confirm: s.boolean().describe("Must be true to actually reset."),
       },
       async execute(args, ctx) {
+        const state = store.stateFor(ctx.sessionID);
+        if (!requireGoalMode(state)) return goalModeOnlyResult();
         if (!args.confirm) {
           return { title: "Reset not confirmed", output: "Pass confirm=true to reset Goal Guard state." };
         }

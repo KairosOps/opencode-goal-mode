@@ -326,6 +326,7 @@ test("goal_contract records a contract and activates enforcement", async () => {
   const guard = makeGuard();
   const { createGoalTools } = await import("../plugins/goal-guard/tools.js");
   const tools = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
+  await guard.hooks["chat.params"]({ sessionID: "ct", agent: "goal" }, {});
   const res = await tools.goal_contract.execute(
     { original: "add an auth endpoint", acceptanceCriteria: ["login works", "tokens expire"] },
     { sessionID: "ct" },
@@ -334,6 +335,25 @@ test("goal_contract records a contract and activates enforcement", async () => {
   const st = guard.store.stateFor("ct");
   assert.equal(st.active, true);
   assert.equal(st.contract.acceptanceCriteria.length, 2);
+});
+
+test("mutating goal tools do not activate Build or non-Goal sessions", async () => {
+  const guard = makeGuard();
+  const tools = await loadTools(guard);
+  await guard.hooks["chat.params"]({ sessionID: "build-tools", agent: "build" }, {});
+
+  let res = await tools.goal_contract.execute({ title: "Wrong", original: "not a goal", acceptanceCriteria: ["x"] }, { sessionID: "build-tools" });
+  assert.match(res.output, /only mutate Goal Guard state/);
+  assert.equal(guard.store.stateFor("build-tools").active, false);
+
+  res = await tools.goal_evidence.execute({ command: "npm test", result: "passed" }, { sessionID: "build-tools" });
+  assert.match(res.output, /only mutate Goal Guard state/);
+  assert.equal(guard.store.stateFor("build-tools").evidence.length, 0);
+  assert.equal(guard.store.stateFor("build-tools").active, false);
+
+  res = await tools.goal_reset.execute({ confirm: true }, { sessionID: "build-tools" });
+  assert.match(res.output, /only mutate Goal Guard state/);
+  assert.equal(guard.store.stateFor("build-tools").active, false);
 });
 
 test("goal_status returns structured status", async () => {
@@ -346,6 +366,26 @@ test("goal_status returns structured status", async () => {
   assert.equal(report.active, true);
   assert.ok(Array.isArray(report.requiredGates));
   assert.equal(report.reviewerMemory.open.length, 0);
+});
+
+test("read-only goal tools are session-scoped and do not show another active goal", async () => {
+  const guard = makeGuard();
+  const tools = await loadTools(guard);
+  await guard.hooks["chat.params"]({ sessionID: "goal-one", agent: "goal" }, {});
+  await tools.goal_contract.execute({ title: "Real goal", original: "ship it", acceptanceCriteria: ["done"] }, { sessionID: "goal-one" });
+  await guard.hooks["chat.params"]({ sessionID: "build-one", agent: "build" }, {});
+
+  const status = JSON.parse((await tools.goal_status.execute({}, { sessionID: "build-one" })).output);
+  assert.equal(status.active, false);
+  assert.equal(status.goal, "");
+  assert.equal(status.completionAllowed, false);
+
+  const evidenceMap = JSON.parse((await tools.goal_evidence_map.execute({}, { sessionID: "build-one" })).output);
+  assert.equal(evidenceMap.active, false);
+  assert.equal(evidenceMap.criteria.length, 0);
+
+  const memory = JSON.parse((await tools.goal_reviewer_memory.execute({}, { sessionID: "build-one" })).output);
+  assert.equal(memory.open.length, 0);
 });
 
 test("goal_reviewer_memory exposes unresolved and resolved findings", async () => {
@@ -376,6 +416,7 @@ test("goal_evidence_map maps criteria to evidence and reviewer status", async ()
   const { createGoalTools } = await import("../plugins/goal-guard/tools.js");
   const { requiredGates } = await import("../plugins/goal-guard/gates.js");
   const tools = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
+  await guard.hooks["chat.params"]({ sessionID: "emap", agent: "goal" }, {});
   await tools.goal_contract.execute(
     { original: "ship docs", acceptanceCriteria: ["README documents command", "package includes command"] },
     { sessionID: "emap" },
@@ -520,6 +561,7 @@ async function loadTools(guard) {
 test("goal_evidence records evidence and marks verification seen", async () => {
   const guard = makeGuard();
   const tools = await loadTools(guard);
+  await guard.hooks["chat.params"]({ sessionID: "ev", agent: "goal" }, {});
   await tools.goal_evidence.execute({ command: "npm test", result: "passed", criteria: ["c1"] }, { sessionID: "ev" });
   const st = guard.store.stateFor("ev");
   assert.equal(st.evidence.length, 1);
@@ -530,6 +572,7 @@ test("goal_evidence records evidence and marks verification seen", async () => {
 test("goal_reset requires confirmation and then clears state", async () => {
   const guard = makeGuard();
   const tools = await loadTools(guard);
+  await guard.hooks["chat.params"]({ sessionID: "rs", agent: "goal" }, {});
   const st = guard.store.stateFor("rs");
   st.dirty = true;
   st.reviewCycles = 3;
