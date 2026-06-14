@@ -130,3 +130,23 @@ export const CONTEXTUAL_GATES = Object.freeze({
 
 /** The reviewer that, when it returns a verdict, closes one review cycle. */
 export const CYCLE_CLOSING_AGENT = "goal-final-auditor";
+
+/** Acronyms that should stay upper-case in display names. */
+const ACRONYMS = new Set(["api", "ux", "ui", "sql", "ops", "qa"]);
+
+/**
+ * Human-friendly display name for an agent id: drops the `goal-` namespace
+ * prefix, turns hyphens into spaces, Title-Cases words, and keeps known acronyms
+ * upper-case. e.g. "goal-security-reviewer" → "Security Reviewer",
+ * "goal-api-reviewer" → "API Reviewer", "goal-final-auditor" → "Final Auditor".
+ */
+export function prettyAgentName(id) {
+  const raw = String(id || "").trim();
+  if (!raw) return "";
+  return raw
+    .replace(/^goal-/, "")
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}

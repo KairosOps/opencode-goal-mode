@@ -23,7 +23,7 @@ import { createStore, createState } from "./goal-guard/state.js";
 import { createPersistence } from "./goal-guard/persistence.js";
 import { createLogger } from "./goal-guard/logger.js";
 import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./goal-guard/shell.js";
-import { isPrimaryAgent, isReviewAgent, CYCLE_CLOSING_AGENT } from "./goal-guard/agents.js";
+import { isPrimaryAgent, isReviewAgent, CYCLE_CLOSING_AGENT, prettyAgentName } from "./goal-guard/agents.js";
 import { textOf, parseVerdict, recordVerdict } from "./goal-guard/verdicts.js";
 import { completionAllowed, missingGates, refreshStickyGates } from "./goal-guard/gates.js";
 import { evaluateCompletionClaim } from "./goal-guard/completion.js";
@@ -210,9 +210,9 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // Surface review progress in the TUI: a toast per recorded verdict, and a
         // single celebratory toast the moment the last required gate clears.
         if (recordedAgent && recordedVerdict && config.toastOnReview) {
-          logger.toast(`Goal Guard: ${recordedAgent} → ${recordedVerdict}`, recordedVerdict === "PASS" ? "success" : "warning");
+          logger.toast(`${prettyAgentName(recordedAgent)} → ${recordedVerdict}`, recordedVerdict === "PASS" ? "success" : "warning");
           if (!wasAllowed && completionAllowed(state, config)) {
-            logger.toast("Goal Guard: all required gates passed — completion unlocked", "success");
+            logger.toast("All required gates passed — completion unlocked", "success");
           }
         }
         persist();

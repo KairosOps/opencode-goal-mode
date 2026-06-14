@@ -75,6 +75,10 @@ function assertCleanBody(file, body) {
   }
 }
 
+// Exactly one user-selectable agent: `goal` is `primary`; every other agent MUST
+// be `subagent` so the user can only ever pick Goal — the specialist subagents are
+// invoked by the Goal agent (via the task tool), never selected by the user. `all`
+// is forbidden because it would expose a subagent in the user's agent picker.
 let primaryCount = 0;
 for (const file of agentFiles) {
   const text = readFileSync(join(root, "agents", file), "utf8");
@@ -82,11 +86,17 @@ for (const file of agentFiles) {
   if (!/^description:/m.test(fm)) throw new Error(`${file} missing description`);
   const modeMatch = fm.match(/^mode:\s+(primary|subagent|all)\s*$/m);
   if (!modeMatch) throw new Error(`${file} has invalid mode`);
-  if (modeMatch[1] === "primary") primaryCount += 1;
+  const mode = modeMatch[1];
+  if (file === "goal.md") {
+    if (mode !== "primary") throw new Error("goal.md must be the primary agent");
+    primaryCount += 1;
+  } else if (mode !== "subagent") {
+    throw new Error(`${file} must be mode: subagent (only goal is user-selectable; found "${mode}")`);
+  }
   if (!/^permission:/m.test(fm)) throw new Error(`${file} missing permission`);
   assertCleanBody(file, body);
 }
-if (primaryCount !== 1) throw new Error(`expected exactly one primary agent, found ${primaryCount}`);
+if (primaryCount !== 1) throw new Error(`expected exactly one primary agent (goal), found ${primaryCount}`);
 
 const reviewerNames = agentFiles.filter((f) => /(reviewer|auditor|verifier|quality-gate|completion-guard)/.test(f));
 for (const file of reviewerNames) {

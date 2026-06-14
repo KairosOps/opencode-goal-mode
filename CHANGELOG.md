@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.2
+
+- Only the `goal` agent is user-selectable. The structural validator now requires
+  every other agent to be `mode: subagent` (no `all`/extra `primary`), so the
+  specialist reviewers can only be invoked by the Goal agent via the task tool,
+  never picked by the user.
+- Friendlier subagent names in the TUI: review-verdict toasts now read
+  "Security Reviewer → PASS" / "API Reviewer → PASS" instead of raw hyphenated ids
+  (`prettyAgentName` drops the `goal-` prefix, de-hyphenates, keeps acronyms).
+- Release pipeline: a single `vX.Y.Z` tag push now publishes to npm AND creates
+  the matching GitHub Release (versions stay in sync). `publish:check` fails the
+  release if the tag does not match `package.json` or the version already exists.
+- README: npm-first install instructions and a documented release flow.
+
 ## v0.3.1
 
 - Sidebar: when a task is running but no goal is set, show a clean grey `No goal`

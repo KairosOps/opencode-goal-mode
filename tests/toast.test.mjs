@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { __test } from "../plugins/goal-guard.js";
+import { prettyAgentName } from "../plugins/goal-guard/agents.js";
+
+test("prettyAgentName de-hyphenates, drops the goal- prefix, and keeps acronyms", () => {
+  assert.equal(prettyAgentName("goal-security-reviewer"), "Security Reviewer");
+  assert.equal(prettyAgentName("goal-final-auditor"), "Final Auditor");
+  assert.equal(prettyAgentName("goal-api-reviewer"), "API Reviewer");
+  assert.equal(prettyAgentName("goal-ux-reviewer"), "UX Reviewer");
+  assert.equal(prettyAgentName("goal-diff-reviewer"), "Diff Reviewer");
+  assert.equal(prettyAgentName(""), "");
+});
 
 const noopPersistence = { load: () => null, save: () => {}, flush: () => false, file: "", isDegraded: () => false };
 
@@ -25,16 +35,18 @@ async function recordVerdict(hooks, sessionID, agent, verdict) {
   );
 }
 
-test("a recorded review verdict toasts PASS as success and FAIL as warning", async () => {
+test("a recorded review verdict toasts PASS as success and FAIL as warning, with a pretty name", async () => {
   const { hooks, toasts } = makeGuard();
   await hooks["chat.params"]({ sessionID: "s", agent: "goal" }, {});
   await recordVerdict(hooks, "s", "goal-security-reviewer", "FAIL");
   await recordVerdict(hooks, "s", "goal-security-reviewer", "PASS");
 
-  const fail = toasts.find((x) => /goal-security-reviewer → FAIL/.test(x.message));
-  const pass = toasts.find((x) => /goal-security-reviewer → PASS/.test(x.message));
-  assert.ok(fail && fail.variant === "warning", "FAIL toast is a warning");
-  assert.ok(pass && pass.variant === "success", "PASS toast is a success");
+  const fail = toasts.find((x) => x.message === "Security Reviewer → FAIL");
+  const pass = toasts.find((x) => x.message === "Security Reviewer → PASS");
+  assert.ok(fail && fail.variant === "warning", "FAIL toast is a warning with the pretty name");
+  assert.ok(pass && pass.variant === "success", "PASS toast is a success with the pretty name");
+  // No raw hyphenated id leaks into the toast.
+  assert.ok(!toasts.some((x) => /goal-security-reviewer/.test(x.message)), "no raw agent id in toasts");
 });
 
 test("completion-unlocked toast fires once when the last required gate clears", async () => {

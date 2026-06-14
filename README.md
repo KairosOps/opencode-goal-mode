@@ -90,7 +90,11 @@ second) — negligible for a per-tool-call guard:
 ## What it adds
 
 - A primary `goal` agent that owns implementation but delegates research,
-  discovery, verification planning, and reviews to subagents.
+  discovery, verification planning, and reviews to subagents. **`goal` is the only
+  user-selectable agent** — every specialist (security, diff, verifier, …) is a
+  `mode: subagent` that the Goal agent invokes via the task tool; the user never
+  picks one directly. They surface with friendly names (e.g. "Security Reviewer",
+  "API Reviewer") rather than raw ids.
 - Strict review gates for prompt compliance, diff review, verification, security,
   UX, operations, data, API, performance, tests, docs, quality, and final audit.
 - Slash commands: `/goal`, `/goal-contract`, `/goal-review`,
@@ -111,8 +115,9 @@ second) — negligible for a per-tool-call guard:
     `goal_reviewer_memory`, `goal_status`, `goal_reset`.
   - **Live state injection** into the system prompt so the model always knows
     what the guard requires.
-  - **TUI toasts**: a toast on each review verdict (PASS/FAIL) and a single
-    "completion unlocked" toast the moment the last required gate clears.
+  - **TUI toasts**: a toast on each review verdict (PASS/FAIL), with the
+    reviewer's friendly name, and a single "completion unlocked" toast the moment
+    the last required gate clears.
 - An **experimental** companion TUI plugin (`plugins/goal-sidebar.js`) that shows
   the active goal as a shining-yellow banner in the sidebar with a compact gate
   status line. See [TUI integration](#tui-integration).
@@ -140,26 +145,39 @@ enforcement and writes its state to disk, and an experimental TUI plugin
   (`toastOnReview`), and blocked destructive commands / premature completions
   toast as before (`toastOnBlock`).
 
-## Install globally
+## Install
+
+### From npm (recommended)
 
 ```bash
-npm ci
-npm run validate
-npm run install:global
+npm install -g opencode-goal-mode
+opencode-goal-mode-install --global    # installs into ~/.config/opencode
 ```
 
-Restart OpenCode after installation. OpenCode loads agents, commands, and
-plugins at startup.
+Then restart OpenCode (it loads agents, commands, and plugins at startup). In the
+agent picker you will see **only the `goal` agent** — the specialist reviewers are
+subagents the Goal agent drives for you; they are never selectable by the user.
 
-## Install into one project
+Install into a single project instead of globally:
 
 ```bash
-npm ci
-npm run validate
-npm run install:local
+npm install -D opencode-goal-mode
+npx opencode-goal-mode-install         # writes to ./.opencode
 ```
 
-This writes to `./.opencode` in the current project.
+Upgrade later by re-running the same install command after `npm install -g
+opencode-goal-mode@latest`; the installer replaces only the files it owns and
+leaves your local edits alone (see [Installer options](#installer-options)).
+
+### From source
+
+```bash
+git clone https://github.com/devinoldenburg/opencode-goal-mode
+cd opencode-goal-mode
+npm ci
+npm run validate
+npm run install:global                 # or: npm run install:local
+```
 
 ## Installer options
 
@@ -253,32 +271,34 @@ keeps read-only inspection from dirtying the session, preserves goal state durin
 compaction and across restarts, and blocks premature `Goal Completed` responses
 when review gates are missing or stale.
 
-## npm publishing
+## Releasing
 
-Install from npm after the first publish:
-
-```bash
-npm install -g opencode-goal-mode
-opencode-goal-mode-install --global
-```
-
-Publishing is handled by `.github/workflows/publish.yml`, which runs on Node 24
-and publishes with the `NPM_TOKEN` repository secret. The workflow validates the
-package, checks the tag matches `package.json`, verifies the version is not
-already on npm, then publishes. Manual workflow dispatch defaults to
-`npm publish --dry-run`.
-
-Release flow for a new version:
+Releases are fully automated and **version-synced**: one pushed tag publishes to
+npm *and* creates the matching GitHub Release. The pipeline lives in
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) (Node 24).
 
 ```bash
-npm version patch
-git push --follow-tags
+npm version patch        # bumps package.json + package-lock.json and creates the vX.Y.Z tag
+git push --follow-tags   # pushes main + the tag → the Release workflow runs
 ```
 
-For a version that is already bumped and reviewed, commit the current tree, tag
-the reviewed version (for example `v0.2.4`), push the branch and tag, then create
-the GitHub Release. Ensure `NPM_TOKEN` has npm publish rights before publishing
-the release.
+On a `vX.Y.Z` tag push the workflow:
+
+1. installs and runs the full CI gate (`npm run ci` — tests, audit, structural
+   validation, `npm pack --dry-run`);
+2. runs `npm run publish:check`, which **fails if the tag does not match
+   `package.json`** or if that version already exists on npm;
+3. publishes with `npm publish --access public` using the `NPM_TOKEN` repository
+   secret;
+4. creates the GitHub Release for the tag with auto-generated notes.
+
+So the git tag, the `package.json` version, the npm version, and the GitHub
+Release version are always identical. A manual `workflow_dispatch` is available
+and defaults to a safe `npm publish --dry-run`.
+
+**One-time setup:** add a publish-scoped npm token as the `NPM_TOKEN` repository
+secret (`gh secret set NPM_TOKEN`). Treat that token as sensitive — never commit
+it.
 
 ## Goal Completion Contract
 
