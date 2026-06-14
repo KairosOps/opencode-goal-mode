@@ -23,7 +23,7 @@ import { createStore, createState } from "./state.js";
 import { createPersistence } from "./persistence.js";
 import { createLogger } from "./logger.js";
 import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./shell.js";
-import { isPrimaryAgent, isReviewAgent, CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
+import { isPrimaryAgent, isReviewAgent, isGoalAgent, CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
 import { textOf, parseVerdict, recordVerdict } from "./verdicts.js";
 import { completionAllowed, missingGates, refreshStickyGates } from "./gates.js";
 import { evaluateCompletionClaim } from "./completion.js";
@@ -39,6 +39,11 @@ function normalizedSubagent(input) {
 
 function commandOf(input, output) {
   return String(output?.args?.command ?? input?.args?.command ?? "");
+}
+
+/** The subagent a `task` call targets (args live on the output in tool.execute.before). */
+function taskTarget(input, output) {
+  return String(output?.args?.subagent_type ?? input?.args?.subagent_type ?? output?.args?.agent ?? input?.args?.agent ?? "").trim();
 }
 
 function partsText(parts) {
@@ -130,6 +135,29 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
 
     async "tool.execute.before"(inp, out) {
       const state = store.stateFor(inp?.sessionID);
+
+      // The goal-* subagents belong to Goal Mode. OpenCode resolves subagents
+      // globally, so without this a Build/Plan/custom agent could invoke a Goal
+      // reviewer directly. Only a Goal session (the `goal` primary, or a session
+      // the guard has already marked active) may spawn them. Non-goal targets
+      // (explore/general/scout) are never restricted.
+      if (inp?.tool === "task" && config.restrictSubagents) {
+        const target = taskTarget(inp, out);
+        if (target && isGoalAgent(target)) {
+          const caller = state.currentAgent;
+          const callerIsGoal = isPrimaryAgent(caller) || state.active;
+          if (!callerIsGoal) {
+            state.dirtyReasons.push(`blocked non-Goal invocation of subagent ${target}`);
+            if (config.toastOnBlock) logger.toast(`Goal Guard blocked ${prettyAgentName(target)} (Goal-only subagent)`, "error");
+            persist();
+            throw new Error(
+              `Goal Guard: "${target}" is a Goal Mode subagent and can only be invoked by the Goal agent. ` +
+                `The "${caller || "current"}" agent cannot call it — start with /goal or switch to the goal agent.`,
+            );
+          }
+        }
+      }
+
       if (inp?.tool === "bash") {
         const command = commandOf(inp, out);
         const analysis = analyzeCommand(command);

@@ -2,9 +2,11 @@
 /**
  * Goal Mode — TUI sidebar todo section.
  *
- * In Goal agent sessions this replaces the native-looking todo area with a
- * Goal-owned, evidence-aware todo section. Non-Goal sessions render nothing here
- * so Build and other modes keep OpenCode's normal todo section in the same slot.
+ * In Goal agent sessions this adds a Goal-owned, evidence-aware todo section to
+ * the sidebar. Non-Goal sessions render nothing here so Build and other modes
+ * keep OpenCode's normal todo section. The section is strictly per-session: it is
+ * keyed by props.session_id, so a Build session in the same worktree never
+ * inherits another session's goal.
  *
  * How OpenCode loads this: TUI plugins are listed in `~/.config/opencode/tui.json`
  * (NOT the plugins/ dir) and resolved via the package's `exports["./tui"]`. The
@@ -60,21 +62,21 @@ function readSnapshot(worktree) {
   }
 }
 
-/** Most-recently-touched active session, preferring an explicit active sessionId. */
+/**
+ * Resolve the guard state for EXACTLY this session id, and only when it is an
+ * active Goal session. There is deliberately NO "most-recently-touched" global
+ * fallback: a Build or other session in the same worktree must never inherit a
+ * Goal from a sibling session. (Mirrors the reference OpenCode TUI plugin's
+ * explicit per-session rule — do not fall back to the latest state.)
+ */
 function pickSession(snapshot, sessionId) {
-  if (!snapshot || !Array.isArray(snapshot.sessions)) return null;
-  const records = snapshot.sessions
-    .filter((e) => Array.isArray(e) && e.length === 2)
-    .map(([key, st]) => [key, st && typeof st === "object" ? st : {}]);
-  if (sessionId) {
-    const direct = records.find(([key, st]) => key === sessionId && st.active);
-    if (direct) return direct[1];
-    return null;
+  if (!snapshot || !Array.isArray(snapshot.sessions) || !sessionId) return null;
+  for (const entry of snapshot.sessions) {
+    if (!Array.isArray(entry) || entry.length !== 2) continue;
+    const [key, st] = entry;
+    if (key === sessionId && st && typeof st === "object" && st.active) return st;
   }
-  const active = records.filter(([, st]) => st.active);
-  if (active.length === 0) return null;
-  active.sort((a, b) => (b[1].touchedAt || 0) - (a[1].touchedAt || 0));
-  return active[0][1];
+  return null;
 }
 
 function readModel(worktree, sessionId) {
@@ -100,11 +102,7 @@ const tui = async (api, options) => {
 
     const worktree = api.state?.path?.worktree || api.state?.path?.directory;
 
-    let registered = false;
-    const register = () => {
-      if (registered) return;
-      registered = true;
-      api.slots.register({
+    api.slots.register({
         order: 50,
         slots: {
           sidebar_content(_ctx, props) {
@@ -143,19 +141,7 @@ const tui = async (api, options) => {
             );
           },
         },
-      });
-    };
-
-    if (readModel(worktree).state !== "none") {
-      register();
-    } else {
-      const registrationTimer = setInterval(() => {
-        if (readModel(worktree).state !== "none") {
-          clearInterval(registrationTimer);
-          register();
-        }
-      }, POLL_MS);
-    }
+    });
   } catch {
     /* TUI runtime missing or API drift — render nothing rather than crash. */
   }

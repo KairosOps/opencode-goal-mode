@@ -66,7 +66,7 @@ Verified against `@opencode-ai/plugin@1.15.13` source.
 | `chat.message` | Capture the user's goal text (drives contextual review gates). |
 | `chat.params` | Track the current agent; activate goal sessions. |
 | `experimental.chat.system.transform` | Inject the live Goal Guard state block. |
-| `tool.execute.before` | Block destructive / remote-exec bash by throwing. |
+| `tool.execute.before` | Block destructive / remote-exec bash, and block non-Goal agents from invoking `goal-*` subagents, by throwing. |
 | `tool.execute.after` | Record edits, verification, mutations, and review verdicts. |
 | `experimental.text.complete` | Rewrite premature `Goal Completed` claims. |
 | `experimental.session.compacting` | Preserve guard state across compaction. |
@@ -166,18 +166,23 @@ hooks still load.
 ## TUI companion (experimental)
 
 `plugins/goal-sidebar.tsx` is a TUI plugin module — default-exporting `{ id, tui }`
-— distinct from the server plugin. It waits until the persisted state contains an
-active Goal session, then registers a `sidebar_content` slot via
-`api.slots.register({ slots: { sidebar_content } })` and renders the short goal
-label, gate/status line, and structured Goal todos derived from acceptance
-criteria, evidence freshness, dirty state, and missing gates. It starts with a
-brief rainbow foreground effect, then returns to the configured running colour
-(`#FFD700` by default). When there is no active Goal session it does not register
-the slot, so Build and other modes keep OpenCode's native todo section in place.
+— distinct from the server plugin. It registers a `sidebar_content` slot via
+`api.slots.register({ slots: { sidebar_content } })` (matching the canonical
+OpenCode TUI-plugin pattern), and the slot renders content **only** for the active
+session, and **only** when that exact session is an active Goal session. It is
+keyed strictly by `props.session_id`: there is no most-recently-touched global
+fallback, so a Build (or any non-Goal) session in the same worktree never inherits
+another session's goal — it renders nothing and keeps OpenCode's native todo
+section. When it does render, it shows the short goal label, gate/status line, and
+structured Goal todos derived from acceptance criteria, evidence freshness, dirty
+state, and missing gates, starting with a brief per-line rainbow foreground effect
+and then settling to the configured running colour (`#FFD700` by default; red when
+done).
 
 It is *paired* with the server plugin only through the persisted state file:
 `sidebar-data.js` recomputes the same `stateBaseDir`/`projectKey` path the guard
-writes to and projects the active session via `summary.sidebarView`. That keeps
+writes to and projects the requested session via `summary.sidebarView` (the same
+per-session rule, so the Node tests and the real component agree). That keeps
 the pure projection logic Node-testable (`tests/sidebar.test.mjs`) even though the
 JSX renderer itself can only run inside OpenCode's (Bun) TUI runtime. Everything
 in the `tui` entry is wrapped so a missing slot API, missing JSX runtime, or read

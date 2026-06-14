@@ -89,7 +89,7 @@ test("sidebarView builds structured Goal todos from acceptance criteria and evid
 // sidebar-data: pickSession + readSidebarModel
 // ---------------------------------------------------------------------------
 
-test("pickSession returns the most-recently-touched active session", () => {
+test("pickSession is strictly session-scoped (no global fallback)", () => {
   const snapshot = {
     sessions: [
       ["old", activeState({ goalText: "old goal", touchedAt: 1 })],
@@ -97,9 +97,12 @@ test("pickSession returns the most-recently-touched active session", () => {
       ["idle", Object.assign(createState(), { goalText: "inactive", touchedAt: 99 })],
     ],
   };
-  assert.equal(pickSession(snapshot, undefined).goalText, "new goal");
+  // Each session sees only its OWN goal — never the most-recently-touched one.
   assert.equal(pickSession(snapshot, "old").goalText, "old goal");
-  // An explicit inactive/non-Goal session must not fall back to another Goal.
+  assert.equal(pickSession(snapshot, "new").goalText, "new goal");
+  // No session id → render nothing (no global "latest goal" leak).
+  assert.equal(pickSession(snapshot, undefined), null);
+  // An explicit inactive/non-Goal or unknown session must not fall back to another Goal.
   assert.equal(pickSession(snapshot, "idle"), null);
   assert.equal(pickSession(snapshot, "missing"), null);
 });
@@ -125,7 +128,9 @@ test("readSidebarModel is strictly session-scoped in mixed Goal/Build snapshots"
     assert.equal(readSidebarModel({ worktree, sessionId: "goal-session", env }).goal, "Real Goal");
     assert.equal(readSidebarModel({ worktree, sessionId: "build-session", env }).state, "none");
     assert.equal(readSidebarModel({ worktree, sessionId: "unknown-session", env }).state, "none");
-    assert.equal(readSidebarModel({ worktree, env }).goal, "Real Goal", "fallback is only for no-session polling");
+    // No session id → render nothing. There is no global "latest goal" fallback that
+    // a Build/other session in the same worktree could inherit.
+    assert.equal(readSidebarModel({ worktree, env }).state, "none");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -145,12 +150,12 @@ test("readSidebarModel reads the guard's persisted snapshot for a worktree", () 
     };
     writeFileSync(file, JSON.stringify(snapshot));
 
-    const model = readSidebarModel({ worktree, env });
+    const model = readSidebarModel({ worktree, sessionId: "s1", env });
     assert.equal(model.state, "running");
     assert.equal(model.goal, "Ship the sidebar");
 
-    // Unknown worktree → no file → state:"none" (renders "No goal available"), never throws.
-    assert.equal(readSidebarModel({ worktree: "/nope", env }).state, "none");
+    // Unknown worktree → no file → state:"none" (renders nothing), never throws.
+    assert.equal(readSidebarModel({ worktree: "/nope", sessionId: "s1", env }).state, "none");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -216,11 +221,11 @@ test("readSidebarModel never throws on malformed/partial snapshots", () => {
 });
 
 test("pickSession tolerates malformed entries and missing fields", () => {
-  assert.equal(pickSession(null, undefined), null);
-  assert.equal(pickSession({}, undefined), null);
-  assert.equal(pickSession({ sessions: "x" }, undefined), null);
-  assert.equal(pickSession({ sessions: [["k", null], [1, 2, 3], ["a", { active: false }]] }, undefined), null);
-  const ok = pickSession({ sessions: [["a", activeState({ goalText: "g", touchedAt: 1 })]] }, undefined);
+  assert.equal(pickSession(null, "a"), null);
+  assert.equal(pickSession({}, "a"), null);
+  assert.equal(pickSession({ sessions: "x" }, "a"), null);
+  assert.equal(pickSession({ sessions: [["k", null], [1, 2, 3], ["a", { active: false }]] }, "a"), null);
+  const ok = pickSession({ sessions: [["a", activeState({ goalText: "g", touchedAt: 1 })]] }, "a");
   assert.equal(ok.goalText, "g");
 });
 

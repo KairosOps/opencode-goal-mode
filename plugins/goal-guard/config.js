@@ -20,6 +20,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   persist: true,
   /** Require the contextual specialist gates derived from goal text / changed files. */
   contextualGates: true,
+  /** Block non-Goal agents from invoking the goal-* subagents via the task tool. */
+  restrictSubagents: true,
   /** Maximum tracked sessions before LRU eviction. */
   maxSessions: 200,
   /** Idle TTL (ms) after which a session's state may be dropped. 0 disables TTL. */
@@ -68,6 +70,7 @@ function fromEnv(env) {
     GOAL_GUARD_INJECT_SYSTEM_STATE: ["injectSystemState", coerceBool],
     GOAL_GUARD_PERSIST: ["persist", coerceBool],
     GOAL_GUARD_CONTEXTUAL_GATES: ["contextualGates", coerceBool],
+    GOAL_GUARD_RESTRICT_SUBAGENTS: ["restrictSubagents", coerceBool],
     GOAL_GUARD_MAX_SESSIONS: ["maxSessions", coerceInt],
     GOAL_GUARD_SESSION_TTL_MS: ["sessionTtlMs", coerceInt],
     GOAL_GUARD_TOAST_ON_BLOCK: ["toastOnBlock", coerceBool],

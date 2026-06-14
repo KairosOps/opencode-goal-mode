@@ -32,6 +32,13 @@ test("environment variables override defaults but options win over env", () => {
   assert.equal(withOpts.maxSessions, 5, "env still applies where options are silent");
 });
 
+test("restrictSubagents defaults on and is configurable via options and env", () => {
+  assert.equal(DEFAULT_CONFIG.restrictSubagents, true);
+  assert.equal(resolveConfig({ restrictSubagents: false }, {}).restrictSubagents, false);
+  assert.equal(resolveConfig(undefined, { GOAL_GUARD_RESTRICT_SUBAGENTS: "off" }).restrictSubagents, false);
+  assert.equal(resolveConfig({ restrictSubagents: true }, { GOAL_GUARD_RESTRICT_SUBAGENTS: "off" }).restrictSubagents, true);
+});
+
 test("boolean coercion accepts common string forms", () => {
   for (const truthy of ["1", "true", "yes", "on", "TRUE"]) {
     assert.equal(resolveConfig({ persist: truthy }).persist, true, truthy);

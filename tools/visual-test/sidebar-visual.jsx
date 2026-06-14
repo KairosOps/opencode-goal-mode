@@ -108,7 +108,7 @@ try {
     writeSnapshot("/proj/nogoal", [["s1", session({ touchedAt: 3 })]]);
     const { frame, registered } = await render({ worktree: "/proj/nogoal" });
     banner("Task running, NO goal (native todo untouched)"); show(frame);
-    check("does not register the slot so native todo can remain", registered === false && !frame.includes("No goal") && !frame.includes("Goal todos"));
+    check("renders nothing so native todo can remain", registered === true && !frame.includes("No goal") && !frame.includes("Goal todos"));
   }
   {
     writeSnapshot("/proj/mixed", [
@@ -127,9 +127,31 @@ try {
     check("slot invocation without session id returns nothing", noProps === undefined);
   }
   {
+    // Two ACTIVE goal sessions in the SAME worktree must not bleed into each other.
+    writeSnapshot("/proj/two-goals", [
+      ["sess-alpha", session({ contract: { title: "Goal Alpha", original: "alpha" }, touchedAt: 5 })],
+      ["sess-beta", session({ contract: { title: "Goal Beta", original: "beta" }, touchedAt: 99 })],
+    ]);
+    const { api, getSlot } = mockApi("/proj/two-goals");
+    await tui(api, { sidebarRainbowMs: 0 });
+    const slot = getSlot();
+    const renderSession = async (sid) => {
+      const t = await testRender(() => slot({}, { session_id: sid }), { width: 44, height: 5 });
+      await t.renderOnce();
+      return t.captureCharFrame();
+    };
+    const alpha = await renderSession("sess-alpha");
+    const beta = await renderSession("sess-beta");
+    banner("Two active goals, same worktree (per-session isolation)");
+    console.log("[sess-alpha]"); show(alpha);
+    console.log("[sess-beta]"); show(beta);
+    check("sess-alpha shows only Goal Alpha", alpha.includes("Goal Alpha") && !alpha.includes("Goal Beta"));
+    check("sess-beta shows only Goal Beta (not the most-recently-touched global)", beta.includes("Goal Beta") && !beta.includes("Goal Alpha"));
+  }
+  {
     const { frame, registered } = await render({ worktree: "/proj/never-touched" });
     banner("No guard state at all (native todo untouched)"); show(frame);
-    check("no slot registered for non-Goal sessions", registered === false && !frame.includes("No goal") && !frame.includes("Goal todos"));
+    check("no Goal content is rendered for non-Goal sessions", registered === true && !frame.includes("No goal") && !frame.includes("Goal todos"));
   }
   {
     const passing = {};

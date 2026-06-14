@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.4.0
+
+### Goal-only subagents
+
+- The `goal-*` specialist subagents are now mechanically locked to Goal Mode.
+  OpenCode resolves subagents globally, so a Build, Plan, or custom agent could
+  previously invoke a Goal reviewer directly. The guard now blocks any `task` call
+  targeting a `goal-*` subagent unless it comes from an active Goal session, and a
+  poach attempt never turns the calling session into a Goal. General-purpose
+  subagents (`explore`/`general`/`scout`) are unaffected. New `restrictSubagents` /
+  `GOAL_GUARD_RESTRICT_SUBAGENTS` option (default on) toggles it.
+
+### Per-session sidebar isolation (not global)
+
+- The TUI Goal todo section is now strictly per-session. Both the live component
+  (`goal-sidebar.tsx`) and the Node-testable projection (`sidebar-data.js`) resolve
+  state by the exact `props.session_id` and only when that session is an active Goal
+  session — the "most-recently-touched active session" global fallback is gone in
+  both. A Build (or any non-Goal) session in the same worktree can no longer inherit
+  a sibling session's goal.
+- The slot now always registers and decides per-session inside the render (matching
+  the canonical OpenCode TUI-plugin pattern) instead of conditionally registering.
+- Added node + headless-visual coverage proving two active goals in one worktree
+  each render only their own goal.
+
+### Goal-mode-only tools
+
+- Every `goal_*` tool is Goal-mode-only: non-Goal/Build sessions get a clear refusal
+  instead of any Goal status, evidence map, memory, contract, evidence, or reset.
+
+### Documentation & visuals (accuracy pass)
+
+- Corrected the sidebar wording from "replaces the native todo area" to "adds a
+  Goal-owned todo section" (the slot contributes content; it does not replace native
+  todos), and removed the stale "waits to register the slot" description.
+- Regenerated the README hero image (`docs/sidebar-demo.svg`) to match what actually
+  renders: a bold `Goal todos` label (no orb), the first-display per-line rainbow,
+  the running/done colour states, and the native-todo-stays behavior. The old image
+  showed a removed `◆ GOAL` orb and a removed grey "No goal" state.
+- Made the benchmark "remaining misses" description accurate (all are plain `rm`
+  without `-r`/`-f`, intentionally permitted) and documented Goal-only subagents and
+  `restrictSubagents` in the README config table and ARCHITECTURE hook table.
+
 ## v0.3.11
 
 - Fixed Goal sidebar/status isolation so an explicit Build or other non-Goal

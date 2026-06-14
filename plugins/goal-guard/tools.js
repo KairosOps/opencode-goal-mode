@@ -50,6 +50,7 @@ export function createGoalTools({ store, config, persist }) {
       args: {},
       async execute(_args, ctx) {
         const state = store.stateFor(ctx.sessionID);
+        if (!requireGoalMode(state)) return goalModeOnlyResult();
         const report = statusReport(state, config);
         const goal = report.goal ? `“${report.goal}” — ` : "";
         return {
@@ -73,6 +74,7 @@ export function createGoalTools({ store, config, persist }) {
       args: {},
       async execute(_args, ctx) {
         const state = store.stateFor(ctx.sessionID);
+        if (!requireGoalMode(state)) return goalModeOnlyResult();
         const report = evidenceMapReport(state, config);
         const covered = report.criteria.filter((item) => item.status === "covered").length;
         return {
@@ -90,6 +92,7 @@ export function createGoalTools({ store, config, persist }) {
       args: {},
       async execute(_args, ctx) {
         const state = store.stateFor(ctx.sessionID);
+        if (!requireGoalMode(state)) return goalModeOnlyResult();
         const report = reviewerMemoryReport(state);
         return {
           title: `Reviewer Memory: ${report.open.length} open findings`,

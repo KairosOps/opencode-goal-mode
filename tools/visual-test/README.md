@@ -25,9 +25,9 @@ If the OpenTUI stack is not installed, the script prints `SKIP` and exits 0.
 
 - Goal set → first-display rainbow text, a bold `Goal todos` label, and a
   `passing/total gates · status` line (no "No goal").
-- A running task with **no goal** → the Goal plugin does not register the slot, so
-  OpenCode's native todo section can remain in place.
-- No guard state at all → no slot registration (never crashes or replaces native todos).
+- A running task with **no goal** → the Goal slot returns no content, so OpenCode's
+  native todo section can remain in place.
+- No guard state at all → no Goal content is rendered (never crashes or shows a stale goal).
 - All gates pass + clean tree → `completed · N review cycles` in the status line.
 - Custom colour via the `sidebarColor` option.
 - Long goals are truncated with an ellipsis.

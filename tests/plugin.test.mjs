@@ -245,6 +245,51 @@ test("risky bash in build mode does not turn the session into a goal", async () 
 });
 
 // ---------------------------------------------------------------------------
+// Goal-only subagent invocation
+// ---------------------------------------------------------------------------
+
+test("a non-Goal agent cannot invoke a goal-* subagent via the task tool", async () => {
+  const { hooks, store } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "build-task", agent: "build" }, {});
+  for (const subagent_type of ["goal-reviewer", "goal-security-reviewer", "goal-implementer", "goal-final-auditor"]) {
+    await assert.rejects(
+      () => hooks["tool.execute.before"]({ tool: "task", sessionID: "build-task", callID: "c" }, { args: { subagent_type, prompt: "x" } }),
+      /Goal Mode subagent|only be invoked by the Goal agent/i,
+      subagent_type,
+    );
+  }
+  // Blocking a poach attempt must not turn the Build session into a goal.
+  assert.equal(store.stateFor("build-task").active, false);
+});
+
+test("the Goal agent CAN invoke goal-* subagents", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "goal-task", agent: "goal" }, {});
+  await assert.doesNotReject(() =>
+    hooks["tool.execute.before"]({ tool: "task", sessionID: "goal-task", callID: "c" }, { args: { subagent_type: "goal-security-reviewer", prompt: "x" } }),
+  );
+});
+
+test("non-goal subagents (explore/general/scout) are never restricted", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "build-explore", agent: "build" }, {});
+  for (const subagent_type of ["explore", "general", "scout"]) {
+    await assert.doesNotReject(
+      () => hooks["tool.execute.before"]({ tool: "task", sessionID: "build-explore", callID: "c" }, { args: { subagent_type, prompt: "x" } }),
+      subagent_type,
+    );
+  }
+});
+
+test("subagent restriction can be disabled via config", async () => {
+  const guard = __test.createGuard({ client: {} }, { restrictSubagents: false }, { persistence: noopPersistence });
+  await guard.hooks["chat.params"]({ sessionID: "loose", agent: "build" }, {});
+  await assert.doesNotReject(() =>
+    guard.hooks["tool.execute.before"]({ tool: "task", sessionID: "loose", callID: "c" }, { args: { subagent_type: "goal-reviewer", prompt: "x" } }),
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Contextual gates (previously dead code)
 // ---------------------------------------------------------------------------
 
@@ -368,24 +413,22 @@ test("goal_status returns structured status", async () => {
   assert.equal(report.reviewerMemory.open.length, 0);
 });
 
-test("read-only goal tools are session-scoped and do not show another active goal", async () => {
+test("read-only goal tools are Goal-only and do not show another active goal", async () => {
   const guard = makeGuard();
   const tools = await loadTools(guard);
   await guard.hooks["chat.params"]({ sessionID: "goal-one", agent: "goal" }, {});
   await tools.goal_contract.execute({ title: "Real goal", original: "ship it", acceptanceCriteria: ["done"] }, { sessionID: "goal-one" });
   await guard.hooks["chat.params"]({ sessionID: "build-one", agent: "build" }, {});
 
-  const status = JSON.parse((await tools.goal_status.execute({}, { sessionID: "build-one" })).output);
-  assert.equal(status.active, false);
-  assert.equal(status.goal, "");
-  assert.equal(status.completionAllowed, false);
+  const status = await tools.goal_status.execute({}, { sessionID: "build-one" });
+  assert.match(status.output, /only mutate Goal Guard state|only .*Goal/i);
 
-  const evidenceMap = JSON.parse((await tools.goal_evidence_map.execute({}, { sessionID: "build-one" })).output);
-  assert.equal(evidenceMap.active, false);
-  assert.equal(evidenceMap.criteria.length, 0);
+  const evidenceMap = await tools.goal_evidence_map.execute({}, { sessionID: "build-one" });
+  assert.match(evidenceMap.output, /only mutate Goal Guard state|only .*Goal/i);
 
-  const memory = JSON.parse((await tools.goal_reviewer_memory.execute({}, { sessionID: "build-one" })).output);
-  assert.equal(memory.open.length, 0);
+  const memory = await tools.goal_reviewer_memory.execute({}, { sessionID: "build-one" });
+  assert.match(memory.output, /only mutate Goal Guard state|only .*Goal/i);
+  assert.equal(guard.store.stateFor("build-one").active, false);
 });
 
 test("goal_reviewer_memory exposes unresolved and resolved findings", async () => {

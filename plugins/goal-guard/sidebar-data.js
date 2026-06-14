@@ -30,25 +30,20 @@ function normalize(record) {
 }
 
 /**
- * Choose which session's goal to show. When OpenCode gives us a concrete session
- * id, never fall back to another session: Build/non-Goal sessions must not show a
- * Goal from the same worktree. The most-recent active fallback is only for
- * no-session contexts such as initial sidebar registration polling.
+ * Resolve the guard state for EXACTLY this session id, and only when it is an
+ * active Goal session. There is deliberately NO "most-recently-touched" global
+ * fallback: a Build or other session in the same worktree must never inherit a
+ * Goal from a sibling session. This mirrors goal-sidebar.tsx's pickSession so the
+ * Node-testable projection and the real TUI component behave identically.
  */
 export function pickSession(snapshot, sessionId) {
-  if (!snapshot || !Array.isArray(snapshot.sessions)) return null;
-  const records = snapshot.sessions
-    .filter((e) => Array.isArray(e) && e.length === 2)
-    .map(([key, st]) => [key, normalize(st)]);
-  if (sessionId) {
-    const direct = records.find(([key, st]) => key === sessionId && st.active);
-    if (direct) return direct[1];
-    return null;
+  if (!snapshot || !Array.isArray(snapshot.sessions) || !sessionId) return null;
+  for (const entry of snapshot.sessions) {
+    if (!Array.isArray(entry) || entry.length !== 2) continue;
+    const [key, st] = entry;
+    if (key === sessionId && st && typeof st === "object" && st.active) return normalize(st);
   }
-  const active = records.filter(([, st]) => st.active);
-  if (active.length === 0) return null;
-  active.sort((a, b) => (b[1].touchedAt || 0) - (a[1].touchedAt || 0));
-  return active[0][1];
+  return null;
 }
 
 /**

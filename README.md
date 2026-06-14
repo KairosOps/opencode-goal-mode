@@ -140,10 +140,13 @@ Reproduce with `npm run bench` or `node benchmarks/external.mjs`.
 
 Honest caveats, because the point of this rewrite was to stop overclaiming:
 
-- The ~7 remaining "misses" are almost all un-flagged single-target `rm <file>`,
-  which the guard **intentionally permits** (plain `rm` is common and the guard
-  blocks `rm -r`/`rm -f`, `$(rm …)`, `bash -c`, interpreters, etc.). Under a
-  strict every-`rm`-is-destructive labeling those count against it.
+- The 7 remaining "misses" are all plain `rm` invocations without `-r`/`-f`
+  (single- or multi-target, a few with `-i`/`-v`/`-d`), which the guard
+  **intentionally permits**: bare `rm` is extremely common, so the guard marks it
+  dirty but lets the host's own `rm *` permission decide, while still blocking the
+  irreversible forms (`rm -r`/`rm -f`, wildcard/root, `$(rm …)`, `bash -c`,
+  `/bin/rm`, interpreters, etc.). Under a strict every-`rm`-is-destructive
+  labeling those count against it.
 - The single counted false positive (`git filter-repo …`) actually *is* a
   history-rewriting command, so the real-world false-positive rate is effectively
   zero. `node benchmarks/external.mjs --json` lists every miss and false positive
@@ -182,7 +185,8 @@ second) — negligible for a per-tool-call guard:
   discovery, verification planning, and reviews to subagents. **`goal` is the only
   user-selectable agent** — every specialist (security, diff, verifier, …) is a
   `mode: subagent` that the Goal agent invokes via the task tool; the user never
-  picks one directly. They surface with friendly names (e.g. "Security Reviewer",
+  picks one directly, and the guard blocks any other agent from invoking them (see
+  **Goal-only subagents** below). They surface with friendly names (e.g. "Security Reviewer",
   "API Reviewer") rather than raw ids.
 - Strict review gates for prompt compliance, diff review, verification, security,
   UX, operations, data, API, performance, tests, docs, quality, and final audit.
@@ -197,6 +201,12 @@ second) — negligible for a per-tool-call guard:
     `Goal Not Completed` with the exact missing review gates.
   - **Contextual gating**: the goal text and changed files determine which
     specialist reviewers are required.
+  - **Goal-only subagents**: the `goal-*` specialist subagents are mechanically
+    locked to Goal Mode. OpenCode resolves subagents globally, so the guard blocks
+    any Build, Plan, or custom agent that tries to invoke a `goal-*` reviewer via
+    the task tool — they run only under the Goal agent (toggle with
+    `restrictSubagents`). General-purpose subagents (`explore`/`general`/`scout`)
+    are never restricted.
   - **Reviewer Memory**: blocking reviewer findings are carried across cycles,
     surfaced in status/system context, and marked resolved by fresh PASS verdicts.
   - **Disk persistence**: review ledgers and Reviewer Memory survive OpenCode restarts.
@@ -208,9 +218,9 @@ second) — negligible for a per-tool-call guard:
     reviewer's friendly name, and a single "completion unlocked" toast the moment
     the last required gate clears.
 - An **experimental** companion TUI plugin (`plugins/goal-sidebar.tsx`) that, in
-  Goal sessions only, replaces the native todo sidebar area with a Goal-owned,
-  evidence-aware todo section. It shows a brief rainbow effect the first time it
-  appears, then normal goal colours. See [TUI integration](#tui-integration).
+  Goal sessions only, adds a Goal-owned, evidence-aware todo section to the
+  sidebar. It shows a brief rainbow effect the first time it appears, then normal
+  goal colours. See [TUI integration](#tui-integration).
 - A test suite validating the analyzer, plugin hooks, state store, install
   safety, and config compatibility.
 
@@ -220,26 +230,29 @@ Goal Mode is a **plugin pair**: the server-side `goal-guard` plugin owns
 enforcement and writes its state to disk, and an experimental TUI plugin
 (`plugins/goal-sidebar.tsx`) reads that same state to render a live todo section.
 
-- **Goal-mode todo replacement.** In a `goal` session, the sidebar content/todo
-  area is replaced by a Goal-owned todo section: short goal title, gate progress,
-  lifecycle status, and structured todo rows derived from acceptance criteria,
-  evidence freshness, dirty state, and missing review gates. It starts with a
-  brief rainbow foreground effect (`sidebarRainbowMs`) so the replacement is
-  visible, then returns to the normal lifecycle colours:
+- **Goal-owned todo section.** In a `goal` session, the sidebar gains a Goal-owned
+  todo section: short goal title, gate progress, lifecycle status, and structured
+  todo rows derived from acceptance criteria, evidence freshness, dirty state, and
+  missing review gates. It starts with a brief rainbow foreground effect
+  (`sidebarRainbowMs`) so it is immediately visible, then returns to the normal
+  lifecycle colours:
   - **yellow** — a goal is set and running;
   - **red** — the goal is done (all required gates pass and the tree is clean);
-  - **no render** — Build and every non-Goal mode keep OpenCode's native todo
-    section in the same sidebar position instead of being classified as a goal.
+  - **no render** — Build and every non-Goal mode render nothing here, so they
+    keep OpenCode's native todo section instead of being classified as a goal. The
+    section is scoped to the session that owns the goal: a Build session in the
+    same worktree never inherits another session's goal.
 
   Toggle/recolour with `sidebarBanner`, `sidebarColor` (running), `sidebarDoneColor`
   (done), `sidebarMutedColor`, `sidebarRainbowMs`, or the `GOAL_GUARD_SIDEBAR_*`
   env vars.
 
   **How it loads — important.** TUI plugins are **not** loaded from the `plugins/`
-  dir; OpenCode loads them from `tui.json`. The Goal sidebar waits to register its
-  `sidebar_content` slot until a real Goal session exists, so non-Goal modes do not
-  get a blank replacement slot. With `--global`, the installer writes
-  `~/.config/opencode/tui.json` for you (merge-safe):
+  dir; OpenCode loads them from `tui.json`. The Goal sidebar registers a
+  `sidebar_content` slot that renders content **only** for the active session when
+  that session is a Goal session; for any other session it renders nothing, so
+  non-Goal modes keep their native todo section. With `--global`, the installer
+  writes `~/.config/opencode/tui.json` for you (merge-safe):
 
   ```json
   { "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
@@ -299,6 +312,7 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live state into the prompt. |
 | `persist` / `GOAL_GUARD_PERSIST` | `true` | Persist state under the XDG state dir. |
 | `contextualGates` / `GOAL_GUARD_CONTEXTUAL_GATES` | `true` | Require specialist gates by goal keywords. |
+| `restrictSubagents` / `GOAL_GUARD_RESTRICT_SUBAGENTS` | `true` | Block non-Goal agents from invoking the `goal-*` subagents via the task tool. |
 | `maxSessions` / `GOAL_GUARD_MAX_SESSIONS` | `200` | Session cache size. |
 | `sessionTtlMs` / `GOAL_GUARD_SESSION_TTL_MS` | `86400000` | Idle session TTL. |
 | `toastOnBlock` / `GOAL_GUARD_TOAST_ON_BLOCK` | `true` | Toast when something is blocked. |
