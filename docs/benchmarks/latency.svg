@@ -1,13 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="164" viewBox="0 0 720 164" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-<rect width="720" height="164" fill="#ffffff"/>
-<text x="20" y="28" font-size="17" font-weight="700" fill="#1f2328">Per-command analysis latency</text>
-<text x="20" y="47" font-size="12" fill="#656d76">Microseconds to classify one command. Both are negligible for a tool-call guard.</text>
-<text x="218" y="87" font-size="12" text-anchor="end" fill="#1f2328">Legacy regex guard</text>
-<rect x="230" y="70" width="420" height="22" rx="3" fill="#eaeef2"/>
-<rect x="230" y="70" width="217.1" height="22" rx="3" fill="#9aa0a6"/>
-<text x="455.1" y="87" font-size="12" font-weight="600" fill="#1f2328">0.75 µs</text>
-<text x="218" y="125" font-size="12" text-anchor="end" fill="#1f2328">Goal Mode analyzer</text>
-<rect x="230" y="108" width="420" height="22" rx="3" fill="#eaeef2"/>
-<rect x="230" y="108" width="300.0" height="22" rx="3" fill="#2da44e"/>
-<text x="538.0" y="125" font-size="12" font-weight="600" fill="#1f2328">1.03 µs</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="164" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" viewBox="0 0 720 164"><rect width="720" height="164" fill="#fff"/><text x="20" y="28" fill="#1f2328" font-size="17" font-weight="700">Per-command analysis latency</text><text x="20" y="47" fill="#656d76" font-size="12">Microseconds to classify one command. Both are negligible for a tool-call guard.</text><text x="218" y="87" fill="#1f2328" font-size="12" text-anchor="end">Legacy regex guard</text><rect width="420" height="22" x="230" y="70" fill="#eaeef2" rx="3"/><rect width="217.1" height="22" x="230" y="70" fill="#9aa0a6" rx="3"/><text x="455.1" y="87" fill="#1f2328" font-size="12" font-weight="600">0.75 µs</text><text x="218" y="125" fill="#1f2328" font-size="12" text-anchor="end">Goal Mode analyzer</text><rect width="420" height="22" x="230" y="108" fill="#eaeef2" rx="3"/><rect width="300" height="22" x="230" y="108" fill="#2da44e" rx="3"/><text x="538" y="125" fill="#1f2328" font-size="12" font-weight="600">1.03 µs</text></svg>
