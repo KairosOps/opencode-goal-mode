@@ -38,10 +38,16 @@ export function createGoalTools({ store, config, persist }) {
       async execute(_args, ctx) {
         const state = store.stateFor(ctx.sessionID);
         const report = statusReport(state, config);
+        const goal = report.goal ? `“${report.goal}” — ` : "";
         return {
-          title: `Goal status: completion ${report.completionAllowed ? "allowed" : "blocked"}`,
+          title: `Goal status: ${goal}completion ${report.completionAllowed ? "allowed" : "blocked"}`,
           output: JSON.stringify(report, null, 2),
-          metadata: { completionAllowed: report.completionAllowed, reviewCycles: report.reviewCycles },
+          metadata: {
+            goal: report.goal,
+            completionAllowed: report.completionAllowed,
+            reviewCycles: report.reviewCycles,
+            missingGates: report.missingGates,
+          },
         };
       },
     }),

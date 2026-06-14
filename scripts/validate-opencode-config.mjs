@@ -41,6 +41,14 @@ if (!agentFiles.includes("goal.md")) throw new Error("primary goal agent missing
 if (!commandFiles.includes("goal.md")) throw new Error("primary goal command missing");
 if (!pluginFiles.includes("goal-guard.js")) throw new Error("goal guard plugin missing");
 
+// The experimental sidebar is a TUI plugin module (Solid/opentui JSX) that the
+// Node runtime cannot import; validate its contract textually instead.
+if (!pluginFiles.includes("goal-sidebar.js")) throw new Error("goal sidebar TUI plugin missing");
+const sidebarSrc = readFileSync(join(root, "plugins", "goal-sidebar.js"), "utf8");
+if (!/export\s+const\s+tui\b/.test(sidebarSrc)) {
+  throw new Error("goal-sidebar.js must export a `tui` plugin entry");
+}
+
 const forbiddenComponentName = /(auth|session|token|secret|preauth|failures|hosts\.ya?ml)/i;
 for (const dir of ["agents", "commands", "plugins"]) {
   for (const file of readdirSync(join(root, dir))) {

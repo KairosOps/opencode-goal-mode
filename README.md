@@ -38,36 +38,49 @@ honest caveats, in [research/goal-mode-comparison.md](research/goal-mode-compari
 - **Destructive commands are blocked by a real shell tokenizer**, not a regex.
   Claude Code's own docs call Bash argument-matching *"fragile"*.
 
-### Benchmarks: shell guard + truthfulness
+### Benchmarks (honest edition)
 
-The guard replaced a boundary-anchored regex classifier. On a labeled corpus of
-71 real commands (`npm run bench` from a repository checkout, reproducible — see
-[research/benchmarks.md](research/benchmarks.md)):
+The headline number is measured on commands **the analyzer was never fitted to**:
+704 real example commands from [tldr-pages](https://github.com/tldr-pages/tldr)
+(common/linux/osx), authored by hundreds of contributors who have never seen
+this guard. Ground-truth labels come from a deliberately simple, analyzer-*independent*
+rule (see [build-external-corpus.mjs](benchmarks/build-external-corpus.mjs)).
+Reproduce with `npm run bench` or `node benchmarks/external.mjs`.
 
-![Destructive-command detection rate by family](docs/benchmarks/detection-by-family.svg)
+![Guard accuracy on real third-party commands](docs/benchmarks/external-scorecard.svg)
 
-![Overall guard accuracy: detection rate vs false-positive rate](docs/benchmarks/overall-scorecard.svg)
-
-| | Legacy regex guard | Goal Mode analyzer |
+| On 704 real third-party commands | Legacy regex guard | Goal Mode analyzer |
 | --- | --- | --- |
-| Destructive-command detection | **20.8%** | **100%** |
-| False positives on safe commands | **21.7%** | **0%** |
-| Obfuscated bypasses caught (`$(…)`, `bash -c`, `sudo -u`, interpreters) | 0% | 100% |
-| Remote exec (`curl \| sh`) caught | 0% | 100% |
+| Destructive-command detection | 53.8% | **93.3%** |
+| False positives on safe commands | 0.2% | **0.2%** |
 
-The deeper analysis costs a few microseconds per command on this machine
-(hundreds of thousands of classifications per second) — negligible for a
-per-tool-call guard:
+Honest caveats, because the point of this rewrite was to stop overclaiming:
+
+- The ~7 remaining "misses" are almost all un-flagged single-target `rm <file>`,
+  which the guard **intentionally permits** (plain `rm` is common and the guard
+  blocks `rm -r`/`rm -f`, `$(rm …)`, `bash -c`, interpreters, etc.). Under a
+  strict every-`rm`-is-destructive labeling those count against it.
+- The single counted false positive (`git filter-repo …`) actually *is* a
+  history-rewriting command, so the real-world false-positive rate is effectively
+  zero. `node benchmarks/external.mjs --json` lists every miss and false positive
+  so you can audit the disagreements yourself.
+
+Two **curated fixture sets** also ship — and they are explicitly *fixtures*, not
+an unbiased benchmark. They define the patterns the analyzer must catch and guard
+against regressions, so they pass by construction; do not read the 100%/0% there
+as measured accuracy:
+
+- `benchmarks/corpus.mjs` — 71 destructive patterns (incl. `$(…)`, `bash -c`,
+  `sudo -u`, `/bin/rm`, `git -C … reset --hard`, `curl | sh`, interpreter
+  deletes) and their safe look-alikes (`git checkout -b`, `echo "rm -rf /"`).
+- `benchmarks/completion-corpus.mjs` — 9 completion-claim policy cases (missing
+  review-cycle line, stale review after edit, missing contextual gate, inactive
+  session, custom marker). `npm run bench:truthfulness` prints them.
+
+The analysis costs ~1µs per command (hundreds of thousands of classifications per
+second) — negligible for a per-tool-call guard:
 
 ![Per-command analysis latency](docs/benchmarks/latency.svg)
-
-Goal Mode also ships a **False Completion Dataset** for completion-claim
-truthfulness: `npm run bench` regenerates the scorecard and
-`npm run bench:truthfulness` prints the labeled-case JSON for premature and valid
-completion claims, including missing review-cycle lines, stale reviews after
-edits, missing contextual gates, inactive sessions, and custom completion markers.
-
-![Benchmark Truthfulness Score](docs/benchmarks/truthfulness-score.svg)
 
 ## Requirements
 
@@ -98,8 +111,32 @@ edits, missing contextual gates, inactive sessions, and custom completion marker
     `goal_reviewer_memory`, `goal_status`, `goal_reset`.
   - **Live state injection** into the system prompt so the model always knows
     what the guard requires.
+  - **TUI toasts**: a toast on each review verdict (PASS/FAIL) and a single
+    "completion unlocked" toast the moment the last required gate clears.
+- An **experimental** companion TUI plugin (`plugins/goal-sidebar.js`) that shows
+  the active goal as a shining-yellow banner in the sidebar with a compact gate
+  status line. See [TUI integration](#tui-integration).
 - A test suite validating the analyzer, plugin hooks, state store, install
   safety, and config compatibility.
+
+## TUI integration
+
+Goal Mode is a **plugin pair**: the server-side `goal-guard` plugin owns
+enforcement and writes its state to disk, and an experimental TUI plugin
+(`plugins/goal-sidebar.js`) reads that same state to render a live banner.
+
+- **Sidebar goal banner (experimental).** The current goal renders in shining
+  yellow in the sidebar (`sidebar_content` slot), with a `passing/total gates ·
+  dirty/ready` status line, and updates as reviews land. It requires a
+  TUI-plugin-capable OpenCode (one exposing `api.slots.register`); on any older
+  runtime it silently no-ops, so it can never break your TUI. Set
+  `sidebarBanner: false` (or `GOAL_GUARD_SIDEBAR_BANNER=0`) to disable, or
+  `sidebarColor` to recolour it. Because no local environment can run OpenCode's
+  TUI runtime, this banner is shipped best-effort and should be verified in your
+  own TUI.
+- **Toasts.** Review verdicts and completion-unlock events surface as toasts
+  (`toastOnReview`), and blocked destructive commands / premature completions
+  toast as before (`toastOnBlock`).
 
 ## Install globally
 
@@ -162,6 +199,9 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `maxSessions` / `GOAL_GUARD_MAX_SESSIONS` | `200` | Session cache size. |
 | `sessionTtlMs` / `GOAL_GUARD_SESSION_TTL_MS` | `86400000` | Idle session TTL. |
 | `toastOnBlock` / `GOAL_GUARD_TOAST_ON_BLOCK` | `true` | Toast when something is blocked. |
+| `toastOnReview` / `GOAL_GUARD_TOAST_ON_REVIEW` | `true` | Toast on each review verdict and when completion unlocks. |
+| `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the experimental yellow goal banner in the TUI sidebar. |
+| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Foreground colour of the sidebar goal banner. |
 
 ## Custom tools
 

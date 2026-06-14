@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "engines": {
@@ -32,6 +32,8 @@
     "test:agents": "node --test tests/agents.test.mjs tests/commands.test.mjs",
     "test:install": "node --test tests/install.test.mjs",
     "bench": "node benchmarks/run.mjs",
+    "bench:external": "node benchmarks/external.mjs",
+    "bench:corpus": "node benchmarks/build-external-corpus.mjs",
     "bench:truthfulness": "node benchmarks/truthfulness.mjs",
     "bench:compare": "node benchmarks/comparison.mjs",
     "pack:check": "npm pack --dry-run",

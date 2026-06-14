@@ -1,0 +1,3540 @@
+{
+  "source": "tldr-pages",
+  "url": "https://github.com/tldr-pages/tldr",
+  "license": "CC-BY-4.0",
+  "commit": "afc5c5409f0c9a94c66980c40cd8215b5f111021",
+  "pages": [
+    "pages/common",
+    "pages/linux",
+    "pages/osx"
+  ],
+  "labeler": "benchmarks/build-external-corpus.mjs labelDestructive() — independent of the analyzer",
+  "totals": {
+    "uniqueCommandsScanned": 28713,
+    "destructiveFound": 104,
+    "safeFound": 28609,
+    "safeSampled": 600
+  },
+  "entries": [
+    {
+      "cmd": "blkdiscard -l 100MB /dev/device",
+      "page": "blkdiscard",
+      "family": "linux"
+    },
+    {
+      "cmd": "blkdiscard -s /dev/device",
+      "page": "blkdiscard",
+      "family": "linux"
+    },
+    {
+      "cmd": "blkdiscard /dev/device",
+      "page": "blkdiscard",
+      "family": "linux"
+    },
+    {
+      "cmd": "curl https://sh.rustup.rs -sSf | sh -s",
+      "page": "rustup-init.sh",
+      "family": "common"
+    },
+    {
+      "cmd": "curl https://sh.rustup.rs -sSf | sh -s -- arguments",
+      "page": "rustup-init.sh",
+      "family": "common"
+    },
+    {
+      "cmd": "dd bs=4194304 conv=fsync if=/dev/source_drive of=/dev/dest_drive",
+      "page": "dd",
+      "family": "common"
+    },
+    {
+      "cmd": "dd bs=4m conv=noerror if=/dev/source_drive of=/dev/dest_drive status=progress",
+      "page": "dd",
+      "family": "osx"
+    },
+    {
+      "cmd": "dd if=path/to/file.iso of=/dev/usb_drive status=progress",
+      "page": "dd",
+      "family": "common"
+    },
+    {
+      "cmd": "git clean -f",
+      "page": "git-clean",
+      "family": "common"
+    },
+    {
+      "cmd": "git clean -f -- path/to/directory '*.ext'",
+      "page": "git-clean",
+      "family": "common"
+    },
+    {
+      "cmd": "git clean -f -d",
+      "page": "git-clean",
+      "family": "common"
+    },
+    {
+      "cmd": "git clean -f -e '*.ext' -e path/to/directory/",
+      "page": "git-clean",
+      "family": "common"
+    },
+    {
+      "cmd": "git clean -f -x",
+      "page": "git-clean",
+      "family": "common"
+    },
+    {
+      "cmd": "git filter-branch --env-filter 'GIT_AUTHOR_EMAIL=new_email' HEAD",
+      "page": "git-filter-branch",
+      "family": "common"
+    },
+    {
+      "cmd": "git filter-branch --tree-filter 'rm -f file' HEAD",
+      "page": "git-filter-branch",
+      "family": "common"
+    },
+    {
+      "cmd": "git filter-branch --tree-filter 'rm -rf folder' HEAD",
+      "page": "git-filter-branch",
+      "family": "common"
+    },
+    {
+      "cmd": "git reset --hard",
+      "page": "git-reset",
+      "family": "common"
+    },
+    {
+      "cmd": "git reset --hard commit",
+      "page": "git-reset",
+      "family": "common"
+    },
+    {
+      "cmd": "git reset --hard; git clean -f",
+      "page": "git",
+      "family": "common"
+    },
+    {
+      "cmd": "mkfs.erofs --all-root image.erofs root/",
+      "page": "mkfs.erofs",
+      "family": "linux"
+    },
+    {
+      "cmd": "mkfs.erofs -U uuid image.erofs root/",
+      "page": "mkfs.erofs",
+      "family": "linux"
+    },
+    {
+      "cmd": "mkfs.erofs -zlz4hc image.erofs root/",
+      "page": "mkfs.erofs",
+      "family": "linux"
+    },
+    {
+      "cmd": "mkfs.erofs image.erofs root/",
+      "page": "mkfs.erofs",
+      "family": "linux"
+    },
+    {
+      "cmd": "parted -h",
+      "page": "parted",
+      "family": "linux"
+    },
+    {
+      "cmd": "rm -d path/to/directory",
+      "page": "rm",
+      "family": "common"
+    },
+    {
+      "cmd": "rm -f .latest.bank.csv",
+      "page": "hledger-import",
+      "family": "common"
+    },
+    {
+      "cmd": "rm -f path/to/file1 path/to/file2 ...",
+      "page": "rm",
+      "family": "common"
+    },
+    {
+      "cmd": "rm -i path/to/file1 path/to/file2 ...",
+      "page": "rm",
+      "family": "common"
+    },
+    {
+      "cmd": "rm -r path/to/file_or_directory1 path/to/file_or_directory2 ...",
+      "page": "rm",
+      "family": "common"
+    },
+    {
+      "cmd": "rm -v $HOME/.cache/fuzzel",
+      "page": "fuzzel",
+      "family": "linux"
+    },
+    {
+      "cmd": "rm -v path/to/file1 path/to/file2 ...",
+      "page": "rm",
+      "family": "common"
+    },
+    {
+      "cmd": "rm /dev/sdXN",
+      "page": "parted.interactive",
+      "family": "linux"
+    },
+    {
+      "cmd": "rm path/to/file1 path/to/file2 ...",
+      "page": "rm",
+      "family": "common"
+    },
+    {
+      "cmd": "rm torrent_id",
+      "page": "deluge-console",
+      "family": "common"
+    },
+    {
+      "cmd": "sgdisk -L",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "shred -n 25 path/to/file",
+      "page": "shred",
+      "family": "common"
+    },
+    {
+      "cmd": "shred -u path/to/file",
+      "page": "shred",
+      "family": "common"
+    },
+    {
+      "cmd": "shred -v path/to/file",
+      "page": "shred",
+      "family": "common"
+    },
+    {
+      "cmd": "shred -vzu -n 100 path/to/file",
+      "page": "shred",
+      "family": "common"
+    },
+    {
+      "cmd": "shred -z path/to/file",
+      "page": "shred",
+      "family": "common"
+    },
+    {
+      "cmd": "shred path/to/file",
+      "page": "shred",
+      "family": "common"
+    },
+    {
+      "cmd": "srm -i \\*",
+      "page": "srm",
+      "family": "common"
+    },
+    {
+      "cmd": "srm -m path/to/file",
+      "page": "srm",
+      "family": "common"
+    },
+    {
+      "cmd": "srm -r -s path/to/directory",
+      "page": "srm",
+      "family": "common"
+    },
+    {
+      "cmd": "srm -s path/to/file",
+      "page": "srm",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo dd bs=4M conv=fsync if=/dev/source_drive of=/dev/dest_drive",
+      "page": "dd",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo dd if=path/to/file.iso of=/dev/usb_drive status=progress",
+      "page": "dd",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo fdisk -l",
+      "page": "fdisk",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo fdisk /dev/sdX",
+      "page": "fdisk",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs -c -t ntfs /dev/sdXY",
+      "page": "mkfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs -t ext4 /dev/sdXY",
+      "page": "mkfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs /dev/sdXY",
+      "page": "mkfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.bcachefs -L volume_label /dev/sdXY",
+      "page": "mkfs.bcachefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.bcachefs /dev/sdXY",
+      "page": "mkfs.bcachefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.btrfs -f /dev/sdX",
+      "page": "mkfs.btrfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.btrfs -L \"label\" /dev/sdX /dev/sdY ...",
+      "page": "mkfs.btrfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.btrfs -m raid1 -d raid1 /dev/sdX /dev/sdY /dev/sdZ ...",
+      "page": "mkfs.btrfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.btrfs -m single -d single /dev/sdX",
+      "page": "mkfs.btrfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.btrfs /dev/sdXY",
+      "page": "mkfs.btrfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.cramfs -n volume_name path/to/directory /dev/sdXY",
+      "page": "mkfs.cramfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.cramfs path/to/directory /dev/sdXY",
+      "page": "mkfs.cramfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.exfat -L volume_name /dev/sdXY",
+      "page": "mkfs.exfat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.exfat -U volume_id /dev/sdXY",
+      "page": "mkfs.exfat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.exfat /dev/sdXY",
+      "page": "mkfs.exfat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.ext4 -E root_owner=uid:gid /dev/sdXY",
+      "page": "mkfs.ext4",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.ext4 -L volume_label /dev/sdXY",
+      "page": "mkfs.ext4",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.ext4 /dev/sdXY",
+      "page": "mkfs.ext4",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.f2fs -l volume_label /dev/sdXY",
+      "page": "mkfs.f2fs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.f2fs /dev/sdXY",
+      "page": "mkfs.f2fs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.fat -F 12|16|32 /dev/sdXY",
+      "page": "mkfs.fat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.fat -f 4 /dev/sdXY",
+      "page": "mkfs.fat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.fat -i volume_id /dev/sdXY",
+      "page": "mkfs.fat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.fat -n volume_name /dev/sdXY",
+      "page": "mkfs.fat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.fat /dev/sdXY",
+      "page": "mkfs.fat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.minix /dev/sdXY",
+      "page": "mkfs.minix",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.ntfs -L volume_label /dev/sdXY",
+      "page": "mkfs.ntfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.ntfs -U uuid /dev/sdXY",
+      "page": "mkfs.ntfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.ntfs /dev/sdXY",
+      "page": "mkfs.ntfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.xfs -L volume_label /dev/sdXY",
+      "page": "mkfs.xfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.xfs /dev/sdXY",
+      "page": "mkfs.xfs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkfs.xfs /dev/stratis/pool_name/volume_name && sudo mount /dev/stratis/pool_name/volume_name /mnt/target",
+      "page": "stratis",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkswap -c path/to/file",
+      "page": "mkswap",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkswap -L label /dev/sdXY",
+      "page": "mkswap",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkswap -s file_size -F path/to/swapfile",
+      "page": "mkswap",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkswap -U clear|random|time|uuid_value",
+      "page": "mkswap",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mkswap path/to/file",
+      "page": "mkswap",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo parted -l",
+      "page": "parted",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo parted /dev/sdX",
+      "page": "parted.interactive",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo parted /dev/sdX -s mklabel gpt mkpart \"boot_partition_name\" 0% 500MiB mkpart \"system_partition_name\" 500MiB 100%",
+      "page": "parted",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo parted /dev/sdX mklabel aix|amiga|bsd|dvh|gpt|loop|mac|msdos|pc98|sun",
+      "page": "parted",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo parted /dev/sdX set 1 boot on",
+      "page": "parted",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo sgdisk -b /path/to/backup.gpt /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo sgdisk -d 1 /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo sgdisk -l /path/to/backup.gpt /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo sgdisk -m 1:2:3:4 /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo sgdisk -p /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo sgdisk -v /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo sgdisk -Z /dev/sdX",
+      "page": "sgdisk",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo wipefs -a -f /dev/sdX",
+      "page": "wipefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo wipefs -a -n /dev/sdX",
+      "page": "wipefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo wipefs -a /dev/sdX",
+      "page": "wipefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo wipefs -a /dev/sdX*",
+      "page": "wipefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo wipefs /dev/sdX",
+      "page": "wipefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "unlink path/to/file",
+      "page": "unlink",
+      "family": "common"
+    },
+    {
+      "cmd": ". path/to/file",
+      "page": "source",
+      "family": "common"
+    },
+    {
+      "cmd": "ab -t 60 url",
+      "page": "ab",
+      "family": "common"
+    },
+    {
+      "cmd": "acme.sh --issue --dns dns_namesilo --domain example.com --domain *.example.com",
+      "page": "acme.sh-dns",
+      "family": "common"
+    },
+    {
+      "cmd": "adb logcat -v color",
+      "page": "adb-logcat",
+      "family": "common"
+    },
+    {
+      "cmd": "AdGuardHome --service reload",
+      "page": "adguardhome",
+      "family": "common"
+    },
+    {
+      "cmd": "agetty -L 38400 tty1",
+      "page": "lxc-console",
+      "family": "linux"
+    },
+    {
+      "cmd": "airshare --upload code",
+      "page": "airshare",
+      "family": "common"
+    },
+    {
+      "cmd": "amass -version",
+      "page": "amass",
+      "family": "common"
+    },
+    {
+      "cmd": "ansible group --list-hosts",
+      "page": "ansible",
+      "family": "common"
+    },
+    {
+      "cmd": "ansiweather -u metric -f 7 -l Rzeszow,PL",
+      "page": "ansiweather",
+      "family": "common"
+    },
+    {
+      "cmd": "apm upgrade package",
+      "page": "apm",
+      "family": "common"
+    },
+    {
+      "cmd": "apptainer exec -h",
+      "page": "apptainer-exec",
+      "family": "linux"
+    },
+    {
+      "cmd": "apptainer search --library library_url query",
+      "page": "apptainer-search",
+      "family": "linux"
+    },
+    {
+      "cmd": "apt-clone clone --destination path/to/backup.tar.gz",
+      "page": "apt-clone",
+      "family": "linux"
+    },
+    {
+      "cmd": "archey",
+      "page": "archey",
+      "family": "linux"
+    },
+    {
+      "cmd": "argocd login --insecure --username user --password password argocd_server:port",
+      "page": "argocd",
+      "family": "common"
+    },
+    {
+      "cmd": "as -I path/to/directory path/to/file.s",
+      "page": "as",
+      "family": "linux"
+    },
+    {
+      "cmd": "asdf plugin add name",
+      "page": "asdf",
+      "family": "common"
+    },
+    {
+      "cmd": "at -c job_number",
+      "page": "at",
+      "family": "common"
+    },
+    {
+      "cmd": "audacious -e path/to/directory",
+      "page": "audacious",
+      "family": "common"
+    },
+    {
+      "cmd": "aurvote --configure",
+      "page": "aurvote",
+      "family": "linux"
+    },
+    {
+      "cmd": "autopkgtest --test-name=test_name -- null",
+      "page": "autopkgtest",
+      "family": "linux"
+    },
+    {
+      "cmd": "awk '($10 >= min_value && $10 <= max_value)' path/to/file",
+      "page": "awk",
+      "family": "common"
+    },
+    {
+      "cmd": "aws batch list-jobs --job-queue queue_name",
+      "page": "aws-batch",
+      "family": "common"
+    },
+    {
+      "cmd": "aws configure get name --profile profile_name",
+      "page": "aws-configure",
+      "family": "common"
+    },
+    {
+      "cmd": "aws help topic_name",
+      "page": "aws-help",
+      "family": "common"
+    },
+    {
+      "cmd": "aws logs create-export-task --log-group-name log_group_name --from start_time --to end_time --destination s3_bucket_name",
+      "page": "aws-logs",
+      "family": "common"
+    },
+    {
+      "cmd": "aws s3 mv help",
+      "page": "aws-s3-mv",
+      "family": "common"
+    },
+    {
+      "cmd": "aws ses describe-receipt-rule --rule-set-name rule_set_name --rule-name rule_name --generate-cli-skeleton",
+      "page": "aws-ses",
+      "family": "common"
+    },
+    {
+      "cmd": "aws-vault login profile",
+      "page": "aws-vault",
+      "family": "common"
+    },
+    {
+      "cmd": "az appconfig create -n name -g group_name -l location",
+      "page": "az-appconfig",
+      "family": "common"
+    },
+    {
+      "cmd": "az image show -n name -g resource_group",
+      "page": "az-image",
+      "family": "common"
+    },
+    {
+      "cmd": "az redis create --location location -n name -g resource_group --sku Basic|Premium|Standard --vm-size c0|c1|c2|c3|c4|c5|c6|p1|p2|p3|p4|p5",
+      "page": "az-redis",
+      "family": "common"
+    },
+    {
+      "cmd": "az tag remove-value -n tag_name --value tag_value",
+      "page": "az-tag",
+      "family": "common"
+    },
+    {
+      "cmd": "b4 --version",
+      "page": "b4",
+      "family": "linux"
+    },
+    {
+      "cmd": "bacon test path/to/directory",
+      "page": "bacon",
+      "family": "common"
+    },
+    {
+      "cmd": "bash-it restart",
+      "page": "bash-it",
+      "family": "common"
+    },
+    {
+      "cmd": "bcftools view path/to/input.bcf -O v",
+      "page": "bcftools",
+      "family": "common"
+    },
+    {
+      "cmd": "beet stats query",
+      "page": "beet",
+      "family": "linux"
+    },
+    {
+      "cmd": "biff time fmt -f '%c' now -1d 'next sat' 'last monday' '9pm last mon'",
+      "page": "biff",
+      "family": "common"
+    },
+    {
+      "cmd": "birdc show route for fd00:/8 all",
+      "page": "birdc",
+      "family": "common"
+    },
+    {
+      "cmd": "blahaj -s",
+      "page": "blahaj",
+      "family": "common"
+    },
+    {
+      "cmd": "bluebuild generate -o Containerfile path/to/recipe.yml",
+      "page": "bluebuild",
+      "family": "linux"
+    },
+    {
+      "cmd": "boot prod",
+      "page": "boot",
+      "family": "common"
+    },
+    {
+      "cmd": "box verify path/to/phar_file",
+      "page": "box",
+      "family": "common"
+    },
+    {
+      "cmd": "brew cleanup -h",
+      "page": "brew-cleanup",
+      "family": "common"
+    },
+    {
+      "cmd": "brew tap username/repository_name git_clone_url",
+      "page": "brew-tap",
+      "family": "common"
+    },
+    {
+      "cmd": "bru run --output path/to/output.json",
+      "page": "bru",
+      "family": "common"
+    },
+    {
+      "cmd": "bun a -d package",
+      "page": "bun-add",
+      "family": "common"
+    },
+    {
+      "cmd": "bun init -m",
+      "page": "bun-init",
+      "family": "common"
+    },
+    {
+      "cmd": "bun pm untrusted",
+      "page": "bun-pm",
+      "family": "common"
+    },
+    {
+      "cmd": "bun why package_name --depth number",
+      "page": "bun-why",
+      "family": "common"
+    },
+    {
+      "cmd": "busybox --help",
+      "page": "busybox",
+      "family": "common"
+    },
+    {
+      "cmd": "bzip3 -v path/to/compressed_files.bz3",
+      "page": "bzip3",
+      "family": "common"
+    },
+    {
+      "cmd": "caja -t path/to/directory1 path/to/directory2 ...",
+      "page": "caja",
+      "family": "linux"
+    },
+    {
+      "cmd": "caller n",
+      "page": "caller",
+      "family": "common"
+    },
+    {
+      "cmd": "cargo b -r",
+      "page": "cargo-build",
+      "family": "common"
+    },
+    {
+      "cmd": "cargo fmt -- rustfmt_args",
+      "page": "cargo-fmt",
+      "family": "common"
+    },
+    {
+      "cmd": "cargo publish --registry name",
+      "page": "cargo-publish",
+      "family": "common"
+    },
+    {
+      "cmd": "cargo update -n",
+      "page": "cargo-update",
+      "family": "common"
+    },
+    {
+      "cmd": "cat file.json | jtbl -n",
+      "page": "jtbl",
+      "family": "common"
+    },
+    {
+      "cmd": "cat path/to/file.html | htmlq '.card'",
+      "page": "htmlq",
+      "family": "common"
+    },
+    {
+      "cmd": "catimg -w|-H 40 path/to/file",
+      "page": "catimg",
+      "family": "common"
+    },
+    {
+      "cmd": "cd ..",
+      "page": "cd",
+      "family": "common"
+    },
+    {
+      "cmd": "cewl --proxy_host host --proxy_port port url",
+      "page": "cewl",
+      "family": "linux"
+    },
+    {
+      "cmd": "charm where",
+      "page": "charm",
+      "family": "common"
+    },
+    {
+      "cmd": "check-language-support",
+      "page": "check-language-support",
+      "family": "linux"
+    },
+    {
+      "cmd": "chisel server -p server_port",
+      "page": "chisel",
+      "family": "common"
+    },
+    {
+      "cmd": "chroma -l python path/to/source_file.py",
+      "page": "chroma",
+      "family": "common"
+    },
+    {
+      "cmd": "cjxl path/to/image.ext path/to/output.jxl",
+      "page": "cjxl",
+      "family": "common"
+    },
+    {
+      "cmd": "clangd --help-list",
+      "page": "clangd",
+      "family": "common"
+    },
+    {
+      "cmd": "clip-view --theme path/to/local_theme.yaml|remote_theme_name page_name1 page_name2 ...",
+      "page": "clip-view",
+      "family": "common"
+    },
+    {
+      "cmd": "cmake --install path/to/build_directory --strip --prefix path/to/directory",
+      "page": "cmake",
+      "family": "common"
+    },
+    {
+      "cmd": "cockpit-tls --port port",
+      "page": "cockpit-tls",
+      "family": "linux"
+    },
+    {
+      "cmd": "colima list",
+      "page": "colima",
+      "family": "common"
+    },
+    {
+      "cmd": "command !$",
+      "page": "!",
+      "family": "common"
+    },
+    {
+      "cmd": "command | sed -E 's/(apple)/\\U\\1/g'",
+      "page": "sed",
+      "family": "osx"
+    },
+    {
+      "cmd": "complete -b command",
+      "page": "complete",
+      "family": "common"
+    },
+    {
+      "cmd": "conda activate environment_name",
+      "page": "conda",
+      "family": "common"
+    },
+    {
+      "cmd": "conda info -a",
+      "page": "conda-info",
+      "family": "common"
+    },
+    {
+      "cmd": "conda search package_name -i",
+      "page": "conda-search",
+      "family": "common"
+    },
+    {
+      "cmd": "copyq < path/to/file.txt copy",
+      "page": "copyq",
+      "family": "common"
+    },
+    {
+      "cmd": "cosign verify --key cosign.pub image",
+      "page": "cosign",
+      "family": "common"
+    },
+    {
+      "cmd": "cppcheck -q path/to/directory",
+      "page": "cppcheck",
+      "family": "common"
+    },
+    {
+      "cmd": "cradle package search package",
+      "page": "cradle-package",
+      "family": "common"
+    },
+    {
+      "cmd": "crane flatten",
+      "page": "crane-flatten",
+      "family": "common"
+    },
+    {
+      "cmd": "crane registry serve",
+      "page": "crane-registry",
+      "family": "common"
+    },
+    {
+      "cmd": "croc --relay ip_to_relay passphrase",
+      "page": "croc",
+      "family": "common"
+    },
+    {
+      "cmd": "cryptsetup open --allow-discards /dev/sdXY mapping_name",
+      "page": "cryptsetup-open",
+      "family": "linux"
+    },
+    {
+      "cmd": "csc /keyfile:path/to/keyfile path/to/input_file.cs",
+      "page": "csc",
+      "family": "common"
+    },
+    {
+      "cmd": "csvformat -U 1 data.csv",
+      "page": "csvformat",
+      "family": "common"
+    },
+    {
+      "cmd": "cups-config --version",
+      "page": "cups-config",
+      "family": "common"
+    },
+    {
+      "cmd": "curlie post httpbin.org/post name=john age:=25",
+      "page": "curlie",
+      "family": "linux"
+    },
+    {
+      "cmd": "daemonize -l path/to/lockfile command command_arguments",
+      "page": "daemonize",
+      "family": "linux"
+    },
+    {
+      "cmd": "datashader_cli points path/to/input_data.geo.parquet path/to/output_data.png --geo true --matplotlib true",
+      "page": "datashader_cli",
+      "family": "common"
+    },
+    {
+      "cmd": "dc path/to/script.dc",
+      "page": "dc",
+      "family": "common"
+    },
+    {
+      "cmd": "ddgr -w site keyword",
+      "page": "ddgr",
+      "family": "common"
+    },
+    {
+      "cmd": "decode-dimms",
+      "page": "decode-dimms",
+      "family": "linux"
+    },
+    {
+      "cmd": "dep rollback",
+      "page": "dep",
+      "family": "common"
+    },
+    {
+      "cmd": "devspace init",
+      "page": "devspace",
+      "family": "common"
+    },
+    {
+      "cmd": "diff -d --color=always path/to/old_file path/to/new_file",
+      "page": "diff",
+      "family": "common"
+    },
+    {
+      "cmd": "dillo -h",
+      "page": "dillo",
+      "family": "common"
+    },
+    {
+      "cmd": "diskutil listFilesystems",
+      "page": "diskutil-partitiondisk",
+      "family": "osx"
+    },
+    {
+      "cmd": "dive your_image_tag",
+      "page": "dive",
+      "family": "common"
+    },
+    {
+      "cmd": "dnf clean packages",
+      "page": "dnf-clean",
+      "family": "linux"
+    },
+    {
+      "cmd": "dnsmasq --no-daemon",
+      "page": "dnsmasq",
+      "family": "common"
+    },
+    {
+      "cmd": "docker buildx create --name builder_name",
+      "page": "docker-buildx-create",
+      "family": "common"
+    },
+    {
+      "cmd": "docker compose logs service_name",
+      "page": "docker-compose-logs",
+      "family": "common"
+    },
+    {
+      "cmd": "docker load -q -i path/to/image_file.tar",
+      "page": "docker-image-load",
+      "family": "common"
+    },
+    {
+      "cmd": "docker rm container1 container2 ...",
+      "page": "docker-container-rm",
+      "family": "common"
+    },
+    {
+      "cmd": "docker swarm init",
+      "page": "docker-swarm",
+      "family": "common"
+    },
+    {
+      "cmd": "dockutil --add path/to/application",
+      "page": "dockutil",
+      "family": "osx"
+    },
+    {
+      "cmd": "doctl d o eng",
+      "page": "doctl-databases-options",
+      "family": "common"
+    },
+    {
+      "cmd": "dog example.com MX @1.1.1.1 -T",
+      "page": "dog",
+      "family": "common"
+    },
+    {
+      "cmd": "dolt commit -a",
+      "page": "dolt-commit",
+      "family": "common"
+    },
+    {
+      "cmd": "dos2unix path/to/file",
+      "page": "dos2unix",
+      "family": "linux"
+    },
+    {
+      "cmd": "dotnet ef migrations list",
+      "page": "dotnet-ef",
+      "family": "common"
+    },
+    {
+      "cmd": "dphys-swapfile swapon",
+      "page": "dphys-swapfile",
+      "family": "linux"
+    },
+    {
+      "cmd": "drop table table_name;",
+      "page": "odpscmd-table",
+      "family": "common"
+    },
+    {
+      "cmd": "dtrace -c command",
+      "page": "dtrace",
+      "family": "osx"
+    },
+    {
+      "cmd": "duf --sort mountpoint|size|used|avail|usage|inodes|inodes_used|inodes_avail|inodes_usage|type|filesystem",
+      "page": "duf",
+      "family": "common"
+    },
+    {
+      "cmd": "duplicacy restore -r revision",
+      "page": "duplicacy",
+      "family": "common"
+    },
+    {
+      "cmd": "dvc diff --show-json --show-hash commit",
+      "page": "dvc-diff",
+      "family": "common"
+    },
+    {
+      "cmd": "e2undo -h path/to/undo_file /dev/sdXN",
+      "page": "e2undo",
+      "family": "linux"
+    },
+    {
+      "cmd": "echo 'lorem ipsum 23   ' | sd '\\s+$' ''",
+      "page": "sd",
+      "family": "common"
+    },
+    {
+      "cmd": "echo \"Hello World!\" | sm -",
+      "page": "sm",
+      "family": "linux"
+    },
+    {
+      "cmd": "echo \"url=http://example.com\" | git credential fill",
+      "page": "git-credential",
+      "family": "common"
+    },
+    {
+      "cmd": "echo my.sql | entr -cp psql -f /_",
+      "page": "entr",
+      "family": "common"
+    },
+    {
+      "cmd": "eget zyedidia/micro -d",
+      "page": "eget",
+      "family": "common"
+    },
+    {
+      "cmd": "eksctl create cluster --name=name --nodes=4 --auto-kubeconfig",
+      "page": "eksctl",
+      "family": "common"
+    },
+    {
+      "cmd": "electron-packager \"path/to/app\" \"app_name\"",
+      "page": "electron-packager",
+      "family": "common"
+    },
+    {
+      "cmd": "emulate",
+      "page": "emulate",
+      "family": "common"
+    },
+    {
+      "cmd": "envoy run --continue task_name",
+      "page": "envoy",
+      "family": "common"
+    },
+    {
+      "cmd": "esbuild --bundle --serve=port --outfile=index.js path/to/file.js",
+      "page": "esbuild",
+      "family": "common"
+    },
+    {
+      "cmd": "espeak -w path/to/output.wav \"text\"",
+      "page": "espeak",
+      "family": "common"
+    },
+    {
+      "cmd": "evince -f path/to/file.pdf",
+      "page": "evince",
+      "family": "linux"
+    },
+    {
+      "cmd": "exif -o path/to/new.jpg --ifd 0 -t \"Artist\" --set-value \"John Smith\" --no-fixup path/to/image.jpg",
+      "page": "exif",
+      "family": "linux"
+    },
+    {
+      "cmd": "exo compute sks create cluster_name -z zone",
+      "page": "exo-compute-sks",
+      "family": "common"
+    },
+    {
+      "cmd": "expo start",
+      "page": "expo",
+      "family": "common"
+    },
+    {
+      "cmd": "f3write --max-write-rate=kb_per_second path/to/mount_point",
+      "page": "f3write",
+      "family": "common"
+    },
+    {
+      "cmd": "farge --stdout",
+      "page": "farge",
+      "family": "linux"
+    },
+    {
+      "cmd": "fc -l",
+      "page": "fc",
+      "family": "common"
+    },
+    {
+      "cmd": "fdesetup status",
+      "page": "fdesetup",
+      "family": "osx"
+    },
+    {
+      "cmd": "ffmpeg -i path/to/file -c copy -f media_format - | ffplay -",
+      "page": "ffplay",
+      "family": "common"
+    },
+    {
+      "cmd": "figlist -d path/to/directory | wc -l",
+      "page": "figlist",
+      "family": "common"
+    },
+    {
+      "cmd": "find . -name \\*.ppd \\! -execdir cupstestppd -q '{}' \\; -print",
+      "page": "cupstestppd",
+      "family": "common"
+    },
+    {
+      "cmd": "firebase projects:list",
+      "page": "firebase",
+      "family": "common"
+    },
+    {
+      "cmd": "flac -d -o path/to/output.wav path/to/file.flac",
+      "page": "flac",
+      "family": "common"
+    },
+    {
+      "cmd": "flatpak remote-info --commit COMMIT remote_name com.example.app",
+      "page": "flatpak-remote-info",
+      "family": "linux"
+    },
+    {
+      "cmd": "flox activate",
+      "page": "flox",
+      "family": "common"
+    },
+    {
+      "cmd": "flyctl version",
+      "page": "flyctl",
+      "family": "common"
+    },
+    {
+      "cmd": "fortune -l",
+      "page": "fortune",
+      "family": "common"
+    },
+    {
+      "cmd": "fprintd-verify -h",
+      "page": "fprintd-verify",
+      "family": "linux"
+    },
+    {
+      "cmd": "frps -c path/to/frps.toml",
+      "page": "frps",
+      "family": "common"
+    },
+    {
+      "cmd": "fuck",
+      "page": "fuck",
+      "family": "common"
+    },
+    {
+      "cmd": "fwupdmgr refresh",
+      "page": "fwupdmgr",
+      "family": "linux"
+    },
+    {
+      "cmd": "ganache-cli --verbose",
+      "page": "ganache-cli",
+      "family": "common"
+    },
+    {
+      "cmd": "gcc path/to/source.c -O1|2|3|fast -o path/to/output_executable",
+      "page": "gcc",
+      "family": "common"
+    },
+    {
+      "cmd": "gcloud feedback --log-file log_file",
+      "page": "gcloud-feedback",
+      "family": "common"
+    },
+    {
+      "cmd": "gcpdiag lint --project gcp_project_id",
+      "page": "gcpdiag",
+      "family": "common"
+    },
+    {
+      "cmd": "gdaldem slope path/to/input.tif path/to/output.tif",
+      "page": "gdaldem",
+      "family": "common"
+    },
+    {
+      "cmd": "gdrive download --path path/to/folder id",
+      "page": "gdrive",
+      "family": "common"
+    },
+    {
+      "cmd": "get path/to/remote_file",
+      "page": "sftp",
+      "family": "common"
+    },
+    {
+      "cmd": "geth account new",
+      "page": "geth",
+      "family": "common"
+    },
+    {
+      "cmd": "gh alias delete alias_name",
+      "page": "gh-alias",
+      "family": "common"
+    },
+    {
+      "cmd": "gh config set editor vim",
+      "page": "gh-config",
+      "family": "common"
+    },
+    {
+      "cmd": "gh issue new",
+      "page": "gh-issue-create",
+      "family": "common"
+    },
+    {
+      "cmd": "gh pr status",
+      "page": "gh-pr",
+      "family": "common"
+    },
+    {
+      "cmd": "gh run watch workflow_run_number",
+      "page": "gh-run",
+      "family": "common"
+    },
+    {
+      "cmd": "gh workflow ls",
+      "page": "gh-workflow",
+      "family": "common"
+    },
+    {
+      "cmd": "ghostty +list-themes",
+      "page": "ghostty",
+      "family": "common"
+    },
+    {
+      "cmd": "gist -u gist_id file.txt",
+      "page": "gist",
+      "family": "common"
+    },
+    {
+      "cmd": "git bisect reset",
+      "page": "git-bisect",
+      "family": "common"
+    },
+    {
+      "cmd": "git bundle create path/to/file.bundle --since 7.days HEAD",
+      "page": "git-bundle",
+      "family": "common"
+    },
+    {
+      "cmd": "git clean -i",
+      "page": "git-clean",
+      "family": "common"
+    },
+    {
+      "cmd": "git config --global rerere.enabled true",
+      "page": "git-rerere",
+      "family": "common"
+    },
+    {
+      "cmd": "git diff-files --summary",
+      "page": "git-diff-files",
+      "family": "common"
+    },
+    {
+      "cmd": "git filter-repo --path-rename path/to/folder/:",
+      "page": "git-filter-repo",
+      "family": "common"
+    },
+    {
+      "cmd": "git gui citool --amend",
+      "page": "git-gui",
+      "family": "common"
+    },
+    {
+      "cmd": "git local-commits",
+      "page": "git-local-commits",
+      "family": "common"
+    },
+    {
+      "cmd": "git merge-base commit_1 commit_2",
+      "page": "git-merge-base",
+      "family": "common"
+    },
+    {
+      "cmd": "git notes show object",
+      "page": "git-notes",
+      "family": "common"
+    },
+    {
+      "cmd": "git rebase -i target_base_branch_or_commit_hash",
+      "page": "git-rebase",
+      "family": "common"
+    },
+    {
+      "cmd": "git rev-list --merges commit",
+      "page": "git-rev-list",
+      "family": "common"
+    },
+    {
+      "cmd": "git shortlog",
+      "page": "git-shortlog",
+      "family": "common"
+    },
+    {
+      "cmd": "git stash -p",
+      "page": "git-stash",
+      "family": "common"
+    },
+    {
+      "cmd": "git symbolic-ref refs/name",
+      "page": "git-symbolic-ref",
+      "family": "common"
+    },
+    {
+      "cmd": "git-lfs-transfer path/to/repo.git download",
+      "page": "git-lfs-transfer",
+      "family": "common"
+    },
+    {
+      "cmd": "gitmoji --init",
+      "page": "gitmoji",
+      "family": "common"
+    },
+    {
+      "cmd": "glab co mr_number -R repo-owner/repository",
+      "page": "glab-mr",
+      "family": "common"
+    },
+    {
+      "cmd": "glances",
+      "page": "glances",
+      "family": "common"
+    },
+    {
+      "cmd": "gnmic -a ip:port set --replace-path path/to/directory --replace-file path/to/file",
+      "page": "gnmic-set",
+      "family": "common"
+    },
+    {
+      "cmd": "gnuplot",
+      "page": "gnuplot",
+      "family": "common"
+    },
+    {
+      "cmd": "go run file.go",
+      "page": "go",
+      "family": "common"
+    },
+    {
+      "cmd": "godot -s script.gd",
+      "page": "godot",
+      "family": "common"
+    },
+    {
+      "cmd": "gopass mounts",
+      "page": "gopass",
+      "family": "common"
+    },
+    {
+      "cmd": "gpg --clearsign doc.txt",
+      "page": "gpg",
+      "family": "common"
+    },
+    {
+      "cmd": "gprof path/to/binary path/to/gmon.out",
+      "page": "gprof",
+      "family": "common"
+    },
+    {
+      "cmd": "gradle wrapper --gradle-version 8.5",
+      "page": "gradle-wrapper",
+      "family": "common"
+    },
+    {
+      "cmd": "gron -s path/to/file|url",
+      "page": "gron",
+      "family": "common"
+    },
+    {
+      "cmd": "grumphp run",
+      "page": "grumphp",
+      "family": "common"
+    },
+    {
+      "cmd": "gst-launch-1.0 -v source ! identity silent=false ! sink",
+      "page": "gst-launch-1.0-identity",
+      "family": "common"
+    },
+    {
+      "cmd": "gsutil ls -r 'gs://bucket_name/prefix**'",
+      "page": "gsutil",
+      "family": "common"
+    },
+    {
+      "cmd": "gunicorn --reload import.path:app_object",
+      "page": "gunicorn",
+      "family": "common"
+    },
+    {
+      "cmd": "gyb --email email@gmail.com --search \"is:important OR is:starred\"",
+      "page": "gyb",
+      "family": "common"
+    },
+    {
+      "cmd": "hardhat",
+      "page": "hardhat",
+      "family": "common"
+    },
+    {
+      "cmd": "hcitool auth bdaddr",
+      "page": "hcitool",
+      "family": "linux"
+    },
+    {
+      "cmd": "helm repo add repository_name",
+      "page": "helm",
+      "family": "common"
+    },
+    {
+      "cmd": "hexdump -e 'element_format .. end_format' path/to/file",
+      "page": "hexdump",
+      "family": "common"
+    },
+    {
+      "cmd": "hg log -G",
+      "page": "hg-log",
+      "family": "common"
+    },
+    {
+      "cmd": "highlight -o html -f -S language source_file",
+      "page": "highlight",
+      "family": "common"
+    },
+    {
+      "cmd": "hledger bs type:C",
+      "page": "hledger-balancesheet",
+      "family": "common"
+    },
+    {
+      "cmd": "home number_of_tweets",
+      "page": "rainbowstream",
+      "family": "common"
+    },
+    {
+      "cmd": "hsw-cli lock",
+      "page": "hsw-cli",
+      "family": "common"
+    },
+    {
+      "cmd": "http-server -S -C path/to/cert.pem -K path/to/key.pem",
+      "page": "http-server",
+      "family": "common"
+    },
+    {
+      "cmd": "hub pr checkout pr_number",
+      "page": "hub",
+      "family": "common"
+    },
+    {
+      "cmd": "hydra -L path/to/usernames.txt -P path/to/wordlist.txt host_ip https-post-form \"url_without_host:https_post_request:login_failed_string\"",
+      "page": "hydra",
+      "family": "common"
+    },
+    {
+      "cmd": "i2cdetect -l",
+      "page": "i2cdetect",
+      "family": "linux"
+    },
+    {
+      "cmd": "ia delete identifier file",
+      "page": "ia",
+      "family": "common"
+    },
+    {
+      "cmd": "ibmcloud update -f",
+      "page": "ibmcloud-update",
+      "family": "common"
+    },
+    {
+      "cmd": "idevicebackup2 encryption on password",
+      "page": "idevicebackup2",
+      "family": "common"
+    },
+    {
+      "cmd": "ifconfig interface_name ip_address",
+      "page": "ifconfig",
+      "family": "common"
+    },
+    {
+      "cmd": "imgp -x 75 z-w path/to/file",
+      "page": "imgp",
+      "family": "linux"
+    },
+    {
+      "cmd": "incus create image container_name",
+      "page": "incus",
+      "family": "common"
+    },
+    {
+      "cmd": "inkscape path/to/file.svg -o path/to/file.pdf -T",
+      "page": "inkscape",
+      "family": "common"
+    },
+    {
+      "cmd": "Integrate(x)Cos(x);",
+      "page": "yacas",
+      "family": "common"
+    },
+    {
+      "cmd": "ip l",
+      "page": "ip-link",
+      "family": "linux"
+    },
+    {
+      "cmd": "ipcalc -v",
+      "page": "ipcalc",
+      "family": "common"
+    },
+    {
+      "cmd": "ipinfo -h",
+      "page": "ipinfo",
+      "family": "common"
+    },
+    {
+      "cmd": "is-up example.com",
+      "page": "is-up",
+      "family": "common"
+    },
+    {
+      "cmd": "iw phy phy0 info",
+      "page": "iw-phy",
+      "family": "linux"
+    },
+    {
+      "cmd": "java -jar jenkins-cli.jar -s jenkins_server_url version",
+      "page": "jenkins",
+      "family": "common"
+    },
+    {
+      "cmd": "jekyll build",
+      "page": "jekyll",
+      "family": "common"
+    },
+    {
+      "cmd": "jigsaw build production",
+      "page": "jigsaw",
+      "family": "common"
+    },
+    {
+      "cmd": "jj commit",
+      "page": "jj-commit",
+      "family": "common"
+    },
+    {
+      "cmd": "jj duplicate -d destination1 -d destination2 revset",
+      "page": "jj-duplicate",
+      "family": "common"
+    },
+    {
+      "cmd": "jj new revision",
+      "page": "jj-new",
+      "family": "common"
+    },
+    {
+      "cmd": "jj squash -i",
+      "page": "jj-squash",
+      "family": "common"
+    },
+    {
+      "cmd": "john --list=formats",
+      "page": "john",
+      "family": "common"
+    },
+    {
+      "cmd": "jps -m",
+      "page": "jps",
+      "family": "common"
+    },
+    {
+      "cmd": "just path/to/file.js",
+      "page": "just.js",
+      "family": "linux"
+    },
+    {
+      "cmd": "kaggle c submissions competition_name",
+      "page": "kaggle-competitions",
+      "family": "common"
+    },
+    {
+      "cmd": "kcadm.sh update realms/realm_name -f path/to/file.json",
+      "page": "kcadm.sh",
+      "family": "common"
+    },
+    {
+      "cmd": "kdialog --msgbox \"message\" \"optional_detailed_message\"",
+      "page": "kdialog",
+      "family": "linux"
+    },
+    {
+      "cmd": "keychain --agents \"gpg,ssh\"",
+      "page": "keychain",
+      "family": "common"
+    },
+    {
+      "cmd": "kinit -R",
+      "page": "kinit",
+      "family": "common"
+    },
+    {
+      "cmd": "kitty",
+      "page": "kitty",
+      "family": "common"
+    },
+    {
+      "cmd": "ko run import_path",
+      "page": "ko",
+      "family": "common"
+    },
+    {
+      "cmd": "koji untag-build -h",
+      "page": "koji-untag-build",
+      "family": "linux"
+    },
+    {
+      "cmd": "kops get cluster cluster_name -o yaml",
+      "page": "kops",
+      "family": "common"
+    },
+    {
+      "cmd": "kscreen-console -h",
+      "page": "kscreen-console",
+      "family": "linux"
+    },
+    {
+      "cmd": "kubectl attach pod_name -c container_name",
+      "page": "kubectl-attach",
+      "family": "common"
+    },
+    {
+      "cmd": "kubectl create ns namespace_name",
+      "page": "kubectl-create",
+      "family": "common"
+    },
+    {
+      "cmd": "kubectl explain pod.spec.containers",
+      "page": "kubectl-explain",
+      "family": "common"
+    },
+    {
+      "cmd": "kubectl proxy --accept-paths '^/api/v1/namespaces/default/.*' --reject-paths '^/api/.*/pods/.*/exec'",
+      "page": "kubectl-proxy",
+      "family": "common"
+    },
+    {
+      "cmd": "kubectl version -o json",
+      "page": "kubectl-version",
+      "family": "common"
+    },
+    {
+      "cmd": "kwriteconfig5 --file startkderc --group General --key systemdBoot true",
+      "page": "kwriteconfig5",
+      "family": "linux"
+    },
+    {
+      "cmd": "last -n login_count",
+      "page": "last",
+      "family": "linux"
+    },
+    {
+      "cmd": "lavat -s 1..10 -r 1..10 -R 1..5 -b 5..20",
+      "page": "lavat",
+      "family": "common"
+    },
+    {
+      "cmd": "ldapsearch -D 'admin_DN' -w 'password' -h ldap_host -b base_ou 'memberOf=group1' displayName",
+      "page": "ldapsearch",
+      "family": "common"
+    },
+    {
+      "cmd": "let \"result = a + b\"",
+      "page": "let",
+      "family": "common"
+    },
+    {
+      "cmd": "lighthouse --quiet --chrome-flags=\"--headless\" https://example.com",
+      "page": "lighthouse",
+      "family": "common"
+    },
+    {
+      "cmd": "linode-cli account view",
+      "page": "linode-cli-account",
+      "family": "common"
+    },
+    {
+      "cmd": "linode-cli volumes resize volume_id --size new_size_in_GB",
+      "page": "linode-cli-volumes",
+      "family": "common"
+    },
+    {
+      "cmd": "llvm-bcanalyzer -dump path/to/file.bc",
+      "page": "llvm-bcanalyzer",
+      "family": "common"
+    },
+    {
+      "cmd": "localectl",
+      "page": "localectl",
+      "family": "linux"
+    },
+    {
+      "cmd": "logread -h",
+      "page": "logread",
+      "family": "linux"
+    },
+    {
+      "cmd": "lpmove job_id new_printer",
+      "page": "lpmove",
+      "family": "common"
+    },
+    {
+      "cmd": "ls -a",
+      "page": "ls",
+      "family": "common"
+    },
+    {
+      "cmd": "lsb_release -a",
+      "page": "lsb_release",
+      "family": "linux"
+    },
+    {
+      "cmd": "lslocks -o PID,COMMAND,PATH,...",
+      "page": "lslocks",
+      "family": "linux"
+    },
+    {
+      "cmd": "lsusb",
+      "page": "lsusb",
+      "family": "linux"
+    },
+    {
+      "cmd": "lure rr -n repository_name",
+      "page": "lure",
+      "family": "linux"
+    },
+    {
+      "cmd": "lxc init [remote:]image container",
+      "page": "lxc",
+      "family": "linux"
+    },
+    {
+      "cmd": "lz path/to/file.tar.gz",
+      "page": "lz",
+      "family": "linux"
+    },
+    {
+      "cmd": "macchina --ascii-artists",
+      "page": "macchina",
+      "family": "common"
+    },
+    {
+      "cmd": "magick mogrify -resize 800x600 DSC*",
+      "page": "magick-mogrify",
+      "family": "common"
+    },
+    {
+      "cmd": "makensis -WX path/to/file.nsi",
+      "page": "makensis",
+      "family": "common"
+    },
+    {
+      "cmd": "mamba update -a",
+      "page": "mamba",
+      "family": "common"
+    },
+    {
+      "cmd": "markdown2pdf -p path/to/input_file.md",
+      "page": "markdown2pdf",
+      "family": "common"
+    },
+    {
+      "cmd": "mate-calc --solve 2 + 5",
+      "page": "mate-calc",
+      "family": "linux"
+    },
+    {
+      "cmd": "mcookie -f path/to/file -m number_of_bytes",
+      "page": "mcookie",
+      "family": "linux"
+    },
+    {
+      "cmd": "mdutil -s /",
+      "page": "mdutil",
+      "family": "osx"
+    },
+    {
+      "cmd": "meson init -l c -n myproject --version 0.1",
+      "page": "meson",
+      "family": "common"
+    },
+    {
+      "cmd": "microcom -t hostname:port",
+      "page": "microcom",
+      "family": "linux"
+    },
+    {
+      "cmd": "minifab down",
+      "page": "minifab",
+      "family": "common"
+    },
+    {
+      "cmd": "mist download firmware \"macOS Sonoma\" --firmware-name \"Install %NAME% %VERSION%-%BUILD%.ipsw\"",
+      "page": "mist",
+      "family": "osx"
+    },
+    {
+      "cmd": "mkdocs build",
+      "page": "mkdocs",
+      "family": "common"
+    },
+    {
+      "cmd": "mktemp -u",
+      "page": "mktemp",
+      "family": "linux"
+    },
+    {
+      "cmd": "mocp -a path/to/directory",
+      "page": "mocp",
+      "family": "linux"
+    },
+    {
+      "cmd": "molecule converge",
+      "page": "molecule",
+      "family": "common"
+    },
+    {
+      "cmd": "monodevelop path/to/file",
+      "page": "monodevelop",
+      "family": "common"
+    },
+    {
+      "cmd": "mosquitto -d",
+      "page": "mosquitto",
+      "family": "common"
+    },
+    {
+      "cmd": "mp4box -add input_subs.srt:lang=eng -add input.mp4 output.mp4",
+      "page": "mp4box",
+      "family": "common"
+    },
+    {
+      "cmd": "mput path/to/*.zip",
+      "page": "lftp",
+      "family": "linux"
+    },
+    {
+      "cmd": "msginit -l locale -i path/to/messages.pot",
+      "page": "msginit",
+      "family": "common"
+    },
+    {
+      "cmd": "multipass find",
+      "page": "multipass",
+      "family": "common"
+    },
+    {
+      "cmd": "mux -o output_muxer_name",
+      "page": "mux",
+      "family": "linux"
+    },
+    {
+      "cmd": "mycli -h database_host -P port -u username database_name",
+      "page": "mycli",
+      "family": "common"
+    },
+    {
+      "cmd": "mysqlsh --import path/to/file.json --schema schema_name --collection collection_name",
+      "page": "mysqlsh",
+      "family": "common"
+    },
+    {
+      "cmd": "namei -m path/to/a path/to/b path/to/c",
+      "page": "namei",
+      "family": "linux"
+    },
+    {
+      "cmd": "nbtscan 192.168.0.1/24",
+      "page": "nbtscan",
+      "family": "common"
+    },
+    {
+      "cmd": "ndc -s command",
+      "page": "ndc",
+      "family": "common"
+    },
+    {
+      "cmd": "neofetch --cpu_brand on|off",
+      "page": "neofetch",
+      "family": "common"
+    },
+    {
+      "cmd": "netstat -rn",
+      "page": "netstat",
+      "family": "common"
+    },
+    {
+      "cmd": "next telemetry",
+      "page": "next",
+      "family": "common"
+    },
+    {
+      "cmd": "ng completion script",
+      "page": "ng-completion",
+      "family": "common"
+    },
+    {
+      "cmd": "ng t --coverage",
+      "page": "ng-test",
+      "family": "common"
+    },
+    {
+      "cmd": "nh search -c nixos-unstable name",
+      "page": "nh-search",
+      "family": "common"
+    },
+    {
+      "cmd": "nix build --no-link --print-out-paths",
+      "page": "nix-build.3",
+      "family": "common"
+    },
+    {
+      "cmd": "nix search github:owner/repo",
+      "page": "nix-search",
+      "family": "common"
+    },
+    {
+      "cmd": "nix-store --delete /nix/store/checksum-package-version.ext",
+      "page": "nix-store.2",
+      "family": "common"
+    },
+    {
+      "cmd": "nmcli a a",
+      "page": "nmcli-agent",
+      "family": "linux"
+    },
+    {
+      "cmd": "node -e \"code\"",
+      "page": "node",
+      "family": "common"
+    },
+    {
+      "cmd": "noseyparker scan --git-url url -d path/to/datastore.np",
+      "page": "noseyparker",
+      "family": "common"
+    },
+    {
+      "cmd": "npm adduser --registry registry_url",
+      "page": "npm-adduser",
+      "family": "common"
+    },
+    {
+      "cmd": "npm diff --diff package_name@version",
+      "page": "npm-diff",
+      "family": "common"
+    },
+    {
+      "cmd": "npm it -g",
+      "page": "npm-install-test",
+      "family": "common"
+    },
+    {
+      "cmd": "npm profile disable-2fa",
+      "page": "npm-profile",
+      "family": "common"
+    },
+    {
+      "cmd": "npm run script_name -- argument --option",
+      "page": "npm-run",
+      "family": "common"
+    },
+    {
+      "cmd": "npm unpublish package_name -f",
+      "page": "npm-unpublish",
+      "family": "common"
+    },
+    {
+      "cmd": "nproc --ignore count",
+      "page": "nproc",
+      "family": "common"
+    },
+    {
+      "cmd": "ntpctl -s a",
+      "page": "ntpctl",
+      "family": "common"
+    },
+    {
+      "cmd": "nvm alias default node_version",
+      "page": "nvm",
+      "family": "common"
+    },
+    {
+      "cmd": "nxc rdp 192.168.178.2 -u path/to/usernames.txt -p path/to/passwords.txt",
+      "page": "nxc-rdp",
+      "family": "common"
+    },
+    {
+      "cmd": "oauth2c issuer_url --client-id client_id --response-types code",
+      "page": "oauth2c",
+      "family": "common"
+    },
+    {
+      "cmd": "ocrmypdf --tesseract-timeout 0 --optimize 2 --skip-text path/to/input.pdf path/to/output.pdf",
+      "page": "ocrmypdf",
+      "family": "common"
+    },
+    {
+      "cmd": "oh-my-posh init pwsh --config path/to/theme | Invoke-Expression",
+      "page": "oh-my-posh",
+      "family": "common"
+    },
+    {
+      "cmd": "onefetch --no-merges",
+      "page": "onefetch",
+      "family": "common"
+    },
+    {
+      "cmd": "open -R path/to/file",
+      "page": "open",
+      "family": "osx"
+    },
+    {
+      "cmd": "opencode agent -h",
+      "page": "opencode-agent",
+      "family": "common"
+    },
+    {
+      "cmd": "opencode uninstall -f",
+      "page": "opencode-uninstall",
+      "family": "common"
+    },
+    {
+      "cmd": "openssl req -new -x509 -key path/to/private.key -out path/to/certificate.crt -days 365",
+      "page": "openssl",
+      "family": "common"
+    },
+    {
+      "cmd": "openstack server create --image image_id --flavor flavor_id --network network_id --wait server_name",
+      "page": "openstack-server",
+      "family": "common"
+    },
+    {
+      "cmd": "optipng -o 7 path/to/file.png",
+      "page": "optipng",
+      "family": "common"
+    },
+    {
+      "cmd": "osv-scanner -D docker_image_name",
+      "page": "osv-scanner",
+      "family": "common"
+    },
+    {
+      "cmd": "p7zip path/to/file",
+      "page": "p7zip",
+      "family": "common"
+    },
+    {
+      "cmd": "paci search package",
+      "page": "paci",
+      "family": "common"
+    },
+    {
+      "cmd": "pacman -Fx 'regex'",
+      "page": "pacman-files",
+      "family": "linux"
+    },
+    {
+      "cmd": "pacstall -Ci package",
+      "page": "pacstall",
+      "family": "linux"
+    },
+    {
+      "cmd": "pamac remove --orphans package_name",
+      "page": "pamac",
+      "family": "linux"
+    },
+    {
+      "cmd": "pamixer -m",
+      "page": "pamixer",
+      "family": "common"
+    },
+    {
+      "cmd": "pamtowinicon -pn t path/to/input_file.pam > path/to/output.ico",
+      "page": "pamtowinicon",
+      "family": "common"
+    },
+    {
+      "cmd": "parquet-tools cat path/to/parquet",
+      "page": "parquet-tools",
+      "family": "common"
+    },
+    {
+      "cmd": "pastel format hsl ff8000",
+      "page": "pastel",
+      "family": "common"
+    },
+    {
+      "cmd": "path/to/server_linux -map ns2_summit",
+      "page": "natural-selection-2",
+      "family": "linux"
+    },
+    {
+      "cmd": "pbmmake -white|black|grey width height > path/to/output_file.pbm",
+      "page": "pbmmake",
+      "family": "common"
+    },
+    {
+      "cmd": "pbmtomacp path/to/image.pbm > path/to/output.macp",
+      "page": "pbmtomacp",
+      "family": "common"
+    },
+    {
+      "cmd": "pct cr 100 local:vztmpl/distro-name.tar.zst --rootfs local-lvm:4",
+      "page": "pct-create",
+      "family": "linux"
+    },
+    {
+      "cmd": "pdfbook2 path/to/file.pdf",
+      "page": "pdfbook2",
+      "family": "linux"
+    },
+    {
+      "cmd": "pdftex -output-directory=path/to/directory source.tex",
+      "page": "pdftex",
+      "family": "common"
+    },
+    {
+      "cmd": "peerflix \"torrent_url|magnet_link\" -a -s",
+      "page": "peerflix",
+      "family": "common"
+    },
+    {
+      "cmd": "pg_amcheck -t pattern dbname",
+      "page": "pg_amcheck",
+      "family": "common"
+    },
+    {
+      "cmd": "pg_ctl -D data_directory stop",
+      "page": "pg_ctl",
+      "family": "common"
+    },
+    {
+      "cmd": "pg_test_timing -d seconds",
+      "page": "pg_test_timing",
+      "family": "common"
+    },
+    {
+      "cmd": "pgmramp -rectangle > path/to/output.pgm",
+      "page": "pgmramp",
+      "family": "common"
+    },
+    {
+      "cmd": "phive remove alias|url",
+      "page": "phive",
+      "family": "common"
+    },
+    {
+      "cmd": "phpcpd --min-lines number_of_lines path/to/file_or_directory",
+      "page": "phpcpd",
+      "family": "common"
+    },
+    {
+      "cmd": "phpstan analyse path/to/directory -a path/to/autoload_file",
+      "page": "phpstan",
+      "family": "common"
+    },
+    {
+      "cmd": "pico -o path/to/directory",
+      "page": "pico",
+      "family": "common"
+    },
+    {
+      "cmd": "pihole status",
+      "page": "pihole",
+      "family": "linux"
+    },
+    {
+      "cmd": "pinta path/to/image1 path/to/image2 ...",
+      "page": "pinta",
+      "family": "common"
+    },
+    {
+      "cmd": "pio lib list",
+      "page": "pio-lib",
+      "family": "common"
+    },
+    {
+      "cmd": "pio settings set setting value",
+      "page": "pio-settings",
+      "family": "common"
+    },
+    {
+      "cmd": "pip download package -i url",
+      "page": "pip-download",
+      "family": "common"
+    },
+    {
+      "cmd": "pip show -f package",
+      "page": "pip-show",
+      "family": "common"
+    },
+    {
+      "cmd": "pixi command --help",
+      "page": "pixi",
+      "family": "common"
+    },
+    {
+      "cmd": "pkgadd -u package",
+      "page": "pkgadd",
+      "family": "linux"
+    },
+    {
+      "cmd": "pkgutil --expand-full path/to/file.pkg path/to/directory",
+      "page": "pkgutil",
+      "family": "osx"
+    },
+    {
+      "cmd": "plasmashell --help-all",
+      "page": "plasmashell",
+      "family": "linux"
+    },
+    {
+      "cmd": "pmap --extended pid",
+      "page": "pmap",
+      "family": "linux"
+    },
+    {
+      "cmd": "pnmgamma -bt709tolinear|bt709tosrgb path/to/image.pnm > path/to/output.pnm",
+      "page": "pnmgamma",
+      "family": "common"
+    },
+    {
+      "cmd": "pnmremap -ma path/to/palette_file.ppm path/to/input.pnm > path/to/output.pnm",
+      "page": "pnmremap",
+      "family": "common"
+    },
+    {
+      "cmd": "pnmtoxwd path/to/input_file.pnm > path/to/output_file.xwd",
+      "page": "pnmtoxwd",
+      "family": "common"
+    },
+    {
+      "cmd": "pod update pod_name",
+      "page": "pod",
+      "family": "osx"
+    },
+    {
+      "cmd": "podman pull -h",
+      "page": "podman-pull",
+      "family": "common"
+    },
+    {
+      "cmd": "poetry check --strict",
+      "page": "poetry-check",
+      "family": "common"
+    },
+    {
+      "cmd": "poetry publish --build",
+      "page": "poetry-publish",
+      "family": "common"
+    },
+    {
+      "cmd": "poetry sync --without test|docs|...",
+      "page": "poetry-sync",
+      "family": "common"
+    },
+    {
+      "cmd": "portablectl detach path/to/image|image_name",
+      "page": "portablectl",
+      "family": "linux"
+    },
+    {
+      "cmd": "ppmcolormask -c red,blue path/to/input.ppm > path/to/output.pbm",
+      "page": "ppmcolormask",
+      "family": "common"
+    },
+    {
+      "cmd": "ppmtoacad path/to/file.ppm > path/to/file.acad",
+      "page": "ppmtoacad",
+      "family": "common"
+    },
+    {
+      "cmd": "ppmtorgb3 path/to/file.ppm",
+      "page": "ppmtorgb3",
+      "family": "common"
+    },
+    {
+      "cmd": "presenterm path/to/slides.md",
+      "page": "presenterm",
+      "family": "common"
+    },
+    {
+      "cmd": "pro security-status",
+      "page": "pro",
+      "family": "linux"
+    },
+    {
+      "cmd": "protocol",
+      "page": "tlmgr-shell",
+      "family": "common"
+    },
+    {
+      "cmd": "prowler kubernetes -e etcd_encryption --exclude-services ietcd|apiserver|...",
+      "page": "prowler-kubernetes",
+      "family": "common"
+    },
+    {
+      "cmd": "psalm --show-info",
+      "page": "psalm",
+      "family": "common"
+    },
+    {
+      "cmd": "ptghci",
+      "page": "ptghci",
+      "family": "common"
+    },
+    {
+      "cmd": "pueue log task_id",
+      "page": "pueue-log",
+      "family": "common"
+    },
+    {
+      "cmd": "pulseaudio-ctl up amount",
+      "page": "pulseaudio-ctl",
+      "family": "linux"
+    },
+    {
+      "cmd": "pulumi new --secrets-provider passphrase",
+      "page": "pulumi-new",
+      "family": "common"
+    },
+    {
+      "cmd": "pulumi stack select stack_name",
+      "page": "pulumi-stack",
+      "family": "common"
+    },
+    {
+      "cmd": "putty -ssh username@hostname_or_ip -L local_port:destination_host:destination_port",
+      "page": "putty",
+      "family": "common"
+    },
+    {
+      "cmd": "pveversion",
+      "page": "pveversion",
+      "family": "linux"
+    },
+    {
+      "cmd": "pw-link -oiI",
+      "page": "pw-link",
+      "family": "linux"
+    },
+    {
+      "cmd": "pwdx process_id",
+      "page": "pwdx",
+      "family": "linux"
+    },
+    {
+      "cmd": "pydoc -b",
+      "page": "pydoc",
+      "family": "common"
+    },
+    {
+      "cmd": "pyinstaller path/to/script.py",
+      "page": "pyinstaller",
+      "family": "common"
+    },
+    {
+      "cmd": "q -d ',' \"SELECT * from path/to/file\"",
+      "page": "q",
+      "family": "common"
+    },
+    {
+      "cmd": "qgis -e xmin,ymin,xmax,ymax",
+      "page": "qgis",
+      "family": "common"
+    },
+    {
+      "cmd": "qm di m --delete 100 destination index",
+      "page": "qm-disk",
+      "family": "linux"
+    },
+    {
+      "cmd": "qm shu 100 --keepActive true",
+      "page": "qm-shutdown",
+      "family": "linux"
+    },
+    {
+      "cmd": "qmv *.jpg",
+      "page": "qmv",
+      "family": "common"
+    },
+    {
+      "cmd": "quarkus deploy kubernetes",
+      "page": "quarkus",
+      "family": "common"
+    },
+    {
+      "cmd": "qwen -i \"Give me an example of recursion in Python\"",
+      "page": "qwen",
+      "family": "common"
+    },
+    {
+      "cmd": "rabbitmqctl -n nodename stop_app",
+      "page": "rabbitmqctl-cluster",
+      "family": "common"
+    },
+    {
+      "cmd": "rails db:create",
+      "page": "rails-db",
+      "family": "common"
+    },
+    {
+      "cmd": "raku -e \"command\"",
+      "page": "raku",
+      "family": "common"
+    },
+    {
+      "cmd": "rawtoppm width height -rgb|rbg|grb|gbr|brg|bgr path/to/image.raw > path/to/output.ppm",
+      "page": "rawtoppm",
+      "family": "common"
+    },
+    {
+      "cmd": "rclone sync path/to/file_or_directory remote_name:path/to/directory",
+      "page": "rclone",
+      "family": "common"
+    },
+    {
+      "cmd": "react-native start --verbose",
+      "page": "react-native-start",
+      "family": "common"
+    },
+    {
+      "cmd": "rector process path/to/directory",
+      "page": "rector",
+      "family": "common"
+    },
+    {
+      "cmd": "regedit -?",
+      "page": "regedit",
+      "family": "common"
+    },
+    {
+      "cmd": "repomix --include \"src/**/*.ts\" --ignore \"**/*.test.ts\"",
+      "page": "repomix",
+      "family": "common"
+    },
+    {
+      "cmd": "resolvectl tlsa tcp domain:443",
+      "page": "resolvectl",
+      "family": "linux"
+    },
+    {
+      "cmd": "reuse --root path/to/directory lint",
+      "page": "reuse",
+      "family": "common"
+    },
+    {
+      "cmd": "rhash --check path/to/file.sfv",
+      "page": "rhash",
+      "family": "common"
+    },
+    {
+      "cmd": "rlwrap -A command",
+      "page": "rlwrap",
+      "family": "common"
+    },
+    {
+      "cmd": "ROPgadget --binary path/to/binary --depth nbyte",
+      "page": "ropgadget",
+      "family": "common"
+    },
+    {
+      "cmd": "rpicam-still -o path/to/file.jpg --shutter 100000",
+      "page": "rpicam-still",
+      "family": "linux"
+    },
+    {
+      "cmd": "rsh remote_host --no-err ls -l",
+      "page": "rsh",
+      "family": "linux"
+    },
+    {
+      "cmd": "rubocop",
+      "page": "rubocop",
+      "family": "common"
+    },
+    {
+      "cmd": "runlim --space-limit=number command command_arguments",
+      "page": "runlim",
+      "family": "linux"
+    },
+    {
+      "cmd": "rustup help subcommand",
+      "page": "rustup-help",
+      "family": "common"
+    },
+    {
+      "cmd": "s bookmark_name",
+      "page": "bashmarks",
+      "family": "common"
+    },
+    {
+      "cmd": "salt-call state.highstate",
+      "page": "salt-call",
+      "family": "common"
+    },
+    {
+      "cmd": "sattach jobid.stepid",
+      "page": "sattach",
+      "family": "linux"
+    },
+    {
+      "cmd": "sc_warts2text path/to/file1.warts path/to/file2.warts ...",
+      "page": "sc_warts2text",
+      "family": "common"
+    },
+    {
+      "cmd": "sccache gcc path/to/file.c",
+      "page": "sccache",
+      "family": "common"
+    },
+    {
+      "cmd": "scrcpy --video-source camera",
+      "page": "scrcpy",
+      "family": "common"
+    },
+    {
+      "cmd": "scrontab -l",
+      "page": "scrontab",
+      "family": "linux"
+    },
+    {
+      "cmd": "sdk use sdk_name sdk_version",
+      "page": "sdk",
+      "family": "common"
+    },
+    {
+      "cmd": "sed -i.orig '1,5d' path/to/file",
+      "page": "sed",
+      "family": "linux"
+    },
+    {
+      "cmd": "serverless create",
+      "page": "serverless",
+      "family": "common"
+    },
+    {
+      "cmd": "setfacl -b path/to/file_or_directory",
+      "page": "setfacl",
+      "family": "linux"
+    },
+    {
+      "cmd": "sfdk build-requires --no-refresh subcommand",
+      "page": "sfdk-build-requires",
+      "family": "common"
+    },
+    {
+      "cmd": "sfdk emulator status name",
+      "page": "sfdk-emulator",
+      "family": "common"
+    },
+    {
+      "cmd": "sftp -P remote_port remote_user@remote_host",
+      "page": "sftp",
+      "family": "common"
+    },
+    {
+      "cmd": "sha384sum -c path/to/file.sha384",
+      "page": "sha384sum",
+      "family": "common"
+    },
+    {
+      "cmd": "shfmt -s path/to/file",
+      "page": "shfmt",
+      "family": "common"
+    },
+    {
+      "cmd": "shpool kill session_name",
+      "page": "shpool",
+      "family": "common"
+    },
+    {
+      "cmd": "sipcalc -h",
+      "page": "sipcalc",
+      "family": "common"
+    },
+    {
+      "cmd": "skopeo login --username username registry_hostname",
+      "page": "skopeo",
+      "family": "common"
+    },
+    {
+      "cmd": "slop -D",
+      "page": "slop",
+      "family": "linux"
+    },
+    {
+      "cmd": "smbclient -W domain -U username //server/share",
+      "page": "smbclient",
+      "family": "common"
+    },
+    {
+      "cmd": "snap --help",
+      "page": "snap.esa",
+      "family": "linux"
+    },
+    {
+      "cmd": "snmpwalk -v 3 -l authNoPriv -u username -a MD5|SHA -A passphrase ip_address oid",
+      "page": "snmpwalk",
+      "family": "common"
+    },
+    {
+      "cmd": "sops -d --input-type json path/to/file.enc.json",
+      "page": "sops",
+      "family": "common"
+    },
+    {
+      "cmd": "spa-json-dump path/to/file.conf",
+      "page": "spa-json-dump",
+      "family": "linux"
+    },
+    {
+      "cmd": "speedtest-cli --json",
+      "page": "speedtest-cli",
+      "family": "common"
+    },
+    {
+      "cmd": "spotdl save open.spotify.com/playlist/playlistId1 open.spotify.com/track/trackId2 ... --save-file path/to/save_file.spotdl",
+      "page": "spotdl",
+      "family": "common"
+    },
+    {
+      "cmd": "sqlite-utils tables path/to/database.db",
+      "page": "sqlite-utils",
+      "family": "common"
+    },
+    {
+      "cmd": "ssh username@10.0.0.1 -p 2222",
+      "page": "ssh",
+      "family": "common"
+    },
+    {
+      "cmd": "SSLKEYLOGFILE=\"path/to/file\" mitmproxy",
+      "page": "mitmproxy",
+      "family": "common"
+    },
+    {
+      "cmd": "standard-version --dry-run",
+      "page": "standard-version",
+      "family": "common"
+    },
+    {
+      "cmd": "steamcmd +force_install_dir path/to/directory +login anonymous +app_update app_id validate +quit",
+      "page": "steamcmd",
+      "family": "common"
+    },
+    {
+      "cmd": "step certificate verify path/to/hostname.crt --roots path/to/root-ca.crt --verbose",
+      "page": "step",
+      "family": "common"
+    },
+    {
+      "cmd": "stress-ng -c 4 -t 60s",
+      "page": "stress-ng",
+      "family": "common"
+    },
+    {
+      "cmd": "su -V",
+      "page": "su",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo a2query -v",
+      "page": "a2query",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo abroot pkg apply",
+      "page": "abroot",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo apptainer config fakeroot -e username",
+      "page": "apptainer-config",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo asr restore --source image_file.dmg --target path/to/volume_file --noverify",
+      "page": "asr",
+      "family": "osx"
+    },
+    {
+      "cmd": "sudo bcachefs data rereplicate path/to/mountpoint",
+      "page": "bcachefs",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo btrbk --progress -v run",
+      "page": "btrbk",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo btrfs resc z path/to/partition",
+      "page": "btrfs-rescue",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo chcat -L",
+      "page": "chcat",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo criu check",
+      "page": "criu",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo dmesg -w",
+      "page": "dmesg",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo edquota -f filesystem",
+      "page": "edquota",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo extundelete /dev/sdXN --restore-all",
+      "page": "extundelete",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo genkernel all",
+      "page": "genkernel",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo grub-reboot entry_number",
+      "page": "grub-reboot",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo importctl pull-tar url path/to/directory",
+      "page": "importctl",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo ip ru a to 192.168.178.2/32 lookup table_id",
+      "page": "ip-rule",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo kismet -c wlan0",
+      "page": "kismet",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo loadkeys -C /dev/ttyN /path/to/file",
+      "page": "loadkeys",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo lvm lvdisplay",
+      "page": "lvm",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo lxc-start container_name -F",
+      "page": "lxc-start",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo mmcli --modem=modem --messaging-delete-sms=path/to/message_file",
+      "page": "mmcli",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo nft add rule nat postrouting ip saddr 192.168.0.0/24 masquerade",
+      "page": "nft",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo openconnect -b vpn.example.org",
+      "page": "openconnect",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo pacsync --force",
+      "page": "pacsync",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo pivot_root path/to/new_root path/to/new_root/old_root",
+      "page": "pivot_root",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo pueue completions fish /usr/share/fish/completions",
+      "page": "pueue-completions",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo quotacheck --verbose mountpoint",
+      "page": "quotacheck",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo rpi-eeprom-update -r",
+      "page": "rpi-eeprom-update",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo semanage fcontext -lCn",
+      "page": "semanage-fcontext",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo sfdisk < path/to/file.dump /dev/sdX",
+      "page": "sfdisk",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo squid",
+      "page": "squid",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo swapon -a",
+      "page": "swapon",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo tc q a dev eth0 root netem corruption|loss|duplication effect_percentage%",
+      "page": "tc",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo tlmgr remove --all",
+      "page": "tlmgr-remove",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo trace-cmd report",
+      "page": "trace-cmd-report",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo unshare -n command argument1 argument2 ...",
+      "page": "unshare",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo usermod -m -d path/to/new_home username",
+      "page": "usermod",
+      "family": "linux"
+    },
+    {
+      "cmd": "sudo virsh edit domain",
+      "page": "virsh",
+      "family": "common"
+    },
+    {
+      "cmd": "sudo zerotier-cli listnetworks",
+      "page": "zerotier-cli",
+      "family": "common"
+    },
+    {
+      "cmd": "supabase init",
+      "page": "supabase",
+      "family": "common"
+    },
+    {
+      "cmd": "svgtopam path/to/file.svg > path/to/output.pam",
+      "page": "svgtopam",
+      "family": "common"
+    },
+    {
+      "cmd": "swaynag -B \"button text\" command -m \"error message\"",
+      "page": "swaynag",
+      "family": "common"
+    },
+    {
+      "cmd": "syncthing --log-level info|warning|error|debug",
+      "page": "syncthing",
+      "family": "common"
+    },
+    {
+      "cmd": "systemctl bind unit /path/to/host_directory /path/to/unit_directory",
+      "page": "systemctl-bind",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemctl hibernate --no-wall",
+      "page": "systemctl-hibernate",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemctl list-machines machine",
+      "page": "systemctl-list-machines",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemctl preset unit --preset-mode enable-only",
+      "page": "systemctl-preset",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemctl show",
+      "page": "systemctl-show",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemctl unmask service_name",
+      "page": "systemctl-unmask",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemd-cryptenroll --tpm2-device auto|path/to/tpm2_block_device --tpm2-with-pin yes path/to/luks2_block_device",
+      "page": "systemd-cryptenroll",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemd-mount -u path/to/mount_point_or_device1 path/to/mount_point_or_device2 ...",
+      "page": "systemd-mount",
+      "family": "linux"
+    },
+    {
+      "cmd": "systemsettings -h",
+      "page": "systemsettings",
+      "family": "linux"
+    },
+    {
+      "cmd": "tailscale ssh username@host",
+      "page": "tailscale-ssh",
+      "family": "common"
+    },
+    {
+      "cmd": "tarsnap -c --keyfile path/to/key_file -f new_archive_name @@source_archive_name",
+      "page": "tarsnap",
+      "family": "common"
+    },
+    {
+      "cmd": "tcptraceroute host -f first_ttl -m max_ttl",
+      "page": "tcptraceroute",
+      "family": "linux"
+    },
+    {
+      "cmd": "terminal-notifier -message 'Imported 42 contacts.' -activate com.apple.AddressBook",
+      "page": "terminal-notifier",
+      "family": "osx"
+    },
+    {
+      "cmd": "terraform output",
+      "page": "terraform-output",
+      "family": "common"
+    },
+    {
+      "cmd": "texconfig conf",
+      "page": "texconfig",
+      "family": "common"
+    },
+    {
+      "cmd": "tgutil -n session_name -u chat_id -m delete --text \"current_text\"",
+      "page": "tgutil",
+      "family": "common"
+    },
+    {
+      "cmd": "timeout -p 1s|1m|1h|1d|... command",
+      "page": "timeout",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr -p common ping",
+      "page": "gping",
+      "family": "osx"
+    },
+    {
+      "cmd": "tldr add-apt-repository",
+      "page": "apt-add-repository",
+      "family": "linux"
+    },
+    {
+      "cmd": "tldr cksum",
+      "page": "gnucksum",
+      "family": "linux"
+    },
+    {
+      "cmd": "tldr docker container stats",
+      "page": "docker-stats",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr get-nodeinstalllocation",
+      "page": "ps-nvm",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr jf",
+      "page": "jfrog",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr mc.cli",
+      "page": "mc",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr nxc",
+      "page": "netexec",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr ping6",
+      "page": "gping6",
+      "family": "osx"
+    },
+    {
+      "cmd": "tldr radare2",
+      "page": "r2",
+      "family": "common"
+    },
+    {
+      "cmd": "tldr split",
+      "page": "gnusplit",
+      "family": "linux"
+    },
+    {
+      "cmd": "tldr ugrep",
+      "page": "ug",
+      "family": "common"
+    },
+    {
+      "cmd": "tlmgr arch list",
+      "page": "tlmgr-platform",
+      "family": "common"
+    },
+    {
+      "cmd": "tlmgr pinning add repository package1 package2 ...",
+      "page": "tlmgr-pinning",
+      "family": "common"
+    },
+    {
+      "cmd": "tmt -c arch=aarch64 test show",
+      "page": "tmt",
+      "family": "linux"
+    },
+    {
+      "cmd": "todo.sh ls",
+      "page": "todo.sh",
+      "family": "common"
+    },
+    {
+      "cmd": "tomb lock encrypted_directory.tomb -k encrypted_directory.tomb.key",
+      "page": "tomb",
+      "family": "linux"
+    },
+    {
+      "cmd": "topgrade --edit-config",
+      "page": "topgrade",
+      "family": "common"
+    },
+    {
+      "cmd": "toybox ls",
+      "page": "toybox",
+      "family": "linux"
+    },
+    {
+      "cmd": "traefik",
+      "page": "traefik",
+      "family": "common"
+    },
+    {
+      "cmd": "transmission-edit -a http://example.com path/to/file.torrent",
+      "page": "transmission-edit",
+      "family": "common"
+    },
+    {
+      "cmd": "trayer --edge left|right|top|bottom",
+      "page": "trayer",
+      "family": "linux"
+    },
+    {
+      "cmd": "trizen -Qe",
+      "page": "trizen",
+      "family": "linux"
+    },
+    {
+      "cmd": "ts-node --skipProject path/to/file.ts",
+      "page": "ts-node",
+      "family": "common"
+    },
+    {
+      "cmd": "tts --model_info_by_name model_type/language/dataset/model_name",
+      "page": "tts",
+      "family": "common"
+    },
+    {
+      "cmd": "tuptime --seconds",
+      "page": "tuptime",
+      "family": "common"
+    },
+    {
+      "cmd": "tye build",
+      "page": "tye",
+      "family": "common"
+    },
+    {
+      "cmd": "ubus",
+      "page": "ubus",
+      "family": "linux"
+    },
+    {
+      "cmd": "ugrep -Z3 \"search_pattern\"",
+      "page": "ugrep",
+      "family": "common"
+    },
+    {
+      "cmd": "uncrustify -c path/to/uncrustify.cfg -f path/to/file.cpp",
+      "page": "uncrustify",
+      "family": "common"
+    },
+    {
+      "cmd": "unp path/to/archive.zip",
+      "page": "unp",
+      "family": "common"
+    },
+    {
+      "cmd": "updatectl update",
+      "page": "updatectl",
+      "family": "linux"
+    },
+    {
+      "cmd": "urpmi --no-install package",
+      "page": "urpmi",
+      "family": "linux"
+    },
+    {
+      "cmd": "uuid -v 4 -o path/to/file",
+      "page": "uuid",
+      "family": "linux"
+    },
+    {
+      "cmd": "uv help command",
+      "page": "uv-help",
+      "family": "common"
+    },
+    {
+      "cmd": "uv run path/to/script.py",
+      "page": "uv-run",
+      "family": "common"
+    },
+    {
+      "cmd": "uvicorn --reload import.path:app_object",
+      "page": "uvicorn",
+      "family": "common"
+    },
+    {
+      "cmd": "vagrant init --box-version version box_name",
+      "page": "vagrant-init",
+      "family": "common"
+    },
+    {
+      "cmd": "vainfo --display wayland|x11|drm|...",
+      "page": "vainfo",
+      "family": "common"
+    },
+    {
+      "cmd": "VBoxManage clonevm vm_name --name new_vm_name",
+      "page": "vboxmanage-clonevm",
+      "family": "common"
+    },
+    {
+      "cmd": "VBoxManage list extpacks",
+      "page": "vboxmanage-list",
+      "family": "common"
+    },
+    {
+      "cmd": "vcpkg install curl",
+      "page": "vcpkg",
+      "family": "common"
+    },
+    {
+      "cmd": "vgmstream_cli path/to/input.adc -m",
+      "page": "vgmstream_cli",
+      "family": "common"
+    },
+    {
+      "cmd": "virsh -c uri list --all",
+      "page": "virsh",
+      "family": "common"
+    },
+    {
+      "cmd": "virt-qemu-run -h",
+      "page": "virt-qemu-run",
+      "family": "linux"
+    },
+    {
+      "cmd": "vladimyr",
+      "page": "vladimyr",
+      "family": "common"
+    },
+    {
+      "cmd": "vpnd -i server_id",
+      "page": "vpnd",
+      "family": "osx"
+    },
+    {
+      "cmd": "w3m https://example.com -M",
+      "page": "w3m",
+      "family": "common"
+    },
+    {
+      "cmd": "waitress-serve --unix-socket=path/to/socket import.path:wsgi_func",
+      "page": "waitress-serve",
+      "family": "common"
+    },
+    {
+      "cmd": "warp-cli connect",
+      "page": "warp-cli",
+      "family": "common"
+    },
+    {
+      "cmd": "watchman trigger-list path/to/watched_directory",
+      "page": "watchman",
+      "family": "common"
+    },
+    {
+      "cmd": "weasyprint path/to/input.html path/to/output.png --stylesheet path/to/stylesheet.css",
+      "page": "weasyprint",
+      "family": "common"
+    },
+    {
+      "cmd": "wezterm connect domain_name",
+      "page": "wezterm",
+      "family": "common"
+    },
+    {
+      "cmd": "whatwaf --ra --throttle seconds --timeout seconds -P --force-ssl -u http://example.com",
+      "page": "whatwaf",
+      "family": "common"
+    },
+    {
+      "cmd": "whois @user",
+      "page": "rainbowstream",
+      "family": "common"
+    },
+    {
+      "cmd": "wishlist --srv.domain example.com",
+      "page": "wishlist",
+      "family": "common"
+    },
+    {
+      "cmd": "wondershaper -a adapter_name -d 1024",
+      "page": "wondershaper",
+      "family": "common"
+    },
+    {
+      "cmd": "wps",
+      "page": "wps",
+      "family": "osx"
+    },
+    {
+      "cmd": "x_x file.xlsx|file.csv",
+      "page": "x_x",
+      "family": "common"
+    },
+    {
+      "cmd": "xbps-query -m",
+      "page": "xbps-query",
+      "family": "linux"
+    },
+    {
+      "cmd": "xcrun --help",
+      "page": "xcrun",
+      "family": "osx"
+    },
+    {
+      "cmd": "xdotool click 3",
+      "page": "xdotool",
+      "family": "linux"
+    },
+    {
+      "cmd": "xgettext path/to/input_file",
+      "page": "xgettext",
+      "family": "common"
+    },
+    {
+      "cmd": "xmake b r",
+      "page": "xmake",
+      "family": "common"
+    },
+    {
+      "cmd": "xml subcommand options path/to/input.xml|uri > path/to/output",
+      "page": "xml",
+      "family": "common"
+    },
+    {
+      "cmd": "xonsh path/to/script_file.xonsh",
+      "page": "xonsh",
+      "family": "common"
+    },
+    {
+      "cmd": "xsv headers path/to/file.csv",
+      "page": "xsv",
+      "family": "common"
+    },
+    {
+      "cmd": "xxh \"host\" ++xxh-config ~/.config/xxh/config.xxhc",
+      "page": "xxh",
+      "family": "common"
+    },
+    {
+      "cmd": "yabai -m config window_shadow off",
+      "page": "yabai",
+      "family": "osx"
+    },
+    {
+      "cmd": "yadm list",
+      "page": "yadm-list",
+      "family": "common"
+    },
+    {
+      "cmd": "yay",
+      "page": "yay",
+      "family": "linux"
+    },
+    {
+      "cmd": "ykman fido credentials delete id",
+      "page": "ykman-fido",
+      "family": "common"
+    },
+    {
+      "cmd": "yq write -i path/to/file.yaml 'key' 'value'",
+      "page": "yq",
+      "family": "common"
+    },
+    {
+      "cmd": "zabbix_server",
+      "page": "zabbix_server",
+      "family": "common"
+    },
+    {
+      "cmd": "zapier versions",
+      "page": "zapier-versions",
+      "family": "common"
+    },
+    {
+      "cmd": "zeroclaw cron -h",
+      "page": "zeroclaw-cron",
+      "family": "common"
+    },
+    {
+      "cmd": "zeroclaw status -h",
+      "page": "zeroclaw-status",
+      "family": "common"
+    },
+    {
+      "cmd": "zinit self-update",
+      "page": "zinit",
+      "family": "common"
+    },
+    {
+      "cmd": "zle widget_name",
+      "page": "zle",
+      "family": "common"
+    },
+    {
+      "cmd": "zpool import",
+      "page": "zpool",
+      "family": "common"
+    }
+  ]
+}

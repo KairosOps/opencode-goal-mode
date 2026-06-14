@@ -4,81 +4,87 @@ Reproducible measurement of the destructive-command guard from a repository
 checkout. Run:
 
 ```bash
-npm run bench          # detection / false-positive / latency benchmark
-npm run bench:truthfulness  # print the completion truthfulness benchmark JSON
-npm run bench:compare  # regenerate the capability-comparison chart
+npm run bench                # external + fixture benchmarks → results.json + charts
+node benchmarks/external.mjs # external benchmark only (add --json for full detail)
+npm run bench:truthfulness   # print the completion-enforcement fixture JSON
+npm run bench:compare        # regenerate the capability-comparison chart
 ```
 
 `npm run bench` writes `docs/benchmarks/results.json` and the SVG charts the
 README embeds.
 
-## Methodology
+## Why this was rewritten
 
-- **Corpus** (`benchmarks/corpus.mjs`): 71 real shell commands a coding agent
-  might emit, each labeled `destructive` (a guard must block) or `safe` (a guard
-  must not block). Split into families: *classic* (plain `rm -rf`, `git reset
-  --hard`), *obfuscated* (the bypass corpus — substitutions, wrappers, `bash -c`,
-  interpreters, weaponized git), *remote-exec* (`curl | sh`), and *safe*
-  (read-only and quoted-text commands, including ones the old guard
-  false-positived).
-- **Baseline** (`benchmarks/legacy-analyzer.mjs`): the original regex classifier,
-  preserved **verbatim** from the first published release (commit `130956d`), so
-  the comparison is apples-to-apples against the same code that shipped.
-- **A command counts as "blocked"** when the analyzer flags it `destructive` or
-  `networkExec` (the two signals `tool.execute.before` throws on). `mutating`
-  marks the session dirty but does not block, so it is not counted here.
-- **Metrics**: detection rate (recall over destructive commands),
-  false-positive rate (safe commands wrongly blocked), and per-command latency.
-- **False Completion Dataset** (`benchmarks/completion-corpus.mjs`): labeled final
-  answer scenarios for premature and valid completion claims. It checks whether
-  `completion.js` blocks missing review-cycle lines, zero cycles, stale reviews,
-  mismatched cycle counts, missing contextual gates, and allows inactive or valid
-  completions.
-- **Truthfulness Score** (`benchmarks/truthfulness.mjs`): weighted score over the
-  dataset: 65% decision accuracy (blocked vs allowed) and 35% reason accuracy for
-  blocked false-completion claims.
+The previous benchmark reported "20.8% → 100% detection, 21.7% → 0% false
+positives" on a **71-command corpus the analyzer's author wrote**. The analyzer
+was, in effect, the specification of that corpus, so 100%/0% mostly restated
+"my code passes my own examples." Those numbers are still produced — but they are
+now labeled as *regression fixtures*, and the headline figure comes from an
+**external corpus the analyzer was never fitted to**.
 
-## Results
+## Headline: external corpus
 
-Representative run (Node 22, single-threaded; latency varies by machine, the
-accuracy figures do not):
+- **Source**: real example commands from
+  [tldr-pages](https://github.com/tldr-pages/tldr) (`common`, `linux`, `osx`
+  English pages), pinned by commit in `benchmarks/external-corpus.json`. These
+  are written by hundreds of contributors with no knowledge of this analyzer, so
+  it cannot have been tuned to them. `tldr` `{{placeholder}}` tokens and
+  `[-f|--force]` alternative-flag notation are canonicalized into literal
+  commands by `benchmarks/build-external-corpus.mjs`.
+- **Ground-truth labels** come from `labelDestructive()` in that builder: a
+  deliberately simple, transparent rule (primary utility ∈ a fixed irreversible
+  set; specific destructive `git` subcommands; `curl|wget … | sh`). It is
+  intentionally **independent of the analyzer's own logic**. No automatic labeler
+  is perfect, so the benchmark prints every disagreement for audit rather than
+  hiding them.
+- **Sampling**: all destructive examples found are kept (they are rare in real
+  docs); safe examples are stride-sampled to a cap. This imbalance is recorded in
+  the corpus `totals` and disclosed here so it is not mistaken for a base rate.
 
-| Metric | Legacy regex guard | Goal Mode analyzer |
+Representative run (sample of 704 commands: 104 destructive, 600 safe):
+
+| On real third-party commands | Legacy regex guard | Goal Mode analyzer |
 | --- | --- | --- |
-| Detection rate | **20.8%** (10/48) | **100%** (48/48) |
-| False-positive rate | **21.7%** (5/23) | **0%** (0/23) |
-| Detection — classic | 100% | 100% |
-| Detection — obfuscated | 0% (0/35) | 100% (35/35) |
-| Detection — remote-exec | 0% (0/3) | 100% (3/3) |
-| Latency per command | ~2.3 µs | ~3.8 µs |
+| Detection rate | 53.8% | **93.3%** |
+| False-positive rate | 0.2% | 0.2% |
 
-False Completion Dataset run:
+Reading the result honestly:
 
-| Metric | Goal Mode |
-| --- | --- |
-| Truthfulness score | **100.0%** |
-| Decision accuracy | **100.0%** |
-| Reason accuracy | **100.0%** |
-| False-completion block rate | **100.0%** |
-| Valid-completion allow rate | **100.0%** |
+- The remaining Goal Mode misses are almost entirely un-flagged single-target
+  `rm <file>` (and `rm -i`/`-v`/`-d`), which the guard **intentionally permits**:
+  it blocks `rm -r`/`rm -f`, command-substitution/`bash -c`/interpreter deletes,
+  and remote exec, but not a plain single-file `rm`. Under the strict
+  every-`rm`-is-destructive labeler these are counted as misses.
+- The one counted false positive (`git filter-repo …`) genuinely rewrites
+  history, so the real-world false-positive rate is effectively zero. Run
+  `node benchmarks/external.mjs --json` to see the full miss / false-positive
+  lists.
+- This benchmark directly drove real fixes: `mkfs.<fstype>` variants, `srm`, and
+  `mkswap` were missing from the analyzer and were added after the external run
+  exposed them.
 
-The legacy guard catches only the *classic* family and misses every obfuscated
-and remote-execution command, while wrongly blocking 1-in-5 benign commands. The
-tokenizer catches the entire corpus with zero false positives, for an extra
-~1.5 µs per command on this run — negligible for a per-tool-call guard (still
-hundreds of thousands of classifications per second).
+## Curated regression fixtures (a spec, not a survey)
+
+`benchmarks/corpus.mjs` (71 commands) and `benchmarks/completion-corpus.mjs`
+(9 completion-claim cases) define the patterns the analyzer must catch and the
+completion-policy decisions it must make. They pass **by construction** and exist
+to prevent regressions. The 100%/0% / "all cases pass" numbers there are not
+measured accuracy — treat them as a checklist the code is required to satisfy.
+
+- **Baseline** for the fixture comparison (`benchmarks/legacy-analyzer.mjs`) is
+  the original regex classifier, preserved **verbatim** from the first published
+  release (commit `130956d`), so it is the author's own prior code, not a
+  strawman built to lose.
+- **A command counts as "blocked"** when the analyzer flags it `destructive` or
+  `networkExec` (the signals `tool.execute.before` throws on). `mutating` marks
+  the session dirty but does not block, so it is not counted.
 
 ## Honesty notes
 
-- The corpus is hand-built to exercise the known bypass classes; it is a
-  capability benchmark, not a claim of catching *every* possible obfuscation
-  (the analyzer fails open on un-analyzable dynamic commands — see
-  [shell-hardening.md](shell-hardening.md)).
-- The latency comparison is intentionally shown even though the new analyzer is
-  slower: the win is accuracy, and the parse cost is still only a few
-  microseconds per tool-call candidate.
-- "100% on this corpus" means 100% of the labeled set; new bypass classes that
-  are discovered get added to the corpus and fixed (that is how the second-wave
-  findings — `sudo -u`, `pnpm dlx`, interpreter shell-out — entered it).
-- The Truthfulness Score is corpus truthfulness for mechanical completion claims,
-  not a global claim that an LLM's prose is semantically true in every domain.
+- The analyzer fails **open** on un-analyzable dynamic commands (deferring to the
+  host's permission rules); it is defense-in-depth, not a jail — see
+  [shell-hardening.md](shell-hardening.md).
+- The latency comparison is shown even though the tokenizer is slower than a
+  regex: the win is accuracy, and the parse cost is ~1µs per candidate.
+- The completion-enforcement fixtures verify mechanical completion-claim policy,
+  not that an LLM's prose is semantically true in every domain.

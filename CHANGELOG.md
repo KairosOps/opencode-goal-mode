@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.0
+
+- Honest benchmarks: add an EXTERNAL corpus of 704 real third-party commands from
+  tldr-pages (`benchmarks/external.mjs`, `npm run bench:external`) as the headline
+  detection/false-positive measure (93.3% vs 53.8% legacy; ~0% real false
+  positives). Reframe the curated 71-command set and 9 completion cases as
+  regression *fixtures*, not measured accuracy, and reword the README/charts to
+  stop overclaiming.
+- Stronger guard: block `mkfs.<fstype>` variants, `srm`, and `mkswap`
+  (genuine destructive commands the external corpus exposed as misses).
+- Deeper TUI embedding: toast on each review verdict (PASS/FAIL) and once when the
+  last required gate clears (`toastOnReview`); `goal_status` now surfaces the goal.
+- Experimental TUI sidebar banner (`plugins/goal-sidebar.js`): the active goal in
+  shining yellow with a live gate-status line, paired with the guard via persisted
+  state. No-ops on any runtime without the TUI slot API. New options
+  `sidebarBanner` / `sidebarColor` (`GOAL_GUARD_SIDEBAR_*`).
+- Tighter `/goal` flow that seeds the Goal Contract via the `goal_contract` tool.
+
 ## v0.2.4
 
 - Add Reviewer Memory for unresolved/resolved reviewer findings across cycles.

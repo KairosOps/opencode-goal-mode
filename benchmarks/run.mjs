@@ -20,6 +20,7 @@ import * as current from "../plugins/goal-guard/shell.js";
 import * as legacy from "./legacy-analyzer.mjs";
 import { groupedBarChart, horizontalBarChart } from "./charts.mjs";
 import { runTruthfulnessBenchmark } from "./truthfulness.mjs";
+import { runExternalBenchmark } from "./external.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const outDir = join(root, "docs", "benchmarks");
@@ -92,6 +93,7 @@ function fmt(n) {
 
 const legacyEval = evaluate(legacy);
 const currentEval = evaluate(current);
+const external = runExternalBenchmark();
 const truthfulness = runTruthfulnessBenchmark();
 const legacyOps = throughput(legacy);
 const currentOps = throughput(current);
@@ -110,23 +112,74 @@ function familyRate(ev, fam) {
   return f && f.destTotal ? (f.destCaught / f.destTotal) * 100 : 0;
 }
 
+// Trim the per-command miss/false-positive lists to keep results.json readable;
+// the full lists are always available via `node benchmarks/external.mjs --json`.
+const externalSummary = {
+  source: external.source,
+  commit: external.commit,
+  totals: external.totals,
+  sampleSize: external.sampleSize,
+  legacy: {
+    detectionRate: Number(external.legacy.detectionRate.toFixed(1)),
+    falsePositiveRate: Number(external.legacy.falsePositiveRate.toFixed(1)),
+    destCaught: external.legacy.destCaught,
+    destTotal: external.legacy.destTotal,
+    safeFalsePos: external.legacy.safeFalsePos,
+    safeTotal: external.legacy.safeTotal,
+  },
+  current: {
+    detectionRate: Number(external.current.detectionRate.toFixed(1)),
+    falsePositiveRate: Number(external.current.falsePositiveRate.toFixed(1)),
+    destCaught: external.current.destCaught,
+    destTotal: external.current.destTotal,
+    safeFalsePos: external.current.safeFalsePos,
+    safeTotal: external.current.safeTotal,
+    misses: external.current.misses.map((m) => m.cmd),
+    falsePositives: external.current.falsePositives.map((f) => f.cmd),
+  },
+};
+
 const results = {
-  corpusSize: CORPUS.length,
-  destructiveCount: CORPUS.filter((c) => c.label === "destructive").length,
-  safeCount: CORPUS.filter((c) => c.label === "safe").length,
-  legacy: { ...legacyEval, opsPerSec: legacyOps, usPerCommand: Number(legacyUs.toFixed(2)) },
-  current: { ...currentEval, opsPerSec: currentOps, usPerCommand: Number(currentUs.toFixed(2)) },
-  truthfulness,
+  // The honest, third-party benchmark: real commands the analyzer was never
+  // fitted to. This is the headline number.
+  external: externalSummary,
+  // Curated REGRESSION FIXTURES: a hand-authored set of known destructive
+  // patterns and their safe look-alikes. These define the patterns the analyzer
+  // is built to catch and guard against regressions — they are NOT an unbiased
+  // sample, so the 100%/0% here is "passes its own spec", not measured accuracy.
+  fixtures: {
+    corpusSize: CORPUS.length,
+    destructiveCount: CORPUS.filter((c) => c.label === "destructive").length,
+    safeCount: CORPUS.filter((c) => c.label === "safe").length,
+    legacy: { ...legacyEval, opsPerSec: legacyOps, usPerCommand: Number(legacyUs.toFixed(2)) },
+    current: { ...currentEval, opsPerSec: currentOps, usPerCommand: Number(currentUs.toFixed(2)) },
+  },
+  // Completion-enforcement fixtures (hand-authored policy cases), not a survey.
+  completionFixtures: truthfulness,
 };
 
 writeFileSync(join(outDir, "results.json"), JSON.stringify(results, null, 2));
 
-// Chart 1: detection rate by command family.
+// Headline chart: detection + false positives on the EXTERNAL third-party corpus.
+writeFileSync(
+  join(outDir, "external-scorecard.svg"),
+  groupedBarChart({
+    title: "Guard accuracy on real third-party commands",
+    subtitle: `${external.sampleSize} tldr-pages commands the analyzer was never fitted to. Detection higher = better; false positives lower = better.`,
+    groups: ["Detection rate", "False-positive rate"],
+    series: [
+      { name: "Legacy regex guard", color: "#9aa0a6", values: [external.legacy.detectionRate, external.legacy.falsePositiveRate] },
+      { name: "Goal Mode analyzer", color: "#2da44e", values: [external.current.detectionRate, external.current.falsePositiveRate] },
+    ],
+  }),
+);
+
+// Chart 1: detection rate by command family (CURATED regression fixtures).
 writeFileSync(
   join(outDir, "detection-by-family.svg"),
   groupedBarChart({
-    title: "Destructive-command detection rate by family",
-    subtitle: `Higher is better. Corpus: ${results.destructiveCount} destructive commands.`,
+    title: "Detection by family — curated regression fixtures",
+    subtitle: `Curated patterns the analyzer is built to catch (not an unbiased sample). ${results.fixtures.destructiveCount} destructive fixtures.`,
     groups: detFamilies.map((f) => FAMILY_LABELS[f]),
     series: [
       { name: "Legacy regex guard", color: "#9aa0a6", values: detFamilies.map((f) => familyRate(legacyEval, f)) },
@@ -135,12 +188,12 @@ writeFileSync(
   }),
 );
 
-// Chart 2: overall scorecard (detection up, false positives down).
+// Chart 2: overall scorecard on the CURATED fixtures (passes its own spec).
 writeFileSync(
   join(outDir, "overall-scorecard.svg"),
   groupedBarChart({
-    title: "Overall guard accuracy",
-    subtitle: "Detection rate (higher better) vs false-positive rate (lower better).",
+    title: "Curated fixtures — passes its own spec",
+    subtitle: "Curated regression fixtures, not measured accuracy. See external-scorecard.svg for the real-world number.",
     groups: ["Detection rate", "False-positive rate"],
     series: [
       { name: "Legacy regex guard", color: "#9aa0a6", values: [legacyEval.detectionRate, legacyEval.falsePositiveRate] },
@@ -168,8 +221,8 @@ writeFileSync(
 writeFileSync(
   join(outDir, "truthfulness-score.svg"),
   horizontalBarChart({
-    title: "Benchmark Truthfulness Score",
-    subtitle: `False Completion Dataset: ${truthfulness.corpusSize} labeled completion-claim cases.`,
+    title: "Completion-enforcement fixtures",
+    subtitle: `${truthfulness.corpusSize} hand-authored policy cases (a spec, not a survey): premature claims blocked, valid ones allowed.`,
     unit: "%",
     max: 100,
     rows: [
@@ -183,16 +236,17 @@ writeFileSync(
 const pct = (n) => `${n.toFixed(1)}%`;
 console.log("Goal Mode shell-guard benchmark");
 console.log("================================");
-console.log(`Corpus: ${results.corpusSize} commands (${results.destructiveCount} destructive, ${results.safeCount} safe)`);
 console.log("");
-console.log(`Detection rate   legacy ${pct(legacyEval.detectionRate)}   →   Goal Mode ${pct(currentEval.detectionRate)}`);
-console.log(`False positives  legacy ${pct(legacyEval.falsePositiveRate)}   →   Goal Mode ${pct(currentEval.falsePositiveRate)}`);
-console.log(`Latency          legacy ${legacyUs.toFixed(2)} µs/cmd   →   Goal Mode ${currentUs.toFixed(2)} µs/cmd (${fmt(currentOps)}/s)`);
-console.log(`Truthfulness    False Completion Dataset score ${truthfulness.score.toFixed(1)}% (${truthfulness.corpusSize} cases)`);
+console.log(`HEADLINE — external corpus: ${external.sampleSize} real tldr-pages commands @ ${external.commit.slice(0, 12)}`);
+console.log(`  (${external.totals.destructiveFound} destructive [all found] + ${external.totals.safeSampled}/${external.totals.safeFound} safe sampled)`);
+console.log(`  Detection       legacy ${pct(external.legacy.detectionRate)}   →   Goal Mode ${pct(external.current.detectionRate)}`);
+console.log(`  False positives legacy ${pct(external.legacy.falsePositiveRate)}   →   Goal Mode ${pct(external.current.falsePositiveRate)}`);
+console.log(`  Remaining Goal Mode misses: ${external.current.misses.length} (mostly un-flagged single-target rm — see external.mjs --json)`);
 console.log("");
-console.log("By family (detection rate):");
-for (const f of detFamilies) {
-  console.log(`  ${FAMILY_LABELS[f].padEnd(12)} legacy ${pct(familyRate(legacyEval, f)).padStart(6)}  →  Goal Mode ${pct(familyRate(currentEval, f)).padStart(6)}`);
-}
+console.log(`Curated regression fixtures: ${results.fixtures.corpusSize} commands (defines patterns to catch; not an unbiased sample)`);
+console.log(`  Detection   legacy ${pct(legacyEval.detectionRate)}   →   Goal Mode ${pct(currentEval.detectionRate)}   (passes its own spec)`);
+console.log(`  False pos   legacy ${pct(legacyEval.falsePositiveRate)}   →   Goal Mode ${pct(currentEval.falsePositiveRate)}`);
+console.log(`Completion-enforcement fixtures: ${truthfulness.corpusSize} hand-authored policy cases, all pass (a spec, not a survey)`);
+console.log(`Latency: Goal Mode ${currentUs.toFixed(2)} µs/cmd (${fmt(currentOps)}/s)`);
 console.log("");
-console.log(`Wrote results.json + 4 SVG charts to docs/benchmarks/`);
+console.log(`Wrote results.json + 5 SVG charts to docs/benchmarks/`);

@@ -26,6 +26,12 @@ export const DEFAULT_CONFIG = Object.freeze({
   sessionTtlMs: 24 * 60 * 60 * 1000,
   /** Emit a TUI toast when completion is blocked. */
   toastOnBlock: true,
+  /** Emit a TUI toast when a review gate records a PASS/FAIL, and when completion unlocks. */
+  toastOnReview: true,
+  /** Show the experimental yellow goal banner in the TUI sidebar (TUI-plugin-capable OpenCode only). */
+  sidebarBanner: true,
+  /** Foreground colour (hex) for the sidebar goal banner. */
+  sidebarColor: "#FFD700",
   /** Phrase that, at the start of an assistant message, claims completion. */
   completionMarker: "Goal Completed",
   /** Replacement marker when completion is blocked. */
@@ -59,6 +65,9 @@ function fromEnv(env) {
     GOAL_GUARD_MAX_SESSIONS: ["maxSessions", coerceInt],
     GOAL_GUARD_SESSION_TTL_MS: ["sessionTtlMs", coerceInt],
     GOAL_GUARD_TOAST_ON_BLOCK: ["toastOnBlock", coerceBool],
+    GOAL_GUARD_TOAST_ON_REVIEW: ["toastOnReview", coerceBool],
+    GOAL_GUARD_SIDEBAR_BANNER: ["sidebarBanner", coerceBool],
+    GOAL_GUARD_SIDEBAR_COLOR: ["sidebarColor", (v) => (v == null ? undefined : String(v))],
   };
   for (const [key, [field, coerce]] of Object.entries(map)) {
     if (env[key] !== undefined) out[field] = coerce(env[key], DEFAULT_CONFIG[field]);

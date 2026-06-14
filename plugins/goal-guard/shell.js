@@ -415,7 +415,7 @@ const DIRECT_TEST_BINS = new Set(["jest", "mocha", "vitest", "ava", "tap", "tape
 const FORMATTERS = new Set(["prettier", "eslint", "black", "ruff", "gofmt", "goimports", "rustfmt", "clang-format", "autopep8", "isort", "standard", "biome", "dprint", "yapf", "stylelint"]);
 
 const MUTATING_BINS = new Set(["mkdir", "rmdir", "touch", "ln", "mv", "cp", "tee", "install", "patch", "rsync", "rename", "chmod", "chown", "chgrp", "git-apply"]);
-const DESTRUCTIVE_BINS = new Set(["shred", "mkfs", "fdisk", "parted", "wipefs", "sgdisk", "blkdiscard", "unlink"]);
+const DESTRUCTIVE_BINS = new Set(["shred", "srm", "mkfs", "mkswap", "fdisk", "parted", "wipefs", "sgdisk", "blkdiscard", "unlink"]);
 
 /**
  * Classify a single already-split simple command (array of words).
@@ -603,8 +603,9 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
-  // Destructive disk/file utilities.
-  if (DESTRUCTIVE_BINS.has(bin)) {
+  // Destructive disk/file utilities. `mkfs.<fstype>` (mkfs.ext4, mkfs.erofs, …)
+  // is the same irreversible filesystem-format operation as bare `mkfs`.
+  if (DESTRUCTIVE_BINS.has(bin) || /^mkfs\./.test(bin)) {
     acc.destructive = true;
     acc.reasons.push(bin);
     return;

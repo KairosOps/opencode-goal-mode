@@ -5,6 +5,39 @@
 
 import { requiredGates, missingGates, gatePassedFresh } from "./gates.js";
 
+/**
+ * A short, single-line human label for the current goal — preferring the
+ * recorded Goal Contract's original request, falling back to the captured goal
+ * text. Collapses whitespace and truncates to `max` chars for compact display
+ * (status reports, the TUI sidebar banner).
+ */
+export function shortGoalLabel(state, max = 80) {
+  const raw = String(state?.contract?.original || state?.goalText || "").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  // Prefer the first sentence/clause if it is reasonably short.
+  const firstSentence = raw.split(/(?<=[.!?])\s/)[0];
+  const base = firstSentence.length > 0 && firstSentence.length <= max ? firstSentence : raw;
+  if (base.length <= max) return base;
+  return `${base.slice(0, max - 1).trimEnd()}…`;
+}
+
+/**
+ * Compact projection for the TUI sidebar banner: the short goal label, a
+ * one-line gate/dirty status, and whether completion is currently allowed.
+ * Returns null when there is no active goal worth showing.
+ */
+export function sidebarView(state, config) {
+  if (!state || !state.active) return null;
+  const goal = shortGoalLabel(state);
+  if (!goal) return null;
+  const required = requiredGates(state, config);
+  const missing = missingGates(state, config);
+  const passing = required.length - missing.length;
+  const allowed = required.length > 0 && missing.length === 0 && !state.dirty;
+  const status = `${passing}/${required.length} gates` + (state.dirty ? " · dirty" : "") + (allowed ? " · ready" : "");
+  return { goal, status, allowed, reviewCycles: state.reviewCycles, passing, required: required.length, dirty: Boolean(state.dirty) };
+}
+
 export function summarizeState(state, config) {
   const verdictSummary =
     state.verdicts
@@ -50,6 +83,7 @@ export function statusReport(state, config) {
   const missing = missingGates(state, config);
   return {
     active: Boolean(state.active),
+    goal: shortGoalLabel(state),
     dirty: Boolean(state.dirty),
     reviewCycles: state.reviewCycles,
     requiredGates: required,

@@ -15,6 +15,10 @@ configuration directory:
    — a runtime guard that enforces review discipline, blocks destructive shell
    commands, preserves state across compaction and restarts, and exposes
    first-class `goal_*` tools.
+4. **An experimental TUI companion** (`plugins/goal-sidebar.js`) — a separate
+   `{ tui }` plugin module that renders the active goal as a yellow sidebar
+   banner. It is *paired* with the server plugin purely through the on-disk state
+   snapshot (no extra IPC) and no-ops on any runtime without the slot API.
 
 This document focuses on the plugin, where the engineering lives.
 
@@ -48,7 +52,9 @@ as plugins. Each module is independently unit-tested.
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
 | `goal-guard/summary.js` | State summaries, status reports, and evidence-map projections. |
 | `goal-guard/system.js` | Live state block injected into the system prompt. |
+| `goal-guard/summary.js` | Status/evidence projections, the short goal label, and the sidebar view. |
 | `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
+| `goal-guard/sidebar-data.js` | Pure reader that projects the persisted snapshot into the sidebar banner model. |
 | `goal-guard/logger.js` | Best-effort logging/toasts over the OpenCode client. |
 
 ## Hooks used
@@ -157,6 +163,25 @@ The `@opencode-ai/plugin` import they need is isolated to `tools.js` and loaded
 via a guarded dynamic import, so if the host cannot resolve it the core guard
 hooks still load.
 
+## TUI companion (experimental)
+
+`plugins/goal-sidebar.js` is a TUI plugin module — `export const tui = async (api)
+=> …` — distinct from the server plugin (`@opencode-ai/plugin` types it as a
+`{ tui }` module, mutually exclusive with `{ server }`). It registers a
+`sidebar_content` slot via `api.slots.register({ slots: { sidebar_content } })`
+and renders, in the configured colour (`#FFD700` by default), the short goal
+label plus a `passing/total gates · dirty/ready` line.
+
+It is *paired* with the server plugin only through the persisted state file:
+`sidebar-data.js` recomputes the same `stateBaseDir`/`projectKey` path the guard
+writes to and projects the active session via `summary.sidebarView`. That keeps
+the pure projection logic Node-testable (`tests/sidebar.test.mjs`) even though the
+JSX renderer itself can only run inside OpenCode's (Bun) TUI runtime. Everything
+in the `tui` entry is wrapped so a missing slot API, missing JSX runtime, or read
+error degrades to rendering nothing — it can never break the TUI. The server plugin
+also emits review-verdict and completion-unlock toasts (`toastOnReview`) so review
+progress is visible even without the banner.
+
 ## Configuration
 
 `config.js` merges, in increasing precedence: built-in defaults, environment
@@ -182,8 +207,14 @@ manifest of the file hashes it wrote. On upgrade it distinguishes files it owns
 - `tests/plugin.test.mjs` — hook behavior, gating, verdicts, completion, tools, isolation.
 - `tests/truthfulness-benchmark.test.mjs` — false-completion corpus and truthfulness scoring.
 - `tests/state.test.mjs` — store, seq ordering, eviction, persistence round-trips.
+- `tests/sidebar.test.mjs` — short goal label, sidebar projection, snapshot reader, new destructive bins.
+- `tests/toast.test.mjs` — review-verdict and completion-unlock toasts.
 - `tests/agents.test.mjs` / `tests/commands.test.mjs` — frontmatter and contracts.
 - `tests/install.test.mjs` — recursive copy, manifest upgrades, uninstall.
+
+The shell guard's headline accuracy is measured on an external, third-party
+corpus (`benchmarks/external.mjs` over `external-corpus.json`), not on the curated
+fixtures — see [research/benchmarks.md](research/benchmarks.md).
 
 `npm run validate` runs the tests, the structural config validator, the publish
 readiness check, and an `npm pack --dry-run`.

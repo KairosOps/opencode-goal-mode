@@ -179,7 +179,9 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // records against that same session (never another), so it can neither
         // mis-credit a sibling session nor break the parent goal, which the task
         // path already covers. Split by tool type so the two never double-count.
+        const wasAllowed = completionAllowed(state, config);
         let recordedAgent = null;
+        let recordedVerdict = null;
         if (tool === "task") {
           const sub = normalizedSubagent(inp);
           if (isReviewAgent(sub)) {
@@ -188,6 +190,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
             if (verdict) {
               recordVerdict(store, state, sub, verdict, text);
               recordedAgent = sub;
+              recordedVerdict = verdict;
             }
           }
         } else if (isReviewAgent(state.currentAgent)) {
@@ -196,11 +199,21 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           if (verdict) {
             recordVerdict(store, state, state.currentAgent, verdict, text);
             recordedAgent = state.currentAgent;
+            recordedVerdict = verdict;
           }
         }
 
         if (recordedAgent === CYCLE_CLOSING_AGENT) {
           maybeClearDirtyOnFinalPass(state, config);
+        }
+
+        // Surface review progress in the TUI: a toast per recorded verdict, and a
+        // single celebratory toast the moment the last required gate clears.
+        if (recordedAgent && recordedVerdict && config.toastOnReview) {
+          logger.toast(`Goal Guard: ${recordedAgent} → ${recordedVerdict}`, recordedVerdict === "PASS" ? "success" : "warning");
+          if (!wasAllowed && completionAllowed(state, config)) {
+            logger.toast("Goal Guard: all required gates passed — completion unlocked", "success");
+          }
         }
         persist();
       } catch {
