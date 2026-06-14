@@ -183,6 +183,35 @@ function ensureTuiPlugin(remove = false) {
   return true;
 }
 
+/**
+ * OpenCode caches TUI plugins under `~/.cache/opencode/packages/<name>@<spec>/`
+ * and does NOT re-check npm for a newer version, so after an upgrade it keeps
+ * loading the OLD sidebar build. Removing our cache entries forces OpenCode to
+ * re-fetch the just-installed version on its next start. Returns the dirs cleared.
+ */
+function refreshTuiPluginCache() {
+  const base = (process.env.XDG_CACHE_HOME && process.env.XDG_CACHE_HOME.trim()) || join(homedir() || "", ".cache");
+  const pkgRoot = join(base, "opencode", "packages");
+  if (!existsSync(pkgRoot)) return [];
+  let entries;
+  try {
+    entries = readdirSync(pkgRoot);
+  } catch {
+    return [];
+  }
+  const ours = entries
+    .filter((name) => name === pkg.name || name.startsWith(`${pkg.name}@`))
+    .map((name) => join(pkgRoot, name));
+  for (const dir of ours) {
+    try {
+      if (!values["dry-run"]) rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
+  }
+  return ours;
+}
+
 // ---------------------------------------------------------------------------
 // Uninstall
 // ---------------------------------------------------------------------------
@@ -205,6 +234,8 @@ if (values.uninstall) {
   const tuiRemoved = ensureTuiPlugin(true);
   if (!values["dry-run"]) pruneEmptyDirs(target, Object.keys(manifest.files));
   if (tuiRemoved) console.log(`${values["dry-run"] ? "Would remove" : "Removed"} the sidebar entry from ${join(target, "tui.json")}`);
+  const cachedCleared = refreshTuiPluginCache();
+  if (cachedCleared.length) console.log(`${values["dry-run"] ? "Would clear" : "Cleared"} OpenCode's cached TUI plugin (${cachedCleared.length}).`);
   const verb = values["dry-run"] ? "Would remove" : "Removed";
   console.log(`${verb} ${removed.length} Goal Mode files from ${target}.`);
   if (kept.length) {
@@ -302,4 +333,8 @@ console.log(
   `Files copied: ${summary.copied.length}; unchanged: ${summary.unchanged.length}; pruned: ${summary.pruned.length}`,
 );
 if (tuiAdded) console.log(`Registered the experimental sidebar in ${join(target, "tui.json")}`);
+const cacheCleared = refreshTuiPluginCache();
+if (cacheCleared.length) {
+  console.log(`${values["dry-run"] ? "Would clear" : "Cleared"} OpenCode's stale TUI plugin cache so the sidebar reloads at the installed version.`);
+}
 console.log("Restart OpenCode for agents, commands, and plugins to load.");

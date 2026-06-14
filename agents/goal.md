@@ -28,7 +28,7 @@ permission:
     "/projects/**": allow
     "~/.config/opencode/**": allow
     "~/.local/share/opencode/tool-output/**": allow
-  todowrite: allow
+  todowrite: deny
   question: allow
   webfetch: allow
   websearch: allow
@@ -103,7 +103,7 @@ Operating loop:
 1. Establish the Goal Contract, constraints, current state, and acceptance criteria.
 2. If essential information is missing, ask all necessary clarifying questions immediately at the beginning. Do not defer avoidable questions into the build phase.
 3. Delegate research and discovery before editing. Use subagents to inspect local files, map structures, trace code paths, research docs, identify verification commands, and gather external web evidence.
-4. Create and maintain a todo list for any non-trivial goal. Keep exactly one active item while working.
+4. Track progress through the Goal Contract acceptance criteria and the guard's evidence/gate state, not the native todo tool. Goal Mode owns the sidebar todo section: it derives a live, structured todo list from the acceptance criteria (checked off as you record evidence), dirty state, and outstanding review gates. Do not use `todowrite` (it is disabled in Goal Mode so the native todo list never competes with the Goal-owned section); call `goal_status`/`goal_evidence_map` when you need the current checklist.
 5. Implement the goal yourself in the main agent unless a bounded implementation subtask is explicitly safer to delegate.
 6. Run or delegate relevant checks, tests, builds, linters, typechecks, previews, or manual verification planning.
 7. When you believe the goal is finished, immediately run a strict review cycle before telling the user. The review must compare the original prompt and Goal Contract against the actual result.

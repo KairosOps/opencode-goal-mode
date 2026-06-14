@@ -23,7 +23,7 @@
  * the Node test suite.
  */
 
-import { createSignal, onCleanup, For, Show } from "solid-js";
+import { createSignal, createEffect, onCleanup, For, Show } from "solid-js";
 import { sidebarView, NO_GOAL } from "./goal-guard/summary.js";
 import { DEFAULT_CONFIG } from "./goal-guard/config.js";
 
@@ -31,7 +31,8 @@ const DEFAULT_COLOR = "#FFD700"; // running — GOAL label, yellow
 const DEFAULT_DONE = "#FF5555"; // done — red
 const DEFAULT_MUTED = "#808080"; // pending todo rows — grey
 const TITLE_COLOR = "#FFFFFF"; // goal title line (running) — bright, distinct from the yellow GOAL label
-const META_COLOR = "#8BE9FD"; // gates · status line (running) — cyan accent
+const META_COLOR = "#8BE9FD"; // gates line (running) — cyan accent
+const STATUS_COLOR = "#FFB86C"; // status line (running) — orange, distinct from the cyan gates line
 const TODO_DONE_COLOR = "#50FA7B"; // ✓ done todo rows — green
 const POLL_MS = 1500;
 const RAINBOW = ["#FF5555", "#FFAA00", "#FFFF55", "#55FF55", "#55FFFF", "#5599FF", "#FF55FF"];
@@ -85,16 +86,27 @@ function pickSession(snapshot, sessionId) {
   return null;
 }
 
-function readModel(worktree, sessionId) {
-  try {
-    const snapshot = readSnapshot(worktree);
-    if (!snapshot) return NO_GOAL;
-    const record = pickSession(snapshot, sessionId);
-    if (!record) return NO_GOAL;
-    return sidebarView(record, DEFAULT_CONFIG);
-  } catch {
-    return NO_GOAL;
+/**
+ * Resolve the sidebar model for a session, trying each candidate worktree key in
+ * turn. The guard persists keyed by `worktree || directory`; the TUI may surface
+ * either path, so we try both (worktree first) rather than risk a key mismatch
+ * that would hide an active goal and leave the native todos showing.
+ */
+function readModel(worktrees, sessionId) {
+  const keys = (Array.isArray(worktrees) ? worktrees : [worktrees]).filter(Boolean);
+  for (const wt of keys) {
+    try {
+      const snapshot = readSnapshot(wt);
+      if (!snapshot) continue;
+      const record = pickSession(snapshot, sessionId);
+      if (!record) continue;
+      const view = sidebarView(record, DEFAULT_CONFIG);
+      if (view && view.state !== "none") return view;
+    } catch {
+      /* try the next candidate */
+    }
   }
+  return NO_GOAL;
 }
 
 const id = "goal-mode-sidebar";
@@ -106,7 +118,9 @@ const tui = async (api, options) => {
     if (!enabled) return;
     if (!api?.slots?.register) return; // runtime without the slot API → no-op.
 
-    const worktree = api.state?.path?.worktree || api.state?.path?.directory;
+    // The guard keys persisted state by worktree (falling back to directory).
+    // Surface both so a path-key mismatch can't hide an active goal.
+    const worktrees = [api.state?.path?.worktree, api.state?.path?.directory];
 
     api.slots.register({
         order: 50,
@@ -115,18 +129,38 @@ const tui = async (api, options) => {
             if (!props?.session_id) return undefined;
             const read = () => {
               try {
-                return readModel(worktree, props?.session_id) || NO_GOAL;
+                return readModel(worktrees, props?.session_id) || NO_GOAL;
               } catch {
                 return NO_GOAL;
               }
             };
-            const initial = read();
-            if (initial.state === "none") return undefined;
-            const [model, setModel] = createSignal(initial);
-            const [rainbow, setRainbow] = createSignal((rainbowMs || 0) > 0);
+            // ALWAYS mount a reactive, polling component — do NOT bail when there is
+            // no goal yet. The goal is normally recorded AFTER the sidebar mounts
+            // (the user opens the session, then states the goal), so the slot must
+            // keep polling and let <Show> reveal the section when the goal appears.
+            // Returning undefined at mount (the old behavior) meant the poll never
+            // ran and the Goal section never showed even once a goal existed.
+            const first = read();
+            const [model, setModel] = createSignal(first);
             const timer = setInterval(() => setModel(read()), POLL_MS);
-            const rainbowTimer = setTimeout(() => setRainbow(false), Math.max(0, rainbowMs || 0));
             onCleanup(() => clearInterval(timer));
+            // First-display rainbow: starts the moment a goal FIRST appears. If a goal
+            // is already present at mount it starts immediately; otherwise the effect
+            // fires when the goal later appears (the common case — the goal is set
+            // after the sidebar mounts). Either way it settles after rainbowMs.
+            const [rainbow, setRainbow] = createSignal(false);
+            let rainbowStarted = false;
+            let rainbowTimer;
+            const startRainbow = () => {
+              if (rainbowStarted || (rainbowMs || 0) <= 0) return;
+              rainbowStarted = true;
+              setRainbow(true);
+              rainbowTimer = setTimeout(() => setRainbow(false), Math.max(0, rainbowMs));
+            };
+            if (first.state !== "none") startRainbow();
+            createEffect(() => {
+              if (model().state !== "none") startRainbow();
+            });
             onCleanup(() => clearTimeout(rainbowTimer));
             const isRainbow = () => rainbow() && model().state === "running";
             // Settled (post-rainbow) colour for each header line. When done, every
@@ -136,7 +170,8 @@ const tui = async (api, options) => {
               if (model().state === "done") return doneColor;
               if (kind === "label") return color; // GOAL — yellow
               if (kind === "title") return TITLE_COLOR; // goal title — bright white
-              return META_COLOR; // gates · status — cyan
+              if (kind === "gates") return META_COLOR; // gate count — cyan
+              return STATUS_COLOR; // lifecycle status — orange
             };
             const lineColor = (index, kind) => (isRainbow() ? RAINBOW[index % RAINBOW.length] : settled(kind));
             const todoColor = (index, item) => {
@@ -144,17 +179,19 @@ const tui = async (api, options) => {
               if (item.status === "done") return TODO_DONE_COLOR;
               return model().state === "done" ? doneColor : muted;
             };
-            // Goal sessions render a Goal-owned todo section (GOAL label, then the goal
-            // title, status, and structured todos — each on its own line). Non-Goal /
-            // no-goal sessions returned undefined above, so native todos remain.
+            // Goal sessions render a Goal-owned todo section — GOAL label, goal title,
+            // gate count, lifecycle status, then structured todos — EACH on its own
+            // line in its own colour. Non-Goal / no-goal sessions returned undefined
+            // above, so the native todo section shows instead.
             return (
               <Show when={model().state !== "none"}>
                 <box flexDirection="column" paddingTop={1}>
                   <text fg={lineColor(0, "label")}><b>{model().label || "GOAL"}</b></text>
                   <text fg={lineColor(1, "title")}>{model().goal}</text>
-                  <text fg={lineColor(2, "meta")}>{`${model().gates} · ${model().status}`}</text>
+                  <text fg={lineColor(2, "gates")}>{model().gates}</text>
+                  <text fg={lineColor(3, "status")}>{model().status}</text>
                   <For each={model().todos || []}>
-                    {(item, index) => <text fg={todoColor(index() + 3, item)}>{`${item.status === "done" ? "✓" : "□"} ${item.text}`}</text>}
+                    {(item, index) => <text fg={todoColor(index() + 4, item)}>{`${item.status === "done" ? "✓" : "□"} ${item.text}`}</text>}
                   </For>
                 </box>
               </Show>

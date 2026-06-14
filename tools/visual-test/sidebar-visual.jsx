@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/solid */
 /**
  * Visual + behavioral test for the real goal-sidebar.tsx TUI component.
  *
@@ -39,6 +40,12 @@ const sidebarMod = await import(join(REPO, "plugins/goal-sidebar.tsx"));
 const tui = sidebarMod.tui || sidebarMod.default?.tui; // entry exports `default { id, tui }`
 const { stateBaseDir, projectKey } = await import(join(REPO, "plugins/goal-guard/persistence.js"));
 const { createState } = await import(join(REPO, "plugins/goal-guard/state.js"));
+const { readSidebarModel } = await import(join(REPO, "plugins/goal-guard/sidebar-data.js"));
+
+/** The model the slot will project for a worktree+session (same projection the .tsx uses). */
+function modelFor(worktree, sessionId = "s1") {
+  return readSidebarModel({ worktree, sessionId, env: process.env });
+}
 
 const YELLOW = [255, 215, 0]; // running
 const RED = [255, 85, 85]; // done
@@ -68,7 +75,14 @@ async function render({ worktree, sessionId = "s1", options, width = 44, height 
   await tui(api, options);
   const slot = getSlot();
   if (typeof slot !== "function") return { frame: "", spans: [], t: null, registered: false };
-  const t = await testRender(() => slot({}, { session_id: sessionId }), { width, height });
+  // When the projection is "none" the slot renders nothing (Show=false) so native
+  // todos stay. opentui's testRender can't host an empty ROOT node (in OpenCode the
+  // slot lives inside the sidebar box), so verify that case via the data model and
+  // skip the render rather than orphan. The node tests cover the "none" projection.
+  if (modelFor(worktree, sessionId).state === "none") return { frame: "", spans: [], t: null, registered: true, empty: true };
+  // Wrap in a parent box so the rendered Goal section has a root node, mirroring how
+  // OpenCode inserts the slot into the sidebar's box.
+  const t = await testRender(() => <box>{slot({}, { session_id: sessionId })}</box>, { width, height });
   await t.renderOnce();
   return { frame: t.captureCharFrame(), spans: t.renderer.currentRenderBuffer.getSpanLines(), t, registered: true };
 }
@@ -104,7 +118,14 @@ try {
     check("GOAL label starts rainbow red (first-display)", sameColor(spanFor(spans, "GOAL")?.rgba, [255, 85, 85]));
     check("goal title is rainbow orange on the next line (first-display)", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, [255, 170, 0]));
     check("GOAL label is bold", spanFor(spans, "GOAL")?.attr === 1);
-    check("status line shows gates · in progress and NO 'changes pending'", /\d\/\d gates · in progress/.test(frame) && !frame.includes("changes pending"), frame);
+    check(
+      "gates and status are on SEPARATE lines (no 'gates · in progress'), no 'changes pending'",
+      frame.split("\n").some((l) => l.trim() === "0/5 gates") &&
+        frame.split("\n").some((l) => l.trim() === "in progress") &&
+        !/gates ·/.test(frame) &&
+        !frame.includes("changes pending"),
+      frame,
+    );
   }
   {
     writeSnapshot("/proj/nogoal", [["s1", session({ touchedAt: 3 })]]);
@@ -120,11 +141,12 @@ try {
     const { api, getSlot } = mockApi("/proj/mixed");
     await tui(api, { sidebarRainbowMs: 0 });
     const slot = getSlot();
-    const t = await testRender(() => slot({}, { session_id: "build-session" }), { width: 44, height: 10 });
-    await t.renderOnce();
-    const frame = t.captureCharFrame();
-    banner("Mixed worktree, Build session"); show(frame);
-    check("registered Goal slot does not render for Build session", !frame.includes("Visible only in Goal") && !frame.includes("GOAL"));
+    banner("Mixed worktree, Build session");
+    // The Build session has its own state (active:false) — its projection must be
+    // "none" so the slot renders nothing and the goal-session's goal never bleeds in.
+    const buildModel = modelFor("/proj/mixed", "build-session");
+    check("Build session projects 'none' (no goal section, no goal bleed-in)", buildModel.state === "none" && buildModel.goal === "");
+    check("the goal-session DOES have a goal in the same worktree", modelFor("/proj/mixed", "goal-session").state !== "none");
     const noProps = slot({}, {});
     check("slot invocation without session id returns nothing", noProps === undefined);
   }
@@ -138,7 +160,7 @@ try {
     await tui(api, { sidebarRainbowMs: 0 });
     const slot = getSlot();
     const renderSession = async (sid) => {
-      const t = await testRender(() => slot({}, { session_id: sid }), { width: 44, height: 10 });
+      const t = await testRender(() => <box>{slot({}, { session_id: sid })}</box>, { width: 44, height: 10 });
       await t.renderOnce();
       return t.captureCharFrame();
     };

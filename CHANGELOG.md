@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.4.2
+
+### The sidebar Goal section now actually renders in the live TUI
+
+- **Root-cause fix.** The `sidebar_content` slot bailed at mount with
+  `return undefined` whenever no goal existed *yet* — but the goal is normally set
+  *after* the sidebar mounts, so the polling component never started and the Goal
+  section never appeared. The slot now **always mounts a reactive, polling
+  component** and reveals the section (via `<Show>`) the moment the goal is
+  recorded. Verified by driving the real OpenCode TUI in a PTY.
+- **Stale plugin cache.** OpenCode caches TUI plugins under
+  `~/.cache/opencode/packages/<name>@<spec>/` and never re-checks npm, so upgrades
+  kept loading the *old* sidebar build. The installer now clears that cache on
+  install and uninstall, so a restart picks up the installed version.
+- The first-display rainbow now triggers when the goal first appears (not at
+  mount, when there may be no goal yet).
+- The sidebar resolves state under both the worktree and directory path keys, so a
+  path-key mismatch can't hide an active goal.
+
+### Sidebar layout
+
+- The gate count and the lifecycle status are now on **separate lines**, each in
+  its own colour (GOAL = yellow, title = white, gates = cyan, status = orange).
+
+### Native todos are replaced in goal mode
+
+- The `goal` agent no longer uses the native `todowrite` tool (it is disabled in
+  Goal Mode). Because OpenCode renders native todos as their own sidebar slot, the
+  only way to replace them is to stop producing them — so in a goal session the
+  native todo list stays empty and the structured Goal-owned section is what shows.
+  Build and every other mode keep their native todos.
+
 ## v0.4.1
 
 ### Restructured Goal sidebar todo section

@@ -278,12 +278,18 @@ enforcement and writes its state to disk, and an experimental TUI plugin
   { "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
   ```
 
-  Restart OpenCode after install so it picks up the TUI plugin (it resolves the
-  package and provides the `@opentui/solid` runtime). The Goal todo section appears
-  in a **Goal session** view (not the home screen and not Build mode). The visual
-  harness renders it with a headless OpenTUI renderer in
-  [visual test](tools/visual-test/README.md) (`npm run test:visual`). The
-  enforcement core is a separate server plugin and works regardless of the sidebar.
+  OpenCode installs the referenced package into its own plugin cache
+  (`~/.cache/opencode/packages/`) and provides the `@opentui/solid` + `solid-js`
+  runtime to it. It does **not** re-check that cache for newer versions, so the
+  installer clears the cached copy on install/uninstall — that's why an upgrade
+  needs only a restart to load the new sidebar. Restart OpenCode after install. The
+  Goal todo section appears in a **Goal session** view (not the home screen and not
+  Build mode), and because the Goal agent does its own todo tracking (native
+  `todowrite` is disabled in Goal Mode), it replaces — rather than sits beside —
+  the native todo list while a goal is active. The visual harness renders the
+  component headlessly in [visual test](tools/visual-test/README.md)
+  (`npm run test:visual`); the enforcement core is a separate server plugin and
+  works regardless of the sidebar.
 - **Toasts.** Review verdicts and completion-unlock events surface as toasts
   (`toastOnReview`), and blocked destructive commands / premature completions
   toast as before (`toastOnBlock`).
