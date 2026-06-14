@@ -38,14 +38,18 @@ test("shortGoalLabel returns empty when nothing is recorded", () => {
 // sidebarView
 // ---------------------------------------------------------------------------
 
-test("sidebarView is null for an inactive or goal-less session", () => {
-  assert.equal(sidebarView(createState(), DEFAULT_CONFIG), null);
-  assert.equal(sidebarView(activeState(), DEFAULT_CONFIG), null);
+test("sidebarView reports hasGoal=false for an inactive or goal-less session", () => {
+  assert.equal(sidebarView(createState(), DEFAULT_CONFIG).hasGoal, false);
+  assert.equal(sidebarView(activeState(), DEFAULT_CONFIG).hasGoal, false);
+  // Never null — the sidebar always has something to render ("No goal").
+  assert.ok(sidebarView(undefined, DEFAULT_CONFIG));
+  assert.equal(sidebarView(undefined, DEFAULT_CONFIG).hasGoal, false);
 });
 
-test("sidebarView surfaces gates, dirty flag, and readiness", () => {
+test("sidebarView surfaces gates, dirty flag, and readiness when a goal is set", () => {
   const st = activeState({ goalText: "Fix the parser", dirty: true });
   const v = sidebarView(st, DEFAULT_CONFIG);
+  assert.equal(v.hasGoal, true);
   assert.equal(v.goal, "Fix the parser");
   assert.equal(v.required, 5); // BASE_GATES
   assert.equal(v.passing, 0);
@@ -86,11 +90,12 @@ test("readSidebarModel reads the guard's persisted snapshot for a worktree", () 
     writeFileSync(file, JSON.stringify(snapshot));
 
     const model = readSidebarModel({ worktree, env });
+    assert.equal(model.hasGoal, true);
     assert.equal(model.goal, "Ship the sidebar");
     assert.equal(model.required, 5);
 
-    // Unknown worktree → no file → null, never throws.
-    assert.equal(readSidebarModel({ worktree: "/nope", env }), null);
+    // Unknown worktree → no file → hasGoal:false (renders "No goal"), never throws.
+    assert.equal(readSidebarModel({ worktree: "/nope", env }).hasGoal, false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -104,14 +109,78 @@ test("new toggles default on and coerce from options/env", () => {
   assert.equal(DEFAULT_CONFIG.toastOnReview, true);
   assert.equal(DEFAULT_CONFIG.sidebarBanner, true);
   assert.equal(DEFAULT_CONFIG.sidebarColor, "#FFD700");
+  assert.equal(DEFAULT_CONFIG.sidebarMutedColor, "#808080");
 
-  const c = resolveConfig({ toastOnReview: false, sidebarColor: "#00FF00" }, {});
+  const c = resolveConfig({ toastOnReview: false, sidebarColor: "#00FF00", sidebarMutedColor: "#111111" }, {});
   assert.equal(c.toastOnReview, false);
   assert.equal(c.sidebarColor, "#00FF00");
+  assert.equal(c.sidebarMutedColor, "#111111");
 
-  const e = resolveConfig(undefined, { GOAL_GUARD_SIDEBAR_BANNER: "off", GOAL_GUARD_SIDEBAR_COLOR: "#123456" });
+  const e = resolveConfig(undefined, {
+    GOAL_GUARD_SIDEBAR_BANNER: "off",
+    GOAL_GUARD_SIDEBAR_COLOR: "#123456",
+    GOAL_GUARD_SIDEBAR_MUTED_COLOR: "#654321",
+  });
   assert.equal(e.sidebarBanner, false);
   assert.equal(e.sidebarColor, "#123456");
+  assert.equal(e.sidebarMutedColor, "#654321");
+});
+
+// ---------------------------------------------------------------------------
+// Robustness: a running task with no goal, and malformed/partial state
+// ---------------------------------------------------------------------------
+
+test("active session with no goal text → hasGoal:false (renders 'No goal')", () => {
+  const running = activeState(); // active but no contract/goalText
+  assert.equal(sidebarView(running, DEFAULT_CONFIG).hasGoal, false);
+});
+
+test("readSidebarModel never throws on malformed/partial snapshots", () => {
+  const dir = mkdtempSync(join(tmpdir(), "goal-sidebar-bad-"));
+  try {
+    const env = { XDG_STATE_HOME: dir };
+    const worktree = "/p";
+    const file = sidebarStateFile(worktree, env);
+    mkdirSync(join(file, ".."), { recursive: true });
+
+    for (const bad of ["not json{", "{}", '{"sessions":null}', '{"sessions":[["k",null]]}', '{"sessions":[[1,2,3]]}', "[]"]) {
+      writeFileSync(file, bad);
+      const m = readSidebarModel({ worktree, env });
+      assert.ok(m && m.hasGoal === false, `bad input handled: ${bad}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pickSession tolerates malformed entries and missing fields", () => {
+  assert.equal(pickSession(null, undefined), null);
+  assert.equal(pickSession({}, undefined), null);
+  assert.equal(pickSession({ sessions: "x" }, undefined), null);
+  assert.equal(pickSession({ sessions: [["k", null], [1, 2, 3], ["a", { active: false }]] }, undefined), null);
+  const ok = pickSession({ sessions: [["a", activeState({ goalText: "g", touchedAt: 1 })]] }, undefined);
+  assert.equal(ok.goalText, "g");
+});
+
+test("sidebarView 'ready' state when every gate passes and tree is clean", () => {
+  const st = activeState({
+    goalText: "Add auth tokens",
+    latestVerdict: {
+      "goal-prompt-auditor": { verdict: "PASS", seq: 9 },
+      "goal-reviewer": { verdict: "PASS", seq: 9 },
+      "goal-diff-reviewer": { verdict: "PASS", seq: 9 },
+      "goal-verifier": { verdict: "PASS", seq: 9 },
+      "goal-final-auditor": { verdict: "PASS", seq: 9 },
+      "goal-security-reviewer": { verdict: "PASS", seq: 9 }, // contextual: "auth tokens"
+    },
+    stickyGates: ["goal-security-reviewer"],
+    lastEditSeq: 1,
+    dirty: false,
+  });
+  const v = sidebarView(st, DEFAULT_CONFIG);
+  assert.equal(v.hasGoal, true);
+  assert.equal(v.allowed, true);
+  assert.match(v.status, /6\/6 gates · ready/);
 });
 
 // ---------------------------------------------------------------------------

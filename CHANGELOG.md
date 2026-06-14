@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.1
+
+- Sidebar: when a task is running but no goal is set, show a clean grey `No goal`
+  (nothing else) instead of a blank/absent banner. New `sidebarMutedColor` option
+  (`GOAL_GUARD_SIDEBAR_MUTED_COLOR`, default `#808080`).
+- `summary.sidebarView` now always returns a model (`{ hasGoal: false }` vs
+  `{ hasGoal: true, … }`) so the sidebar renders unconditionally.
+- Add a headless visual test (`npm run test:visual`, `tools/visual-test/`) that
+  renders the real component with @opentui/solid and asserts text + exact colours
+  + bold attributes across goal / no-goal / ready / custom-colour / truncation /
+  disabled / no-API / resize scenarios. Excluded from the npm package and CI.
+- Hardened the sidebar projection against malformed/partial persisted state.
+
 ## v0.3.0
 
 - Honest benchmarks: add an EXTERNAL corpus of 704 real third-party commands from

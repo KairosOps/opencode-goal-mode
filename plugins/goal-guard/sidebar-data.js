@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { stateBaseDir, projectKey } from "./persistence.js";
 import { DEFAULT_CONFIG } from "./config.js";
-import { sidebarView } from "./summary.js";
+import { sidebarView, NO_GOAL } from "./summary.js";
 
 /** Absolute path of the guard's state file for a given worktree. */
 export function sidebarStateFile(worktree, env = process.env) {
@@ -49,8 +49,10 @@ export function pickSession(snapshot, sessionId) {
 }
 
 /**
- * Build the sidebar banner model for a worktree, or null if there is nothing to
- * show. Returns { goal, status, allowed, … } (see summary.sidebarView).
+ * Build the sidebar banner model for a worktree. ALWAYS returns an object so the
+ * sidebar renders unconditionally: `{ hasGoal: false }` when there is no state,
+ * no active session, or no goal (render a muted "No goal"); otherwise
+ * `{ hasGoal: true, goal, status, … }` (see summary.sidebarView).
  *
  * @param {object} opts
  * @param {string} opts.worktree   Project worktree root (same key the guard uses).
@@ -63,9 +65,9 @@ export function readSidebarModel({ worktree, sessionId, config = DEFAULT_CONFIG,
   try {
     snapshot = JSON.parse(readFileSync(sidebarStateFile(worktree, env), "utf8"));
   } catch {
-    return null; // no state yet, or unreadable — show nothing.
+    return NO_GOAL; // no state yet, or unreadable.
   }
   const record = pickSession(snapshot, sessionId);
-  if (!record) return null;
+  if (!record) return NO_GOAL;
   return sidebarView(record, config);
 }

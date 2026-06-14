@@ -170,7 +170,9 @@ hooks still load.
 `{ tui }` module, mutually exclusive with `{ server }`). It registers a
 `sidebar_content` slot via `api.slots.register({ slots: { sidebar_content } })`
 and renders, in the configured colour (`#FFD700` by default), the short goal
-label plus a `passing/total gates · dirty/ready` line.
+label plus a `passing/total gates · dirty/ready` line. It renders
+unconditionally: when a task is running with no goal set, it shows a muted grey
+`No goal` (`sidebarView` returns `{ hasGoal: false }`) rather than a blank slot.
 
 It is *paired* with the server plugin only through the persisted state file:
 `sidebar-data.js` recomputes the same `stateBaseDir`/`projectKey` path the guard
@@ -181,6 +183,12 @@ in the `tui` entry is wrapped so a missing slot API, missing JSX runtime, or rea
 error degrades to rendering nothing — it can never break the TUI. The server plugin
 also emits review-verdict and completion-unlock toasts (`toastOnReview`) so review
 progress is visible even without the banner.
+
+The JSX renderer is verified headlessly with `@opentui/solid`'s `testRender` in
+`tools/visual-test/sidebar-visual.jsx` (`npm run test:visual`, needs Bun + the
+OpenTUI stack): it asserts the rendered text, the exact foreground colours, and
+the bold attribute for goal / "No goal" / ready states. That tool is excluded from
+the npm package and from `node --test`/CI.
 
 ## Configuration
 

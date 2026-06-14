@@ -127,13 +127,15 @@ enforcement and writes its state to disk, and an experimental TUI plugin
 
 - **Sidebar goal banner (experimental).** The current goal renders in shining
   yellow in the sidebar (`sidebar_content` slot), with a `passing/total gates ·
-  dirty/ready` status line, and updates as reviews land. It requires a
-  TUI-plugin-capable OpenCode (one exposing `api.slots.register`); on any older
-  runtime it silently no-ops, so it can never break your TUI. Set
-  `sidebarBanner: false` (or `GOAL_GUARD_SIDEBAR_BANNER=0`) to disable, or
-  `sidebarColor` to recolour it. Because no local environment can run OpenCode's
-  TUI runtime, this banner is shipped best-effort and should be verified in your
-  own TUI.
+  dirty/ready` status line, and updates as reviews land. When a task is running
+  but **no goal is set**, it shows a clean grey `No goal` and nothing else. It
+  requires a TUI-plugin-capable OpenCode (one exposing `api.slots.register`); on
+  any older runtime it silently no-ops, so it can never break your TUI. Set
+  `sidebarBanner: false` (or `GOAL_GUARD_SIDEBAR_BANNER=0`) to disable,
+  `sidebarColor` to recolour the goal, or `sidebarMutedColor` for the "No goal"
+  line. It is rendered-and-asserted headlessly by the
+  [visual test](tools/visual-test/README.md) (`npm run test:visual`); still worth
+  a glance in your own TUI.
 - **Toasts.** Review verdicts and completion-unlock events surface as toasts
   (`toastOnReview`), and blocked destructive commands / premature completions
   toast as before (`toastOnBlock`).
@@ -202,6 +204,7 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `toastOnReview` / `GOAL_GUARD_TOAST_ON_REVIEW` | `true` | Toast on each review verdict and when completion unlocks. |
 | `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the experimental yellow goal banner in the TUI sidebar. |
 | `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Foreground colour of the sidebar goal banner. |
+| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Colour of the muted "No goal" line when no goal is set. |
 
 ## Custom tools
 

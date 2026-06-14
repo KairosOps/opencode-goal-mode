@@ -21,21 +21,25 @@ export function shortGoalLabel(state, max = 80) {
   return `${base.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** Sentinel for "a task is running but no goal is set" — the sidebar shows a muted "No goal". */
+export const NO_GOAL = Object.freeze({ hasGoal: false });
+
 /**
- * Compact projection for the TUI sidebar banner: the short goal label, a
- * one-line gate/dirty status, and whether completion is currently allowed.
- * Returns null when there is no active goal worth showing.
+ * Compact projection for the TUI sidebar banner. ALWAYS returns an object so the
+ * sidebar can render unconditionally:
+ *   - `{ hasGoal: false }` when no active goal is set (render a muted "No goal").
+ *   - `{ hasGoal: true, goal, status, … }` when a goal is active (render in colour).
  */
 export function sidebarView(state, config) {
-  if (!state || !state.active) return null;
+  if (!state || !state.active) return NO_GOAL;
   const goal = shortGoalLabel(state);
-  if (!goal) return null;
+  if (!goal) return NO_GOAL;
   const required = requiredGates(state, config);
   const missing = missingGates(state, config);
   const passing = required.length - missing.length;
   const allowed = required.length > 0 && missing.length === 0 && !state.dirty;
   const status = `${passing}/${required.length} gates` + (state.dirty ? " · dirty" : "") + (allowed ? " · ready" : "");
-  return { goal, status, allowed, reviewCycles: state.reviewCycles, passing, required: required.length, dirty: Boolean(state.dirty) };
+  return { hasGoal: true, goal, status, allowed, reviewCycles: state.reviewCycles, passing, required: required.length, dirty: Boolean(state.dirty) };
 }
 
 export function summarizeState(state, config) {

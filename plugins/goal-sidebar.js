@@ -28,10 +28,11 @@
  */
 
 import { createSignal, onCleanup, Show } from "solid-js";
-import { sidebarView } from "./goal-guard/summary.js";
+import { sidebarView, NO_GOAL } from "./goal-guard/summary.js";
 import { DEFAULT_CONFIG } from "./goal-guard/config.js";
 
 const DEFAULT_COLOR = "#FFD700"; // shining yellow
+const DEFAULT_MUTED = "#808080"; // clean grey for "No goal"
 const POLL_MS = 1500;
 
 function resolveOptions(options, env) {
@@ -41,7 +42,8 @@ function resolveOptions(options, env) {
   const disabled =
     enabledOpt === false || enabledEnv === "0" || enabledEnv === "false" || enabledEnv === "off";
   const color = options?.sidebarColor || e.GOAL_GUARD_SIDEBAR_COLOR || DEFAULT_COLOR;
-  return { enabled: !disabled, color };
+  const muted = options?.sidebarMutedColor || e.GOAL_GUARD_SIDEBAR_MUTED_COLOR || DEFAULT_MUTED;
+  return { enabled: !disabled, color, muted };
 }
 
 /**
@@ -82,14 +84,14 @@ function pickSession(snapshot, sessionId) {
 }
 
 function readModel(worktree, sessionId) {
-  const snapshot = readSnapshot(worktree);
-  if (!snapshot) return null;
-  const record = pickSession(snapshot, sessionId);
-  if (!record) return null;
   try {
+    const snapshot = readSnapshot(worktree);
+    if (!snapshot) return NO_GOAL;
+    const record = pickSession(snapshot, sessionId);
+    if (!record) return NO_GOAL;
     return sidebarView(record, DEFAULT_CONFIG);
   } catch {
-    return null;
+    return NO_GOAL;
   }
 }
 
@@ -98,7 +100,7 @@ export const id = "goal-mode-sidebar";
 /** @type {import("@opencode-ai/plugin/tui").TuiPlugin} */
 export const tui = async (api, options) => {
   try {
-    const { enabled, color } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
+    const { enabled, color, muted } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
     if (!enabled) return;
     if (!api?.slots?.register) return; // runtime without the slot API → no-op.
 
@@ -110,25 +112,26 @@ export const tui = async (api, options) => {
         sidebar_content(_ctx, props) {
           const read = () => {
             try {
-              return readModel(worktree, props?.session_id);
+              return readModel(worktree, props?.session_id) || NO_GOAL;
             } catch {
-              return null;
+              return NO_GOAL;
             }
           };
           const [model, setModel] = createSignal(read());
           const timer = setInterval(() => setModel(read()), POLL_MS);
           onCleanup(() => clearInterval(timer));
+          // Always render: a muted "No goal" when none is set, the goal in colour otherwise.
           return (
-            <Show when={model()}>
-              <box flexDirection="column">
+            <box flexDirection="column">
+              <Show when={model().hasGoal} fallback={<text fg={muted}>No goal</text>}>
                 <text fg={color}>
                   {"◆ "}
                   <b>GOAL</b>
                   {`  ${model().goal}`}
                 </text>
                 <text fg={color}>{model().status}</text>
-              </box>
-            </Show>
+              </Show>
+            </box>
           );
         },
       },
