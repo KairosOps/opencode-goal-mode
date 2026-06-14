@@ -188,8 +188,9 @@ progress is visible even without the banner.
 The JSX renderer is verified headlessly with `@opentui/solid`'s `testRender` in
 `tools/visual-test/sidebar-visual.jsx` (`npm run test:visual`, needs Bun + the
 OpenTUI stack): it asserts the rendered text, the exact foreground colours, and
-the bold attribute for Goal todo / done / native-todo-preserved states. That tool is excluded from
-the npm package and from `node --test`/CI.
+the bold attribute for Goal todo / done / native-todo-preserved states. That tool
+is excluded from the npm package and from `node --test`; the GitHub CI workflow
+runs it in a separate Bun/OpenTUI job.
 
 ## Configuration
 

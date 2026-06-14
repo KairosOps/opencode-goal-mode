@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.10
+
+- Clarified the recommended install command to use a persistent global npm install
+  before running the installer, so OpenCode can resolve the TUI package on future
+  starts. `npx` remains documented for temporary installs/server-side checks.
+- Added the missing historical `v0.3.8` changelog section. `v0.3.8` reached npm,
+  but its GitHub Release workflow failed while generating release notes, so it was
+  superseded by `v0.3.9`.
+
 ## v0.3.9
 
 - Installer docs and `--help` now put the one-command `npx opencode-goal-mode --global`
@@ -11,6 +20,12 @@
   OpenCode's native todo section remains in place.
 - Destructive-command blocking no longer activates Goal enforcement for Build or
   other non-Goal sessions, preventing non-Goal tasks from being classified as goals.
+
+## v0.3.8
+
+- Superseded release: npm publish succeeded, but the GitHub Release workflow failed
+  because the changelog section was still named `Unreleased`. The same functional
+  changes shipped correctly in `v0.3.9` with matching npm and GitHub releases.
 
 ## v0.3.7
 

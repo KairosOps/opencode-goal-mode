@@ -17,14 +17,15 @@ TUI sidebar.
 **One command** (recommended; needs [Node](https://nodejs.org) 20.11+ and a working [OpenCode](https://opencode.ai) install):
 
 ```bash
-npx opencode-goal-mode --global
+npm install -g opencode-goal-mode && opencode-goal-mode --global
 ```
 
 Then **restart OpenCode**. That's the whole install: it copies the Goal agent,
 review subagents, slash commands, and guard plugin into `~/.config/opencode`, and
 merge-safely registers the Goal todo sidebar in `~/.config/opencode/tui.json`.
 In the agent picker you'll see only the **`goal`** agent; reviewers are subagents
-it drives automatically. Goal Mode inherits your existing OpenCode model/provider.
+it drives automatically. The global install keeps the TUI package resolvable on
+future OpenCode starts; Goal Mode inherits your existing OpenCode model/provider.
 
 <details>
 <summary>Other ways to install</summary>
@@ -33,6 +34,10 @@ it drives automatically. Goal Mode inherits your existing OpenCode model/provide
 # Global npm install, then run the installer
 npm install -g opencode-goal-mode
 opencode-goal-mode --global          # alias of opencode-goal-mode-install
+
+# Temporary npx install (server-side components work; for the TUI sidebar,
+# prefer the global install above so OpenCode can resolve the package later)
+npx opencode-goal-mode --global
 
 # Into a single project (writes ./.opencode, including ./.opencode/tui.json)
 npx opencode-goal-mode
@@ -253,6 +258,7 @@ enforcement and writes its state to disk, and an experimental TUI plugin
 ## Installer options
 
 ```bash
+npm install -g opencode-goal-mode && opencode-goal-mode --global
 npx opencode-goal-mode --global --dry-run
 npx opencode-goal-mode --global
 opencode-goal-mode-install --global --uninstall
