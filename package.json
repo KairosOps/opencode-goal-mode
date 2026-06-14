@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "main": "plugins/goal-sidebar.tsx",
@@ -25,6 +25,7 @@
     "plugins/",
     "research/",
     "scripts/install.mjs",
+    "scripts/postinstall.mjs",
     "ARCHITECTURE.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -51,7 +52,8 @@
     "ci": "npm run validate && npm run audit",
     "prepublishOnly": "npm run ci && npm run publish:check",
     "install:local": "node scripts/install.mjs",
-    "install:global": "node scripts/install.mjs --global"
+    "install:global": "node scripts/install.mjs --global",
+    "postinstall": "node scripts/postinstall.mjs"
   },
   "keywords": [
     "opencode",

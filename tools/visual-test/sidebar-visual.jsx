@@ -1,4 +1,3 @@
-/** @jsxImportSource @opentui/solid */
 /**
  * Visual + behavioral test for the real goal-sidebar.tsx TUI component.
  *
@@ -80,9 +79,9 @@ async function render({ worktree, sessionId = "s1", options, width = 44, height 
   // slot lives inside the sidebar box), so verify that case via the data model and
   // skip the render rather than orphan. The node tests cover the "none" projection.
   if (modelFor(worktree, sessionId).state === "none") return { frame: "", spans: [], t: null, registered: true, empty: true };
-  // Wrap in a parent box so the rendered Goal section has a root node, mirroring how
-  // OpenCode inserts the slot into the sidebar's box.
-  const t = await testRender(() => <box>{slot({}, { session_id: sessionId })}</box>, { width, height });
+  // The Goal section renders a <box> root, so testRender hosts it directly (the
+  // empty/no-goal cases are handled above via modelFor, avoiding an orphan root).
+  const t = await testRender(() => slot({}, { session_id: sessionId }), { width, height });
   await t.renderOnce();
   return { frame: t.captureCharFrame(), spans: t.renderer.currentRenderBuffer.getSpanLines(), t, registered: true };
 }
@@ -160,7 +159,7 @@ try {
     await tui(api, { sidebarRainbowMs: 0 });
     const slot = getSlot();
     const renderSession = async (sid) => {
-      const t = await testRender(() => <box>{slot({}, { session_id: sid })}</box>, { width: 44, height: 10 });
+      const t = await testRender(() => slot({}, { session_id: sid }), { width: 44, height: 10 });
       await t.renderOnce();
       return t.captureCharFrame();
     };

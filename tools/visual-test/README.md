@@ -23,12 +23,12 @@ If the OpenTUI stack is not installed, the script prints `SKIP` and exits 0.
 
 ## What it checks
 
-- Goal set → first-display rainbow text, a bold `Goal todos` label, and a
-  `passing/total gates · status` line (no "No goal").
+- Goal set → first-display rainbow, a bold `GOAL` label, the goal title, and the
+  gate count and lifecycle status on their own separate lines (no "No goal").
 - A running task with **no goal** → the Goal slot returns no content, so OpenCode's
   native todo section can remain in place.
 - No guard state at all → no Goal content is rendered (never crashes or shows a stale goal).
-- All gates pass + clean tree → `completed · N review cycles` in the status line.
+- All gates pass + clean tree → a `completed · N review cycles` status line.
 - Custom colour via the `sidebarColor` option.
 - Long goals are truncated with an ellipsis.
 - Disabled via `sidebarBanner:false` → nothing registers.

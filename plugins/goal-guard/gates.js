@@ -71,7 +71,7 @@ export function requiredGates(state, config) {
 
 /** A gate is satisfied when its latest verdict is PASS and newer than the last edit. */
 export function gatePassedFresh(state, agent) {
-  const v = state.latestVerdict[agent];
+  const v = state.latestVerdict?.[agent];
   if (!v || v.verdict !== "PASS") return false;
   return v.seq > (state.lastEditSeq || 0);
 }

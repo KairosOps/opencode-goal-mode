@@ -93,7 +93,10 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
       try {
         if (!inp?.sessionID) return;
         const state = store.stateFor(inp.sessionID);
-        if (isPrimaryAgent(inp.agent)) state.active = true;
+        // `active` reflects whether this session is CURRENTLY a Goal session. Switching
+        // the session's agent to Build (or anything non-goal) must deactivate it, or
+        // the sidebar/guard would keep treating an explicit Build session as a goal.
+        if (inp.agent) state.active = isPrimaryAgent(inp.agent);
         const text = partsText(out?.parts);
         if (text && state.active) {
           // Accumulate goal text (bounded) so contextual gates can be derived.
@@ -115,7 +118,10 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (!normalized) return;
         const state = store.stateFor(normalized);
         state.currentAgent = inp.agent;
-        if (isPrimaryAgent(inp.agent)) state.active = true;
+        // Track the current mode: a session is active (a goal) only while its agent
+        // is the goal primary. Switching to Build/Plan/etc. deactivates it so the
+        // Goal sidebar and enforcement stop treating it as a goal.
+        if (inp.agent) state.active = isPrimaryAgent(inp.agent);
       } catch {
         /* ignore */
       }
@@ -178,13 +184,14 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
     async "tool.execute.after"(inp, out) {
       try {
         const state = store.stateFor(inp?.sessionID);
-        // Goal bookkeeping is GOAL-ONLY. A Build/Plan/custom session must never have
-        // its edits, mutations, verification, or verdicts recorded as goal state —
-        // otherwise the guard would treat a non-Goal message/task as if it were a
-        // goal. Only an active Goal session (or a goal-namespace subagent's own
-        // session, for verdict capture) is tracked. Destructive-command blocking is
-        // handled in tool.execute.before and still applies in every mode.
-        if (!state.active && !isGoalAgent(state.currentAgent)) return;
+        // Goal bookkeeping runs only for an active Goal session, or for a REVIEW
+        // subagent's own child session (so the agent-path can capture its verdict).
+        // It must NOT run for a Build/Plan/custom session, nor for a non-review goal
+        // WORKER child session (e.g. goal-implementer/goal-explorer) — otherwise that
+        // worker's edits would mark it dirty and activate it, leaking goal completion
+        // enforcement into a worker's prompt. Destructive-command blocking lives in
+        // tool.execute.before and still applies in every mode.
+        if (!state.active && !isReviewAgent(state.currentAgent)) return;
         const tool = inp?.tool;
         const isReviewing = isReviewAgent(state.currentAgent);
 
@@ -278,6 +285,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
       try {
         if (!inp?.sessionID || !out || !Array.isArray(out.context)) return;
         const state = store.stateFor(inp.sessionID);
+        if (!state.active) return; // only preserve goal state for active Goal sessions
         out.context.push(
           `Goal Guard state: ${summarizeState(state, config)}. Preserve Goal Contract, Verification Ledger, ` +
             `Review Ledger, Reviewer Memory, review cycle count, dirty state, and open findings across compaction.`,

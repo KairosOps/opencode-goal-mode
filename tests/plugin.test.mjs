@@ -17,10 +17,14 @@ function makeGuard(extra = {}) {
 }
 
 async function passAllBaseGates(hooks, store, sessionID) {
+  // Reviewers run as subagents via the task tool against the parent goal session.
+  // The parent session stays the `goal` agent (so it remains active); each reviewer's
+  // PASS verdict is recorded through the task path — mirroring real OpenCode, where
+  // reviewers run in child sessions and never switch the parent's agent.
+  await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
   for (const agent of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
-    await hooks["chat.params"]({ sessionID, agent }, {});
     await hooks["tool.execute.after"](
-      { tool: "bash", sessionID, callID: agent, args: { command: "git status" } },
+      { tool: "task", sessionID, callID: agent, args: { subagent_type: agent } },
       { output: "Verdict: PASS", title: "", metadata: {} },
     );
   }
@@ -259,6 +263,48 @@ test("risky bash in build mode does not turn the session into a goal", async () 
   const out = { text: "Goal Completed by the test fixture." };
   await hooks["experimental.text.complete"]({ sessionID: "build-mode", messageID: "m", partID: "p" }, out);
   assert.doesNotMatch(out.text, /Goal Not Completed/);
+});
+
+test("a goal WORKER subagent (e.g. goal-implementer) child session is not activated by its edits", async () => {
+  const { hooks, store } = makeGuard();
+  // A worker subagent runs in its OWN child session; its edits must not activate it
+  // or leak Goal completion enforcement into the worker's prompt.
+  await hooks["chat.params"]({ sessionID: "impl", agent: "goal-implementer" }, {});
+  await hooks["tool.execute.after"]({ tool: "edit", sessionID: "impl", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+  const st = store.stateFor("impl");
+  assert.equal(st.active, false, "a worker subagent's edits must not activate it");
+  assert.equal(st.dirty, false);
+  assert.equal(st.lastEditSeq, 0);
+  const out = { system: [] };
+  await hooks["experimental.chat.system.transform"]({ sessionID: "impl", model: {} }, out);
+  assert.equal(out.system.length, 0, "no Goal enforcement injected into a worker subagent session");
+});
+
+test("switching a goal session to Build deactivates it (sidebar + subagents + completion)", async () => {
+  const { hooks, store } = makeGuard();
+  // Start as a goal session with a goal.
+  await hooks["chat.params"]({ sessionID: "switch", agent: "goal" }, {});
+  await hooks["chat.message"]({ sessionID: "switch", agent: "goal" }, { parts: [{ type: "text", text: "ship the feature" }] });
+  assert.equal(store.stateFor("switch").active, true);
+
+  // User switches the SAME session to Build.
+  await hooks["chat.params"]({ sessionID: "switch", agent: "build" }, {});
+  assert.equal(store.stateFor("switch").active, false, "switching to Build deactivates the goal session (sidebar stops showing it)");
+
+  // Build can no longer invoke goal-* subagents from this (now non-goal) session.
+  await assert.rejects(
+    () => hooks["tool.execute.before"]({ tool: "task", sessionID: "switch", callID: "c" }, { args: { subagent_type: "goal-reviewer" } }),
+    /Goal Mode subagent|only be invoked by the Goal/i,
+  );
+
+  // A premature completion is NOT rewritten — it is no longer a goal session.
+  const out = { text: "Goal Completed in build mode" };
+  await hooks["experimental.text.complete"]({ sessionID: "switch", messageID: "m", partID: "p" }, out);
+  assert.doesNotMatch(out.text, /Goal Not Completed/);
+
+  // Switching back to Goal re-activates it (the contract/goal data is still there).
+  await hooks["chat.params"]({ sessionID: "switch", agent: "goal" }, {});
+  assert.equal(store.stateFor("switch").active, true, "switching back to Goal re-activates the session");
 });
 
 // ---------------------------------------------------------------------------

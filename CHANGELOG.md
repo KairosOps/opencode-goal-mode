@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.4.3
+
+### Build mode no longer behaves like a goal
+
+- Switching a session from the `goal` agent to Build (or any non-goal agent) now
+  **deactivates** it: `state.active` tracks the current agent (`isPrimaryAgent`),
+  instead of latching `true` forever. The sidebar also gates on the session's live
+  current agent (its latest message), so when you switch to Build the Goal section
+  disappears and OpenCode's native todos return — and a Build session can no longer
+  invoke the `goal-*` subagents or have its completion claims policed.
+- Goal **worker** subagents (e.g. `goal-implementer`) are no longer activated by
+  their own edits, so Goal completion enforcement is never injected into a worker's
+  prompt. Bookkeeping runs only for active goal sessions and review subagents.
+
+### `npm install -g` now updates everything, automatically
+
+- A global-install `postinstall` runs the installer for you — it copies the
+  components into `~/.config/opencode`, registers the Goal sidebar, and clears
+  OpenCode's stale plugin cache — so `npm install -g opencode-goal-mode` **alone**
+  fully installs or upgrades Goal Mode and the new version actually loads on the
+  next restart. It runs only for global installs, never for repo/dev/dependency
+  installs, and never fails the npm install (it prints a hint if it can't finish).
+
+### Fixes
+
+- **CI green again:** the headless visual test no longer requires
+  `@opentui/solid/jsx-dev-runtime` (the CI visual job was failing).
+- Hardened `gatePassedFresh` against partial/legacy snapshots so the TUI never
+  silently fails to render an active goal.
+- Compaction context is only added for active goal sessions (no stray Goal state in
+  a Build session's compaction summary).
+- Docs: corrected the sidebar description (separate gate/status lines; the label is
+  `GOAL`, not "Goal todos").
+
 ## v0.4.2
 
 ### The sidebar Goal section now actually renders in the live TUI

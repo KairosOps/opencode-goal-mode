@@ -35,6 +35,7 @@ const META_COLOR = "#8BE9FD"; // gates line (running) — cyan accent
 const STATUS_COLOR = "#FFB86C"; // status line (running) — orange, distinct from the cyan gates line
 const TODO_DONE_COLOR = "#50FA7B"; // ✓ done todo rows — green
 const POLL_MS = 1500;
+const GOAL_AGENT = "goal"; // the primary Goal agent id (mirrors agents.js PRIMARY_AGENT)
 const RAINBOW = ["#FF5555", "#FFAA00", "#FFFF55", "#55FF55", "#55FFFF", "#5599FF", "#FF55FF"];
 
 function resolveOptions(options, env) {
@@ -127,8 +128,33 @@ const tui = async (api, options) => {
         slots: {
           sidebar_content(_ctx, props) {
             if (!props?.session_id) return undefined;
+            // The session's CURRENT agent, from its latest message (mirrors the
+            // reference OpenCode TUI plugin). This is the authoritative, immediate
+            // signal of whether the session is in Goal mode right now — so when the
+            // user switches to Build (or any non-goal agent) the Goal section vanishes
+            // and OpenCode's native todos return, without waiting for persisted state.
+            const currentAgent = () => {
+              try {
+                const msgs = api?.state?.session?.messages?.(props.session_id);
+                if (Array.isArray(msgs)) {
+                  for (let i = msgs.length - 1; i >= 0; i--) {
+                    const a = msgs[i] && msgs[i].agent;
+                    if (a) return String(a).toLowerCase();
+                  }
+                }
+              } catch {
+                /* messages API unavailable — fall back to persisted goal state */
+              }
+              return undefined;
+            };
             const read = () => {
               try {
+                const agent = currentAgent();
+                // Render only in Goal mode. "goal" and its `goal-*` subagents count as
+                // Goal mode (so the section doesn't flicker out while reviewers run);
+                // any other primary agent (build/plan/custom) renders nothing here.
+                const goalMode = !agent || agent === GOAL_AGENT || agent.startsWith(`${GOAL_AGENT}-`);
+                if (!goalMode) return NO_GOAL;
                 return readModel(worktrees, props?.session_id) || NO_GOAL;
               } catch {
                 return NO_GOAL;

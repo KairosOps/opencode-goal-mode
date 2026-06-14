@@ -244,9 +244,11 @@ enforcement and writes its state to disk, and an experimental TUI plugin
   slot, stacked on separate lines, each in its own colour so it never reads as one
   run of text:
   - a bold **`GOAL`** label (yellow while running, red when done);
-  - the short goal title;
-  - a `passing/total gates · status` line (lifecycle only — no "changes pending"
-    noise; pending work shows as a todo row instead);
+  - the short goal title (white);
+  - the gate count `passing/total gates` (cyan), on its own line;
+  - the lifecycle status (orange) on its own line — `in progress`, or
+    `completed · N review cycles`. No "changes pending" noise; pending work shows
+    as a todo row instead;
   - structured todo rows derived from real guard state: one per acceptance
     criterion (✓ when fresh evidence covers it), a re-verify row when the tree
     changed, and one row per still-missing review gate by friendly name

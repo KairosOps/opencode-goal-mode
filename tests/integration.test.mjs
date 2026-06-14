@@ -46,7 +46,6 @@ test("integration: a security goal cannot complete until every required gate pas
 
   // 4. Run base gates only — still blocked because contextual gates are missing.
   for (const agent of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
-    await hooks["chat.params"]({ sessionID: sid, agent }, {});
     await hooks["tool.execute.after"]({ tool: "task", sessionID: sid, callID: agent, args: { subagent_type: agent } }, { output: "Verdict: PASS", title: "", metadata: {} });
   }
   out = { text: "Goal Completed\n\nReview cycles: 1" };
@@ -55,7 +54,6 @@ test("integration: a security goal cannot complete until every required gate pas
 
   // 5. Run the contextual gates too.
   for (const agent of ["goal-security-reviewer", "goal-api-reviewer", "goal-data-reviewer"]) {
-    await hooks["chat.params"]({ sessionID: sid, agent }, {});
     await hooks["tool.execute.after"]({ tool: "task", sessionID: sid, callID: agent, args: { subagent_type: agent } }, { output: "Verdict: PASS", title: "", metadata: {} });
   }
 
@@ -71,7 +69,6 @@ test("integration: a fresh edit after a clean review re-blocks completion (stale
   await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
   await hooks["tool.execute.after"]({ tool: "edit", sessionID: sid, callID: "e1", args: {} }, { output: "", title: "", metadata: {} });
   for (const agent of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
-    await hooks["chat.params"]({ sessionID: sid, agent }, {});
     await hooks["tool.execute.after"]({ tool: "task", sessionID: sid, callID: agent, args: { subagent_type: agent } }, { output: "Verdict: PASS", title: "", metadata: {} });
   }
   // Sneak in a final edit.
@@ -89,7 +86,6 @@ test("integration: file.edited from a subagent child session dirties the active 
   await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
   await hooks["tool.execute.after"]({ tool: "edit", sessionID: sid, callID: "e1", args: {} }, { output: "", title: "", metadata: {} });
   for (const agent of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
-    await hooks["chat.params"]({ sessionID: sid, agent }, {});
     await hooks["tool.execute.after"]({ tool: "task", sessionID: sid, callID: agent, args: { subagent_type: agent } }, { output: "Verdict: PASS", title: "", metadata: {} });
   }
   // A subagent (different session) edits a file — surfaced via the event bus.

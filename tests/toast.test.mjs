@@ -28,9 +28,10 @@ function makeGuard(extra = {}) {
 }
 
 async function recordVerdict(hooks, sessionID, agent, verdict) {
-  await hooks["chat.params"]({ sessionID, agent }, {});
+  // Reviewers report via the task tool against the (goal) parent session — recording
+  // a verdict must not switch the parent's agent, which would deactivate the goal.
   await hooks["tool.execute.after"](
-    { tool: "bash", sessionID, callID: agent, args: { command: "git status" } },
+    { tool: "task", sessionID, callID: agent, args: { subagent_type: agent } },
     { output: `Verdict: ${verdict}`, title: "", metadata: {} },
   );
 }
