@@ -63,7 +63,7 @@ function mockApi(worktree) {
   };
   return { api, getSlot: () => captured?.slots?.sidebar_content };
 }
-async function render({ worktree, sessionId = "s1", options, width = 44, height = 5 }) {
+async function render({ worktree, sessionId = "s1", options, width = 44, height = 10 }) {
   const { api, getSlot } = mockApi(worktree);
   await tui(api, options);
   const slot = getSlot();
@@ -97,18 +97,20 @@ try {
     const { frame, spans } = await render({ worktree: "/proj/withgoal" });
     banner("Goal RUNNING (rainbow first display, AI title)"); show(frame);
     check("shows the AI title, not the long original", frame.includes("Ship the OAuth refactor") && !frame.includes("legacy code path"));
-    check("shows the Goal todos label", frame.includes("Goal todos"));
-    check("NO orb (◆) before GOAL", !frame.includes("◆"));
+    check("shows the GOAL label", frame.includes("GOAL"));
+    check("GOAL label is on its OWN line (not joined to the goal title)", frame.split("\n").some((l) => l.trim() === "GOAL") && !/GOAL +Ship the OAuth/.test(frame));
+    check("NO orb (◆)", !frame.includes("◆"));
     check("does NOT show 'No goal'", !frame.includes("No goal"));
-    check("goal text starts with rainbow red", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, [255, 85, 85]));
-    check("Goal todos label is bold", spanFor(spans, "Goal todos")?.attr === 1);
-    check("line 2 contains gates and status", /\d\/\d gates · in progress/.test(frame), frame);
+    check("GOAL label starts rainbow red (first-display)", sameColor(spanFor(spans, "GOAL")?.rgba, [255, 85, 85]));
+    check("goal title is rainbow orange on the next line (first-display)", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, [255, 170, 0]));
+    check("GOAL label is bold", spanFor(spans, "GOAL")?.attr === 1);
+    check("status line shows gates · in progress and NO 'changes pending'", /\d\/\d gates · in progress/.test(frame) && !frame.includes("changes pending"), frame);
   }
   {
     writeSnapshot("/proj/nogoal", [["s1", session({ touchedAt: 3 })]]);
     const { frame, registered } = await render({ worktree: "/proj/nogoal" });
     banner("Task running, NO goal (native todo untouched)"); show(frame);
-    check("renders nothing so native todo can remain", registered === true && !frame.includes("No goal") && !frame.includes("Goal todos"));
+    check("renders nothing so native todo can remain", registered === true && !frame.includes("No goal") && !frame.includes("GOAL"));
   }
   {
     writeSnapshot("/proj/mixed", [
@@ -118,11 +120,11 @@ try {
     const { api, getSlot } = mockApi("/proj/mixed");
     await tui(api, { sidebarRainbowMs: 0 });
     const slot = getSlot();
-    const t = await testRender(() => slot({}, { session_id: "build-session" }), { width: 44, height: 5 });
+    const t = await testRender(() => slot({}, { session_id: "build-session" }), { width: 44, height: 10 });
     await t.renderOnce();
     const frame = t.captureCharFrame();
     banner("Mixed worktree, Build session"); show(frame);
-    check("registered Goal slot does not render for Build session", !frame.includes("Visible only in Goal") && !frame.includes("Goal todos"));
+    check("registered Goal slot does not render for Build session", !frame.includes("Visible only in Goal") && !frame.includes("GOAL"));
     const noProps = slot({}, {});
     check("slot invocation without session id returns nothing", noProps === undefined);
   }
@@ -136,7 +138,7 @@ try {
     await tui(api, { sidebarRainbowMs: 0 });
     const slot = getSlot();
     const renderSession = async (sid) => {
-      const t = await testRender(() => slot({}, { session_id: sid }), { width: 44, height: 5 });
+      const t = await testRender(() => slot({}, { session_id: sid }), { width: 44, height: 10 });
       await t.renderOnce();
       return t.captureCharFrame();
     };
@@ -151,7 +153,7 @@ try {
   {
     const { frame, registered } = await render({ worktree: "/proj/never-touched" });
     banner("No guard state at all (native todo untouched)"); show(frame);
-    check("no Goal content is rendered for non-Goal sessions", registered === true && !frame.includes("No goal") && !frame.includes("Goal todos"));
+    check("no Goal content is rendered for non-Goal sessions", registered === true && !frame.includes("No goal") && !frame.includes("GOAL"));
   }
   {
     const passing = {};
@@ -167,7 +169,7 @@ try {
     writeSnapshot("/proj/green", [["s1", session({ goalText: "Custom colour goal", touchedAt: 9 })]]);
     const { frame, spans } = await render({ worktree: "/proj/green", options: { sidebarColor: "#00FF00", sidebarRainbowMs: 0 } });
     banner("Custom colour (#00FF00)"); show(frame);
-    check("goal uses the custom colour", sameColor(spanFor(spans, "Custom colour goal")?.rgba, GREEN));
+    check("GOAL label uses the custom colour (goal title stays its own colour)", sameColor(spanFor(spans, "GOAL")?.rgba, GREEN));
   }
   {
     writeSnapshot("/proj/long", [["s1", session({ goalText: "X".repeat(200), touchedAt: 9 })]]);

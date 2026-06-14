@@ -2,11 +2,14 @@
 /**
  * Goal Mode — TUI sidebar todo section.
  *
- * In Goal agent sessions this adds a Goal-owned, evidence-aware todo section to
- * the sidebar. Non-Goal sessions render nothing here so Build and other modes
- * keep OpenCode's normal todo section. The section is strictly per-session: it is
- * keyed by props.session_id, so a Build session in the same worktree never
- * inherits another session's goal.
+ * In Goal agent sessions this renders a Goal-owned, evidence-aware todo section
+ * into the sidebar_content slot (GOAL label, goal title, gate/status line, and
+ * structured todo rows). OpenCode renders the native todo list as that slot's
+ * fallback, so in replace/single-winner slot mode this REPLACES the native todos
+ * while a goal is active; rendering nothing (non-Goal or no-goal sessions) brings
+ * the native todos back. The section is strictly per-session: it is keyed by
+ * props.session_id, so a Build session in the same worktree never inherits
+ * another session's goal.
  *
  * How OpenCode loads this: TUI plugins are listed in `~/.config/opencode/tui.json`
  * (NOT the plugins/ dir) and resolved via the package's `exports["./tui"]`. The
@@ -24,9 +27,12 @@ import { createSignal, onCleanup, For, Show } from "solid-js";
 import { sidebarView, NO_GOAL } from "./goal-guard/summary.js";
 import { DEFAULT_CONFIG } from "./goal-guard/config.js";
 
-const DEFAULT_COLOR = "#FFD700"; // running — yellow
+const DEFAULT_COLOR = "#FFD700"; // running — GOAL label, yellow
 const DEFAULT_DONE = "#FF5555"; // done — red
-const DEFAULT_MUTED = "#808080"; // no goal — grey
+const DEFAULT_MUTED = "#808080"; // pending todo rows — grey
+const TITLE_COLOR = "#FFFFFF"; // goal title line (running) — bright, distinct from the yellow GOAL label
+const META_COLOR = "#8BE9FD"; // gates · status line (running) — cyan accent
+const TODO_DONE_COLOR = "#50FA7B"; // ✓ done todo rows — green
 const POLL_MS = 1500;
 const RAINBOW = ["#FF5555", "#FFAA00", "#FFFF55", "#55FF55", "#55FFFF", "#5599FF", "#FF55FF"];
 
@@ -96,7 +102,7 @@ const id = "goal-mode-sidebar";
 /** @type {import("@opencode-ai/plugin/tui").TuiPlugin} */
 const tui = async (api, options) => {
   try {
-    const { enabled, color, doneColor, rainbowMs } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
+    const { enabled, color, doneColor, muted, rainbowMs } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
     if (!enabled) return;
     if (!api?.slots?.register) return; // runtime without the slot API → no-op.
 
@@ -122,19 +128,33 @@ const tui = async (api, options) => {
             const rainbowTimer = setTimeout(() => setRainbow(false), Math.max(0, rainbowMs || 0));
             onCleanup(() => clearInterval(timer));
             onCleanup(() => clearTimeout(rainbowTimer));
-            const fg = () => (model().state === "done" ? doneColor : color);
-            const lineColor = (index = 0) => (rainbow() && model().state === "running" ? RAINBOW[index % RAINBOW.length] : fg());
-            // Goal sessions render a Goal-owned todo section; non-Goal sessions return undefined so native todos remain.
+            const isRainbow = () => rainbow() && model().state === "running";
+            // Settled (post-rainbow) colour for each header line. When done, every
+            // line is red; while running each line gets its OWN highlight colour so
+            // the GOAL label, the goal title, and the status never read as one text.
+            const settled = (kind) => {
+              if (model().state === "done") return doneColor;
+              if (kind === "label") return color; // GOAL — yellow
+              if (kind === "title") return TITLE_COLOR; // goal title — bright white
+              return META_COLOR; // gates · status — cyan
+            };
+            const lineColor = (index, kind) => (isRainbow() ? RAINBOW[index % RAINBOW.length] : settled(kind));
+            const todoColor = (index, item) => {
+              if (isRainbow()) return RAINBOW[index % RAINBOW.length];
+              if (item.status === "done") return TODO_DONE_COLOR;
+              return model().state === "done" ? doneColor : muted;
+            };
+            // Goal sessions render a Goal-owned todo section (GOAL label, then the goal
+            // title, status, and structured todos — each on its own line). Non-Goal /
+            // no-goal sessions returned undefined above, so native todos remain.
             return (
               <Show when={model().state !== "none"}>
                 <box flexDirection="column" paddingTop={1}>
-                  <text fg={lineColor(0)}>
-                    <b>{model().todoTitle || "Goal todos"}</b>
-                    {`  ${model().goal}`}
-                  </text>
-                  <text fg={lineColor(1)}>{`${model().gates} · ${model().status}`}</text>
+                  <text fg={lineColor(0, "label")}><b>{model().label || "GOAL"}</b></text>
+                  <text fg={lineColor(1, "title")}>{model().goal}</text>
+                  <text fg={lineColor(2, "meta")}>{`${model().gates} · ${model().status}`}</text>
                   <For each={model().todos || []}>
-                    {(item, index) => <text fg={lineColor(index() + 2)}>{`${item.status === "done" ? "✓" : "□"} ${item.text}`}</text>}
+                    {(item, index) => <text fg={todoColor(index() + 3, item)}>{`${item.status === "done" ? "✓" : "□"} ${item.text}`}</text>}
                   </For>
                 </box>
               </Show>

@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.4.1
+
+### Restructured Goal sidebar todo section
+
+- The sidebar Goal section is now a proper stacked, multi-colour layout instead of
+  one run of text: a bold **`GOAL`** label on its own line (yellow while running,
+  red when done), then the goal title, then a `passing/total gates · status` line —
+  each line in its own highlight colour (GOAL yellow, title white, status cyan) so
+  they never blend together. It opens with a first-display per-line rainbow, then
+  settles.
+- Removed the noisy `· changes pending` suffix from the status line; pending work
+  now surfaces as a structured todo row instead.
+- Better, more structured todos: one row per acceptance criterion (✓ when fresh
+  evidence covers it), a re-verify row when the tree changed, and one row per
+  still-missing review gate by friendly name (e.g. "Pass Security Reviewer").
+- In a goal session the section takes over the sidebar `sidebar_content` slot;
+  because OpenCode renders the native todo list as that slot's fallback, it
+  replaces the native list on builds that use replace/single-winner slot mode and
+  sits alongside it otherwise. Non-goal and no-goal sessions render nothing, so
+  the native todo list stays in place.
+
+### Build mode is never treated as a goal
+
+- Hardened the guard so a Build/Plan/custom session never accumulates goal state.
+  `tool.execute.after` bookkeeping (dirty flag, edits, verification, verdicts) now
+  runs only for active Goal sessions (and goal-namespace subagent sessions for
+  verdict capture). Destructive-command blocking still applies in every mode.
+
+### Installer
+
+- `--global` now resolves the home directory via `$HOME` and falls back to the OS
+  home dir, so it works in shells/containers where `$HOME` is unset.
+- Verified the full install → idempotent re-run → conflict-protection → uninstall
+  lifecycle end-to-end on macOS (Node 24) and in clean Linux containers (Apple
+  `container`, Node 20 and Node 24) using the real `npm install -g <tarball>` path.
+- Moved **Install** to the top of the README and documented dry-run/uninstall.
+
 ## v0.4.0
 
 ### Goal-only subagents

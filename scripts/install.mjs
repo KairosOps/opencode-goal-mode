@@ -15,6 +15,7 @@ import {
 import { join, resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import { parseArgs } from "node:util";
 
 const { values } = parseArgs({
@@ -67,8 +68,18 @@ if (values.global && values.target) {
 function resolveTarget() {
   if (values.target) return resolve(String(values.target));
   if (values.global) {
-    const home = process.env.HOME;
-    if (!home) throw new Error("Cannot resolve HOME for --global install");
+    // OpenCode reads global config from ~/.config/opencode. Resolve home from $HOME,
+    // falling back to the OS home dir (homedir() works where $HOME is unset, e.g.
+    // some CI/container shells) so --global doesn't fail in those environments.
+    let home = process.env.HOME;
+    if (!home) {
+      try {
+        home = homedir();
+      } catch {
+        home = "";
+      }
+    }
+    if (!home) throw new Error("Cannot resolve a home directory for --global install. Pass --target <dir> instead.");
     return join(home, ".config", "opencode");
   }
   return resolve(process.cwd(), ".opencode");

@@ -1,39 +1,37 @@
 # OpenCode Goal Mode
 
-[![npm version](https://img.shields.io/npm/v/opencode-goal-mode?color=2da44e&label=npm)](https://www.npmjs.com/package/opencode-goal-mode)
-[![npm downloads](https://img.shields.io/npm/dm/opencode-goal-mode?color=2da44e)](https://www.npmjs.com/package/opencode-goal-mode)
-[![CI](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml)
-[![Release](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml)
-[![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
-[![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
-
 Strict Goal Mode for OpenCode: a primary `goal` agent, specialized review
 subagents, slash commands, a `goal-guard` plugin that enforces review discipline
-and blocks destructive shell commands, and a live Goal-owned todo section in the
-TUI sidebar.
+and blocks destructive shell commands, and a structured Goal-owned todo section
+in the TUI sidebar.
 
 ## Install
 
-**One command** (recommended; needs [Node](https://nodejs.org) 20.11+ and a working [OpenCode](https://opencode.ai) install):
+**One command.** Needs [Node](https://nodejs.org) 20.11+ and a working
+[OpenCode](https://opencode.ai). Works on macOS and Linux:
 
 ```bash
 npm install -g opencode-goal-mode && opencode-goal-mode --global
 ```
 
-Then **restart OpenCode**. That's the whole install: it copies the Goal agent,
+Then **restart OpenCode**. That's the whole install — it copies the Goal agent,
 review subagents, slash commands, and guard plugin into `~/.config/opencode`, and
 merge-safely registers the Goal todo sidebar in `~/.config/opencode/tui.json`.
 In the agent picker you'll see only the **`goal`** agent; reviewers are subagents
-it drives automatically. The global install keeps the TUI package resolvable on
-future OpenCode starts; Goal Mode inherits your existing OpenCode model/provider.
+it drives automatically. The install is **idempotent** (re-run it to upgrade in
+place), never touches files you've edited, and `--uninstall` removes exactly what
+it added. Goal Mode inherits your existing OpenCode model/provider.
 
 <details>
 <summary>Other ways to install</summary>
 
 ```bash
-# Global npm install, then run the installer
+# Global npm install, then run the installer separately
 npm install -g opencode-goal-mode
 opencode-goal-mode --global          # alias of opencode-goal-mode-install
+
+# Preview first, then install (no writes on --dry-run)
+opencode-goal-mode --global --dry-run
 
 # Temporary npx install (server-side components work; for the TUI sidebar,
 # prefer the global install above so OpenCode can resolve the package later)
@@ -42,6 +40,9 @@ npx opencode-goal-mode --global
 # Into a single project (writes ./.opencode, including ./.opencode/tui.json)
 npx opencode-goal-mode
 
+# Clean removal of everything it installed (incl. its tui.json entry)
+opencode-goal-mode --global --uninstall
+
 # From source
 git clone https://github.com/devinoldenburg/opencode-goal-mode
 cd opencode-goal-mode && npm ci && npm run install:global
@@ -49,16 +50,23 @@ cd opencode-goal-mode && npm ci && npm run install:global
 
 Use global install for normal daily use. Use project install only when you want
 Goal Mode scoped to one repo and your OpenCode build reads project `.opencode`
-config, including `.opencode/tui.json`. `--dry-run` previews changes;
-`--uninstall` removes only what it installed (and its `tui.json` entry), leaving
-your edits untouched. See [Installer options](#installer-options).
+config, including `.opencode/tui.json`. See [Installer options](#installer-options).
 </details>
+
+[![npm version](https://img.shields.io/npm/v/opencode-goal-mode?color=2da44e&label=npm)](https://www.npmjs.com/package/opencode-goal-mode)
+[![npm downloads](https://img.shields.io/npm/dm/opencode-goal-mode?color=2da44e)](https://www.npmjs.com/package/opencode-goal-mode)
+[![CI](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml)
+[![Release](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml)
+[![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
+[![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
 
 ![OpenCode Goal Mode sidebar todo section](docs/sidebar-demo.svg)
 
-<sub>↑ In Goal mode, the sidebar todo slot becomes a Goal-owned todo section with
-a first-display rainbow effect, then normal goal colours. Build and other modes
-keep OpenCode's native todo section — see [TUI integration](#tui-integration).</sub>
+<sub>↑ In goal mode, the Goal plugin takes over the sidebar todo section with a
+structured, evidence-aware Goal todo list — a bold `GOAL` label, then the goal
+title, gate progress, and per-acceptance/gate todo rows, each on its own line in
+its own colour, with a first-display rainbow. Build and every other mode keep
+OpenCode's native todo section — see [TUI integration](#tui-integration).</sub>
 
 **[Quick start](#quick-start) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
 
@@ -218,9 +226,10 @@ second) — negligible for a per-tool-call guard:
     reviewer's friendly name, and a single "completion unlocked" toast the moment
     the last required gate clears.
 - An **experimental** companion TUI plugin (`plugins/goal-sidebar.tsx`) that, in
-  Goal sessions only, adds a Goal-owned, evidence-aware todo section to the
-  sidebar. It shows a brief rainbow effect the first time it appears, then normal
-  goal colours. See [TUI integration](#tui-integration).
+  Goal sessions only, takes over the sidebar todo area with a structured,
+  evidence-aware Goal todo list (`GOAL` label, goal title, gate progress, and
+  todo rows — each on its own line in its own colour). It shows a first-display
+  rainbow, then normal goal colours. See [TUI integration](#tui-integration).
 - A test suite validating the analyzer, plugin hooks, state store, install
   safety, and config compatibility.
 
@@ -230,18 +239,29 @@ Goal Mode is a **plugin pair**: the server-side `goal-guard` plugin owns
 enforcement and writes its state to disk, and an experimental TUI plugin
 (`plugins/goal-sidebar.tsx`) reads that same state to render a live todo section.
 
-- **Goal-owned todo section.** In a `goal` session, the sidebar gains a Goal-owned
-  todo section: short goal title, gate progress, lifecycle status, and structured
-  todo rows derived from acceptance criteria, evidence freshness, dirty state, and
-  missing review gates. It starts with a brief rainbow foreground effect
-  (`sidebarRainbowMs`) so it is immediately visible, then returns to the normal
-  lifecycle colours:
-  - **yellow** — a goal is set and running;
-  - **red** — the goal is done (all required gates pass and the tree is clean);
-  - **no render** — Build and every non-Goal mode render nothing here, so they
-    keep OpenCode's native todo section instead of being classified as a goal. The
-    section is scoped to the session that owns the goal: a Build session in the
-    same worktree never inherits another session's goal.
+- **Goal-owned todo section.** In a `goal` session with a goal set, the Goal
+  plugin renders its own structured todo section into the sidebar's `sidebar_content`
+  slot, stacked on separate lines, each in its own colour so it never reads as one
+  run of text:
+  - a bold **`GOAL`** label (yellow while running, red when done);
+  - the short goal title;
+  - a `passing/total gates · status` line (lifecycle only — no "changes pending"
+    noise; pending work shows as a todo row instead);
+  - structured todo rows derived from real guard state: one per acceptance
+    criterion (✓ when fresh evidence covers it), a re-verify row when the tree
+    changed, and one row per still-missing review gate by friendly name
+    (e.g. "Pass Security Reviewer").
+
+  It opens with a first-display rainbow (`sidebarRainbowMs`) so the takeover is
+  visible, then settles to the lifecycle colours (running → yellow label; done →
+  red). Because OpenCode renders the native todo list as that slot's *fallback*,
+  on builds that render `sidebar_content` in replace/single-winner mode the Goal
+  section **replaces** the native todo list while a goal is active; in append mode
+  it sits alongside it. In every case:
+  - **no render** — Build and every non-Goal mode (and a Goal session before a
+    goal is set) render nothing here, so OpenCode's native todo section stays in
+    the same position. The section is scoped to the session that owns the goal: a
+    Build session in the same worktree never inherits another session's goal.
 
   Toggle/recolour with `sidebarBanner`, `sidebarColor` (running), `sidebarDoneColor`
   (done), `sidebarMutedColor`, `sidebarRainbowMs`, or the `GOAL_GUARD_SIDEBAR_*`

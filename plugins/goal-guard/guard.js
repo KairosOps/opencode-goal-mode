@@ -178,6 +178,13 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
     async "tool.execute.after"(inp, out) {
       try {
         const state = store.stateFor(inp?.sessionID);
+        // Goal bookkeeping is GOAL-ONLY. A Build/Plan/custom session must never have
+        // its edits, mutations, verification, or verdicts recorded as goal state —
+        // otherwise the guard would treat a non-Goal message/task as if it were a
+        // goal. Only an active Goal session (or a goal-namespace subagent's own
+        // session, for verdict capture) is tracked. Destructive-command blocking is
+        // handled in tool.execute.before and still applies in every mode.
+        if (!state.active && !isGoalAgent(state.currentAgent)) return;
         const tool = inp?.tool;
         const isReviewing = isReviewAgent(state.currentAgent);
 

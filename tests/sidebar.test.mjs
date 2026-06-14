@@ -59,7 +59,7 @@ test("sidebarView reports state 'none' for an inactive or goal-less session", ()
   assert.equal(sidebarView(undefined, DEFAULT_CONFIG).state, "none");
 });
 
-test("sidebarView state 'running' (yellow) with stacked gates + status lines", () => {
+test("sidebarView state 'running' with a stacked GOAL label, gates + status lines", () => {
   const st = activeState({ goalText: "Fix the parser", dirty: true });
   const v = sidebarView(st, DEFAULT_CONFIG);
   assert.equal(v.state, "running");
@@ -67,9 +67,12 @@ test("sidebarView state 'running' (yellow) with stacked gates + status lines", (
   assert.equal(v.required, 5); // BASE_GATES
   assert.equal(v.passing, 0);
   assert.equal(v.gates, "0/5 gates");
-  assert.equal(v.status, "in progress · changes pending");
-  assert.equal(v.todoTitle, "Goal todos");
-  assert.ok(v.todos.some((item) => item.text.includes("Rerun verification")));
+  // Status is just the lifecycle word — the noisy "· changes pending" suffix is gone;
+  // pending work surfaces as a structured todo row instead. GOAL label on its own line.
+  assert.equal(v.status, "in progress");
+  assert.equal(v.label, "GOAL");
+  assert.equal(v.todoTitle, "GOAL");
+  assert.ok(v.todos.some((item) => item.text.includes("Re-verify")));
 });
 
 test("sidebarView builds structured Goal todos from acceptance criteria and evidence", () => {

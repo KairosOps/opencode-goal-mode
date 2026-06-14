@@ -71,11 +71,28 @@ test("write/edit/apply_patch mark the session dirty", async () => {
   const { hooks, store } = makeGuard();
   for (const tool of ["write", "edit", "apply_patch"]) {
     const sessionID = `dirty-${tool}`;
+    await hooks["chat.params"]({ sessionID, agent: "goal" }, {});
     await hooks["tool.execute.after"]({ tool, sessionID, callID: "c", args: {} }, { output: "", title: "", metadata: {} });
     const st = store.stateFor(sessionID);
     assert.equal(st.dirty, true);
     assert.ok(st.lastEditSeq > 0);
   }
+});
+
+test("a Build (non-Goal) session is fully inert: edits/bash never record goal state", async () => {
+  const { hooks, store } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "build-inert", agent: "build" }, {});
+  // Edits, mutating bash, and verification commands must NOT dirty or otherwise
+  // turn a Build session into a goal — the guard only tracks goal sessions.
+  await hooks["tool.execute.after"]({ tool: "edit", sessionID: "build-inert", callID: "c1", args: {} }, { output: "", title: "", metadata: {} });
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID: "build-inert", callID: "c2", args: { command: "npm install" } }, { output: "", title: "", metadata: {} });
+  await hooks["tool.execute.after"]({ tool: "bash", sessionID: "build-inert", callID: "c3", args: { command: "npm test" } }, { output: "", title: "", metadata: {} });
+  const st = store.stateFor("build-inert");
+  assert.equal(st.active, false);
+  assert.equal(st.dirty, false);
+  assert.equal(st.lastEditSeq, 0);
+  assert.equal(st.verificationSeen, false);
+  assert.equal(st.changedFiles.length, 0);
 });
 
 test("read-only bash does not mark the session dirty", async () => {

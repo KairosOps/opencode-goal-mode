@@ -4,6 +4,7 @@
  */
 
 import { requiredGates, missingGates, gatePassedFresh } from "./gates.js";
+import { prettyAgentName } from "./agents.js";
 
 /**
  * A short, single-line label for the current goal.
@@ -35,33 +36,55 @@ function criterionEvidenceFresh(state, criterion) {
   return entries.some((entry) => evidenceMatchesCriterion(entry, criterion) && evidenceFresh(entry, state));
 }
 
+function clip(text, max) {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+  return s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`;
+}
+
+/**
+ * Structured, ordered todo rows for the sidebar. Each row is a concrete, checkable
+ * step toward Goal completion — acceptance criteria first (✓ when fresh evidence
+ * covers them), then a re-verify nudge if the tree changed, then ONE row per still-
+ * missing review gate (friendly name, e.g. "Pass Security Reviewer"). This is the
+ * Goal plugin's own todo system: it is derived from real guard state (contract,
+ * evidence freshness, dirty flag, required gates), not transcript memory, so it
+ * tracks completion truthfully and updates as gates clear.
+ */
 function sidebarTodos(state, required, missing) {
   const criteria = Array.isArray(state?.contract?.acceptanceCriteria) ? state.contract.acceptanceCriteria : [];
   const items = [];
-  for (const criterion of criteria.slice(0, 5)) {
-    const text = String(criterion || "").replace(/\s+/g, " ").trim();
+  for (const criterion of criteria.slice(0, 4)) {
+    const text = clip(criterion, 52);
     if (!text) continue;
-    items.push({
-      status: criterionEvidenceFresh(state, text) ? "done" : "todo",
-      text: text.length <= 58 ? text : `${text.slice(0, 57).trimEnd()}…`,
-    });
+    items.push({ status: criterionEvidenceFresh(state, text) ? "done" : "todo", text });
   }
-  if (state?.dirty) items.push({ status: "todo", text: "Rerun verification and reviews after latest changes" });
-  if (missing.length > 0) items.push({ status: "todo", text: `Clear review gates: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}` });
-  if (items.length === 0 && required.length > 0) items.push({ status: "todo", text: "Record Goal Contract acceptance criteria" });
-  return items.slice(0, 7);
+  if (state?.dirty) items.push({ status: "todo", text: "Re-verify & re-review after recent edits" });
+  // One row per missing/stale review gate, by friendly name — more scannable than a
+  // comma-joined id list and it shows exactly which reviewer is still owed.
+  for (const gate of missing.slice(0, 4)) {
+    items.push({ status: "todo", text: `Pass ${prettyAgentName(gate)}` });
+  }
+  if (items.length === 0 && required.length > 0) {
+    items.push({ status: "todo", text: "Record the Goal Contract & acceptance criteria" });
+  }
+  return items.slice(0, 8);
 }
 
 /**
  * Compact projection for the TUI sidebar todo section. ALWAYS returns an object with a
- * three-way `state`, plus three lines that stack vertically in the sidebar:
- *   - `goal`   → line 1: the short AI goal title.
- *   - `gates`  → line 2: the gate count, e.g. "0/7 gates".
- *   - `status` → line 3: the lifecycle status, e.g. "in progress · changes pending"
- *                or "completed · 2 review cycles".
+ * three-way `state`, plus lines that stack vertically in the sidebar — each rendered
+ * on its OWN line in a distinct colour so it never reads as one run of text:
+ *   - `label`  → line 1: the fixed "GOAL" header (yellow when running, red when done).
+ *   - `goal`   → line 2: the short AI goal title.
+ *   - `gates`  → line 3: gate count + lifecycle, e.g. "3/5 gates · in progress" or
+ *                "5/5 gates · completed · 2 review cycles". No "changes pending"
+ *                noise — pending work surfaces as a structured todo row instead.
+ *   - `todos`  → following lines: structured acceptance/verification/gate todos.
  * State drives colour: "running" = rainbow first, then yellow; "done" = red;
- * "none" = render nothing so non-Goal modes keep the native todo section.
+ * "none" = render nothing so non-Goal / no-goal sessions keep the native todo section.
  */
+export const GOAL_LABEL = "GOAL";
+
 export function sidebarView(state, config) {
   if (!state || !state.active) return NO_GOAL;
   const goal = shortGoalLabel(state);
@@ -76,10 +99,11 @@ export function sidebarView(state, config) {
   if (done) {
     return {
       state: "done",
+      label: GOAL_LABEL,
       goal,
       gates,
       status: `completed · ${cycles} review cycle${cycles === 1 ? "" : "s"}`,
-      todoTitle: "Goal todos",
+      todoTitle: GOAL_LABEL,
       todos: todos.length ? todos.map((item) => ({ ...item, status: "done" })) : [{ status: "done", text: "All Goal completion gates are clear" }],
       passing,
       required: required.length,
@@ -88,10 +112,11 @@ export function sidebarView(state, config) {
   }
   return {
     state: "running",
+    label: GOAL_LABEL,
     goal,
     gates,
-    status: `in progress${state.dirty ? " · changes pending" : ""}`,
-    todoTitle: "Goal todos",
+    status: "in progress",
+    todoTitle: GOAL_LABEL,
     todos,
     passing,
     required: required.length,
