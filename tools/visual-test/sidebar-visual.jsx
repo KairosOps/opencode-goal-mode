@@ -35,7 +35,7 @@ const REPO = new URL("../../", import.meta.url).pathname;
 const XDG = mkdtempSync(join(tmpdir(), "goal-sidebar-visual-"));
 process.env.XDG_STATE_HOME = XDG;
 
-const sidebarMod = await import(join(REPO, "plugins/goal-sidebar.js"));
+const sidebarMod = await import(join(REPO, "plugins/goal-sidebar.tsx"));
 const tui = sidebarMod.tui || sidebarMod.default?.tui; // entry exports `default { id, tui }`
 const { stateBaseDir, projectKey } = await import(join(REPO, "plugins/goal-guard/persistence.js"));
 const { createState } = await import(join(REPO, "plugins/goal-guard/state.js"));
@@ -94,15 +94,17 @@ const show = (f) => console.log(f.replace(/ +$/gm, "").replace(/\n+$/, ""));
 
 try {
   {
-    writeSnapshot("/proj/withgoal", [["s1", session({ contract: { original: "Ship the OAuth refactor" }, touchedAt: 9 })]]);
+    writeSnapshot("/proj/withgoal", [["s1", session({ contract: { title: "Ship the OAuth refactor", original: "the user wants us to finish migrating the oauth flow and delete the legacy code path entirely" }, touchedAt: 9 })]]);
     const { frame, spans } = await render({ worktree: "/proj/withgoal" });
-    banner("Goal RUNNING (yellow)"); show(frame);
-    check("shows the goal text", frame.includes("Ship the OAuth refactor"));
+    banner("Goal RUNNING (yellow, AI title)"); show(frame);
+    check("shows the AI title, not the long original", frame.includes("Ship the OAuth refactor") && !frame.includes("legacy code path"));
     check("shows the GOAL label", frame.includes("GOAL"));
+    check("NO orb (◆) before GOAL", !frame.includes("◆"));
     check("does NOT show 'No goal'", !frame.includes("No goal"));
     check("goal text is shining yellow", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, YELLOW));
     check("GOAL label is bold", spanFor(spans, "GOAL")?.attr === 1);
-    check("generated detail says 'in progress'", /in progress · \d\/\d gates/.test(frame), frame.split("\n")[1]);
+    check("line 2 is the gate count", /\d\/\d gates/.test(frame), frame);
+    check("line 3 is the status 'in progress'", /in progress/.test(frame), frame);
   }
   {
     writeSnapshot("/proj/nogoal", [["s1", session({ touchedAt: 3 })]]);
@@ -123,9 +125,9 @@ try {
     writeSnapshot("/proj/done", [["s1", session({ goalText: "Fix the parser bug", latestVerdict: passing, lastEditSeq: 1, reviewCycles: 2, touchedAt: 9 })]]);
     const { frame, spans } = await render({ worktree: "/proj/done" });
     banner("Goal DONE (red)"); show(frame);
-    check("shows the goal + ✓", frame.includes("Fix the parser bug") && frame.includes("✓"));
+    check("shows the goal (no orb)", frame.includes("Fix the parser bug") && !frame.includes("◆"));
     check("done goal is RED", sameColor(spanFor(spans, "Fix the parser bug")?.rgba, RED), JSON.stringify(spanFor(spans, "Fix the parser bug")?.rgba));
-    check("generated detail says 'completed'", /completed · 5\/5 gates passed · 2 review cycles/.test(frame.replace(/\s+/g, " ")), frame.replace(/\s+/g, " "));
+    check("done shows gates + 'completed' status", /5\/5 gates/.test(frame) && /completed · 2 review cycles/.test(frame.replace(/\s+/g,' ')), frame.replace(/\s+/g,' '));
   }
   {
     writeSnapshot("/proj/green", [["s1", session({ goalText: "Custom colour goal", touchedAt: 9 })]]);

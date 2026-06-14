@@ -11,11 +11,12 @@ $ARGUMENTS
 
 Run this sequence:
 
-1. **Seed the contract first.** Call the `goal_contract` tool with the original
-   request, explicit/inferred requirements, non-goals, and concrete acceptance
-   criteria. This activates enforcement, fixes the required specialist review
-   gates, and lights up the goal banner in the sidebar. Ask only essential
-   clarifying questions before recording it.
+1. **Seed the contract first.** Call the `goal_contract` tool with a concise
+   `title` (≤8 words, what the user ultimately wants — like a session title for
+   the objective), the original request, explicit/inferred requirements,
+   non-goals, and concrete acceptance criteria. This activates enforcement, fixes
+   the required specialist review gates, and shows the `title` live in the sidebar
+   goal banner. Ask only essential clarifying questions before recording it.
 2. Delegate discovery and research to subagents; implement in the main agent.
 3. Verify, and record each verification with the `goal_evidence` tool so it maps
    to your acceptance criteria.

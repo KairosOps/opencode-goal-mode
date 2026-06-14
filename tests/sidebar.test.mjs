@@ -34,6 +34,19 @@ test("shortGoalLabel returns empty when nothing is recorded", () => {
   assert.equal(shortGoalLabel(activeState()), "");
 });
 
+test("shortGoalLabel prefers the AI-generated contract.title over original/goalText", () => {
+  const st = activeState({
+    contract: { title: "Rate-limit the login endpoint", original: "please add some kind of rate limiting to the /login route and prove it" },
+    goalText: "please add some kind of rate limiting to the /login route and prove it",
+  });
+  assert.equal(shortGoalLabel(st), "Rate-limit the login endpoint");
+});
+
+test("sidebarView surfaces the AI title as the goal", () => {
+  const st = activeState({ contract: { title: "Migrate auth to JWT", original: "x" }, goalText: "x" });
+  assert.equal(sidebarView(st, DEFAULT_CONFIG).goal, "Migrate auth to JWT");
+});
+
 // ---------------------------------------------------------------------------
 // sidebarView
 // ---------------------------------------------------------------------------
@@ -46,14 +59,15 @@ test("sidebarView reports state 'none' for an inactive or goal-less session", ()
   assert.equal(sidebarView(undefined, DEFAULT_CONFIG).state, "none");
 });
 
-test("sidebarView state 'running' (yellow) with generated detail when a goal is in progress", () => {
+test("sidebarView state 'running' (yellow) with stacked gates + status lines", () => {
   const st = activeState({ goalText: "Fix the parser", dirty: true });
   const v = sidebarView(st, DEFAULT_CONFIG);
   assert.equal(v.state, "running");
   assert.equal(v.goal, "Fix the parser");
   assert.equal(v.required, 5); // BASE_GATES
   assert.equal(v.passing, 0);
-  assert.match(v.detail, /in progress · 0\/5 gates · changes pending/);
+  assert.equal(v.gates, "0/5 gates");
+  assert.equal(v.status, "in progress · changes pending");
 });
 
 // ---------------------------------------------------------------------------
@@ -182,7 +196,8 @@ test("sidebarView state 'done' (red) when every gate passes and the tree is clea
   });
   const v = sidebarView(st, DEFAULT_CONFIG);
   assert.equal(v.state, "done");
-  assert.match(v.detail, /completed · 6\/6 gates passed · 2 review cycles/);
+  assert.equal(v.gates, "6/6 gates");
+  assert.equal(v.status, "completed · 2 review cycles");
 });
 
 // ---------------------------------------------------------------------------

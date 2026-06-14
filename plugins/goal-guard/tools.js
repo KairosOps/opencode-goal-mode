@@ -92,6 +92,13 @@ export function createGoalTools({ store, config, persist }) {
         "inferred requirements, non-goals, and acceptance criteria). Establishing a contract " +
         "activates strict goal enforcement and drives which specialist review gates are required.",
       args: {
+        title: s
+          .string()
+          .describe(
+            "A short (max ~8 words) human-friendly title summarizing the GOAL/objective — what the user " +
+              "ultimately wants, phrased like a session title but about the outcome. Shown in the TUI sidebar. " +
+              "e.g. 'Rate-limit the login endpoint', 'Migrate auth to JWT'. No trailing punctuation.",
+          ),
         original: s.string().describe("The original user request, verbatim or faithfully summarized."),
         requirements: s.array(s.string()).optional().describe("Explicit requirements stated by the user."),
         inferred: s.array(s.string()).optional().describe("Reasonable inferred requirements."),
@@ -104,6 +111,7 @@ export function createGoalTools({ store, config, persist }) {
         const state = store.stateFor(ctx.sessionID);
         state.active = true;
         state.contract = {
+          title: String(args.title || "").replace(/\s+/g, " ").trim(),
           original: String(args.original || ""),
           requirements: args.requirements || [],
           inferred: args.inferred || [],

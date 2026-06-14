@@ -8,21 +8,49 @@
 [![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
 
 Strict Goal Mode for OpenCode: a primary `goal` agent, a matrix of specialized
-review subagents, slash commands, and a `goal-guard` plugin that enforces review
-discipline, blocks destructive shell commands, and preserves goal state across
-compaction **and** restarts.
+review subagents, slash commands, a `goal-guard` plugin that enforces review
+discipline and blocks destructive shell commands, and a live goal banner in the
+TUI sidebar.
+
+## Install
+
+**One command** (needs [Node](https://nodejs.org) 20.11+ and [OpenCode](https://opencode.ai)):
 
 ```bash
-npm install -g opencode-goal-mode && opencode-goal-mode-install --global
+npx opencode-goal-mode --global
 ```
+
+Then **restart OpenCode**. That's the whole install — it copies the Goal agent,
+review subagents, slash commands, and the guard plugin into `~/.config/opencode`,
+and registers the sidebar in `~/.config/opencode/tui.json`. In the agent picker
+you'll see only the **`goal`** agent (the reviewers are subagents it drives).
+
+<details>
+<summary>Other ways to install</summary>
+
+```bash
+# Global npm install, then run the installer
+npm install -g opencode-goal-mode
+opencode-goal-mode --global          # alias of opencode-goal-mode-install
+
+# Into a single project (writes ./.opencode + ./tui.json)
+npx opencode-goal-mode
+
+# From source
+git clone https://github.com/devinoldenburg/opencode-goal-mode
+cd opencode-goal-mode && npm ci && npm run install:global
+```
+
+`--dry-run` previews changes; `--uninstall` removes only what it installed (and its
+tui.json entry), leaving your edits untouched. See [Installer options](#installer-options).
+</details>
 
 ![OpenCode Goal Mode sidebar banner](docs/sidebar-demo.svg)
 
-<sub>↑ Illustrative mockup of the **experimental** sidebar banner. The enforcement
-core (guard + agents) is the verified product; the TUI sidebar is opt-in and its
-live render depends on your OpenCode build — see [TUI integration](#tui-integration).</sub>
+<sub>↑ The sidebar goal banner: yellow while a goal runs, red when done, grey "No
+goal available" otherwise — see [TUI integration](#tui-integration).</sub>
 
-**[Quick start](#quick-start) · [Install](#install) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
+**[Quick start](#quick-start) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
 
 ## Quick start
 
@@ -204,40 +232,6 @@ enforcement and writes its state to disk, and an experimental TUI plugin
 - **Toasts.** Review verdicts and completion-unlock events surface as toasts
   (`toastOnReview`), and blocked destructive commands / premature completions
   toast as before (`toastOnBlock`).
-
-## Install
-
-### From npm (recommended)
-
-```bash
-npm install -g opencode-goal-mode
-opencode-goal-mode-install --global    # installs into ~/.config/opencode
-```
-
-Then restart OpenCode (it loads agents, commands, and plugins at startup). In the
-agent picker you will see **only the `goal` agent** — the specialist reviewers are
-subagents the Goal agent drives for you; they are never selectable by the user.
-
-Install into a single project instead of globally:
-
-```bash
-npm install -D opencode-goal-mode
-npx opencode-goal-mode-install         # writes to ./.opencode
-```
-
-Upgrade later by re-running the same install command after `npm install -g
-opencode-goal-mode@latest`; the installer replaces only the files it owns and
-leaves your local edits alone (see [Installer options](#installer-options)).
-
-### From source
-
-```bash
-git clone https://github.com/devinoldenburg/opencode-goal-mode
-cd opencode-goal-mode
-npm ci
-npm run validate
-npm run install:global                 # or: npm run install:local
-```
 
 ## Installer options
 

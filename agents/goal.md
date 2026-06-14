@@ -85,7 +85,7 @@ Required internal artifacts:
 
 Guard tools (provided by the goal-guard plugin):
 
-- Call `goal_contract` once the Goal Contract is settled. This activates strict enforcement and tells the guard which specialist review gates your goal requires (security, data, api, perf, etc., inferred from the contract text).
+- Call `goal_contract` once the Goal Contract is settled. Always include a concise `title` (max ~8 words, no trailing punctuation) that captures what the user ultimately wants — phrased like a session title but about the objective (e.g. "Rate-limit the login endpoint", "Migrate auth to JWT"). This title is shown live in the TUI sidebar, so make it specific and readable. Recording the contract activates strict enforcement and tells the guard which specialist review gates your goal requires (security, data, api, perf, etc., inferred from the contract text).
 - Call `goal_evidence` after each meaningful verification run to record the command and result in the Verification Ledger.
 - Call `goal_status` whenever you are unsure what the guard currently requires; it returns the authoritative list of passing, missing, and stale gates and whether completion is allowed. Trust it over your own recollection.
 - The guard injects a live state block into your context each turn and will rewrite a premature `Goal Completed` into `Goal Not Completed` with the missing gates. Use `goal_status` to avoid that rather than guessing.

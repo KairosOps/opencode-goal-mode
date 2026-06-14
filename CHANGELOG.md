@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.3.7
+
+- **FIX: the sidebar now actually loads.** OpenCode loads a TUI plugin via the
+  package's `exports["./tui"]` subpath (verified against the OpenCode binary), and
+  ours had no `exports`, so it silently never loaded. The package now maps
+  `"./tui"` (and `main`) to `plugins/goal-sidebar.tsx`, and the entry is shipped as
+  `.tsx` so OpenCode transpiles it. Confirmed working in a real OpenCode 1.17.6 TUI.
+- **Sidebar layout, as requested:** three stacked lines — `GOAL  <title>`, then the
+  gate count (`n/m gates`), then the status (`in progress` / `… · changes pending`
+  / `completed · k review cycles`). The leading orb (◆) is removed.
+- **AI-generated goal title:** `goal_contract` takes a short `title` the Goal agent
+  writes (the objective, like a session title); the sidebar shows it, falling back
+  to the raw goal text until titled.
+- **One-command install:** `npx opencode-goal-mode --global` (new `opencode-goal-mode`
+  bin alias). The installer registers the sidebar in `tui.json` (merge-safe) and
+  `--uninstall` removes that entry too. Install instructions moved to the top of the
+  README.
+- Colours configurable: `sidebarColor` (running), `sidebarDoneColor` (done),
+  `sidebarMutedColor` (no goal).
+
 ## v0.3.6
 
 - **FIX: the sidebar never loaded.** TUI plugins are loaded from

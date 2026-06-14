@@ -42,17 +42,20 @@ if (!agentFiles.includes("goal.md")) throw new Error("primary goal agent missing
 if (!commandFiles.includes("goal.md")) throw new Error("primary goal command missing");
 if (!pluginFiles.includes("goal-guard.js")) throw new Error("goal guard plugin missing");
 
-// The experimental sidebar is a TUI plugin module (Solid/opentui JSX) that the
-// Node runtime cannot import; validate its contract textually instead. It must
-// follow the proven TUI-plugin shape: a SINGLE `export default { id, tui }` (no
-// stray `export const`, which OpenCode's loader would treat as extra plugins).
-if (!pluginFiles.includes("goal-sidebar.js")) throw new Error("goal sidebar TUI plugin missing");
-const sidebarSrc = readFileSync(join(root, "plugins", "goal-sidebar.js"), "utf8");
+// The TUI sidebar is a Solid/opentui JSX module the Node runtime can't import;
+// validate its contract textually. OpenCode loads TUI plugins from tui.json via
+// the package's `exports["./tui"]` (NOT the plugins/ dir), so the package MUST map
+// `./tui` to the .tsx entry, and the entry MUST be a single `export default { id, tui }`.
+if (!existsSync(join(root, "plugins", "goal-sidebar.tsx"))) throw new Error("goal sidebar TUI plugin (plugins/goal-sidebar.tsx) missing");
+if (pkg.exports?.["./tui"] !== "./plugins/goal-sidebar.tsx") {
+  throw new Error('package.json exports["./tui"] must map to "./plugins/goal-sidebar.tsx" (OpenCode loads TUI plugins via this subpath)');
+}
+const sidebarSrc = readFileSync(join(root, "plugins", "goal-sidebar.tsx"), "utf8");
 if (!/export default \{[^}]*\btui\b/.test(sidebarSrc)) {
-  throw new Error("goal-sidebar.js must `export default { id, tui }`");
+  throw new Error("goal-sidebar.tsx must `export default { id, tui }`");
 }
 if (/^export\s+const\s/m.test(sidebarSrc)) {
-  throw new Error("goal-sidebar.js must not use `export const` (OpenCode loads every export; use a single default object)");
+  throw new Error("goal-sidebar.tsx must not use `export const` (OpenCode loads every export; use a single default object)");
 }
 
 const forbiddenComponentName = /(auth|session|token|secret|preauth|failures|hosts\.ya?ml)/i;

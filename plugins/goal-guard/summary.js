@@ -6,12 +6,18 @@
 import { requiredGates, missingGates, gatePassedFresh } from "./gates.js";
 
 /**
- * A short, single-line human label for the current goal — preferring the
- * recorded Goal Contract's original request, falling back to the captured goal
- * text. Collapses whitespace and truncates to `max` chars for compact display
- * (status reports, the TUI sidebar banner).
+ * A short, single-line label for the current goal.
+ *
+ * Prefers `contract.title` — a concise, AI-generated summary of the objective
+ * (what the user wants), written by the Goal agent when it records the contract
+ * via `goal_contract` (think "session title", but the goal/objective). Falls back
+ * to the contract's original request, then the captured goal text, so something
+ * sensible still shows before the agent has titled the goal. Collapses whitespace
+ * and truncates to `max` chars for the compact sidebar.
  */
 export function shortGoalLabel(state, max = 80) {
+  const title = String(state?.contract?.title || "").replace(/\s+/g, " ").trim();
+  if (title) return title.length <= max ? title : `${title.slice(0, max - 1).trimEnd()}…`;
   const raw = String(state?.contract?.original || state?.goalText || "").replace(/\s+/g, " ").trim();
   if (!raw) return "";
   // Prefer the first sentence/clause if it is reasonably short.
@@ -22,17 +28,17 @@ export function shortGoalLabel(state, max = 80) {
 }
 
 /** Sentinel for "a task is running but no goal is set" — the sidebar shows a muted "No goal available". */
-export const NO_GOAL = Object.freeze({ state: "none", goal: "", detail: "" });
+export const NO_GOAL = Object.freeze({ state: "none", goal: "", gates: "", status: "" });
 
 /**
  * Compact projection for the TUI sidebar banner. ALWAYS returns an object with a
- * three-way `state` so the sidebar renders unconditionally:
- *   - `state: "none"`    → no active goal: grey "No goal available".
- *   - `state: "running"` → goal in progress: yellow, with a generated status line.
- *   - `state: "done"`    → goal complete (all required gates pass, tree clean):
- *                           red, with a generated completion line.
- * `goal` is the short goal label; `detail` is generated descriptive text derived
- * from the current goal's gate/cycle/dirty state.
+ * three-way `state`, plus three lines that stack vertically in the sidebar:
+ *   - `goal`   → line 1: the short AI goal title.
+ *   - `gates`  → line 2: the gate count, e.g. "0/7 gates".
+ *   - `status` → line 3: the lifecycle status, e.g. "in progress · changes pending"
+ *                or "completed · 2 review cycles".
+ * State drives colour: "running" = yellow, "done" = red, "none" = grey
+ * ("No goal available").
  */
 export function sidebarView(state, config) {
   if (!state || !state.active) return NO_GOAL;
@@ -42,24 +48,24 @@ export function sidebarView(state, config) {
   const missing = missingGates(state, config);
   const passing = required.length - missing.length;
   const cycles = Number(state.reviewCycles) || 0;
+  const gates = `${passing}/${required.length} gates`;
   const done = required.length > 0 && missing.length === 0 && !state.dirty;
   if (done) {
     return {
       state: "done",
       goal,
-      detail: `completed · ${passing}/${required.length} gates passed · ${cycles} review cycle${cycles === 1 ? "" : "s"}`,
+      gates,
+      status: `completed · ${cycles} review cycle${cycles === 1 ? "" : "s"}`,
       passing,
       required: required.length,
       reviewCycles: cycles,
     };
   }
-  const bits = [`${passing}/${required.length} gates`];
-  if (state.dirty) bits.push("changes pending");
-  if (cycles) bits.push(`cycle ${cycles}`);
   return {
     state: "running",
     goal,
-    detail: `in progress · ${bits.join(" · ")}`,
+    gates,
+    status: `in progress${state.dirty ? " · changes pending" : ""}`,
     passing,
     required: required.length,
     reviewCycles: cycles,
