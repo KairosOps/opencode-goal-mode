@@ -38,23 +38,22 @@ test("shortGoalLabel returns empty when nothing is recorded", () => {
 // sidebarView
 // ---------------------------------------------------------------------------
 
-test("sidebarView reports hasGoal=false for an inactive or goal-less session", () => {
-  assert.equal(sidebarView(createState(), DEFAULT_CONFIG).hasGoal, false);
-  assert.equal(sidebarView(activeState(), DEFAULT_CONFIG).hasGoal, false);
-  // Never null — the sidebar always has something to render ("No goal").
+test("sidebarView reports state 'none' for an inactive or goal-less session", () => {
+  assert.equal(sidebarView(createState(), DEFAULT_CONFIG).state, "none");
+  assert.equal(sidebarView(activeState(), DEFAULT_CONFIG).state, "none");
+  // Never null — the sidebar always has something to render ("No goal available").
   assert.ok(sidebarView(undefined, DEFAULT_CONFIG));
-  assert.equal(sidebarView(undefined, DEFAULT_CONFIG).hasGoal, false);
+  assert.equal(sidebarView(undefined, DEFAULT_CONFIG).state, "none");
 });
 
-test("sidebarView surfaces gates, dirty flag, and readiness when a goal is set", () => {
+test("sidebarView state 'running' (yellow) with generated detail when a goal is in progress", () => {
   const st = activeState({ goalText: "Fix the parser", dirty: true });
   const v = sidebarView(st, DEFAULT_CONFIG);
-  assert.equal(v.hasGoal, true);
+  assert.equal(v.state, "running");
   assert.equal(v.goal, "Fix the parser");
   assert.equal(v.required, 5); // BASE_GATES
   assert.equal(v.passing, 0);
-  assert.equal(v.allowed, false);
-  assert.match(v.status, /0\/5 gates · dirty/);
+  assert.match(v.detail, /in progress · 0\/5 gates · changes pending/);
 });
 
 // ---------------------------------------------------------------------------
@@ -90,12 +89,11 @@ test("readSidebarModel reads the guard's persisted snapshot for a worktree", () 
     writeFileSync(file, JSON.stringify(snapshot));
 
     const model = readSidebarModel({ worktree, env });
-    assert.equal(model.hasGoal, true);
+    assert.equal(model.state, "running");
     assert.equal(model.goal, "Ship the sidebar");
-    assert.equal(model.required, 5);
 
-    // Unknown worktree → no file → hasGoal:false (renders "No goal"), never throws.
-    assert.equal(readSidebarModel({ worktree: "/nope", env }).hasGoal, false);
+    // Unknown worktree → no file → state:"none" (renders "No goal available"), never throws.
+    assert.equal(readSidebarModel({ worktree: "/nope", env }).state, "none");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -109,20 +107,24 @@ test("new toggles default on and coerce from options/env", () => {
   assert.equal(DEFAULT_CONFIG.toastOnReview, true);
   assert.equal(DEFAULT_CONFIG.sidebarBanner, true);
   assert.equal(DEFAULT_CONFIG.sidebarColor, "#FFD700");
+  assert.equal(DEFAULT_CONFIG.sidebarDoneColor, "#FF5555");
   assert.equal(DEFAULT_CONFIG.sidebarMutedColor, "#808080");
 
-  const c = resolveConfig({ toastOnReview: false, sidebarColor: "#00FF00", sidebarMutedColor: "#111111" }, {});
+  const c = resolveConfig({ toastOnReview: false, sidebarColor: "#00FF00", sidebarDoneColor: "#FF0000", sidebarMutedColor: "#111111" }, {});
   assert.equal(c.toastOnReview, false);
   assert.equal(c.sidebarColor, "#00FF00");
+  assert.equal(c.sidebarDoneColor, "#FF0000");
   assert.equal(c.sidebarMutedColor, "#111111");
 
   const e = resolveConfig(undefined, {
     GOAL_GUARD_SIDEBAR_BANNER: "off",
     GOAL_GUARD_SIDEBAR_COLOR: "#123456",
+    GOAL_GUARD_SIDEBAR_DONE_COLOR: "#abcdef",
     GOAL_GUARD_SIDEBAR_MUTED_COLOR: "#654321",
   });
   assert.equal(e.sidebarBanner, false);
   assert.equal(e.sidebarColor, "#123456");
+  assert.equal(e.sidebarDoneColor, "#abcdef");
   assert.equal(e.sidebarMutedColor, "#654321");
 });
 
@@ -130,9 +132,9 @@ test("new toggles default on and coerce from options/env", () => {
 // Robustness: a running task with no goal, and malformed/partial state
 // ---------------------------------------------------------------------------
 
-test("active session with no goal text → hasGoal:false (renders 'No goal')", () => {
+test("active session with no goal text → state 'none' (renders 'No goal available')", () => {
   const running = activeState(); // active but no contract/goalText
-  assert.equal(sidebarView(running, DEFAULT_CONFIG).hasGoal, false);
+  assert.equal(sidebarView(running, DEFAULT_CONFIG).state, "none");
 });
 
 test("readSidebarModel never throws on malformed/partial snapshots", () => {
@@ -146,7 +148,7 @@ test("readSidebarModel never throws on malformed/partial snapshots", () => {
     for (const bad of ["not json{", "{}", '{"sessions":null}', '{"sessions":[["k",null]]}', '{"sessions":[[1,2,3]]}', "[]"]) {
       writeFileSync(file, bad);
       const m = readSidebarModel({ worktree, env });
-      assert.ok(m && m.hasGoal === false, `bad input handled: ${bad}`);
+      assert.ok(m && m.state === "none", `bad input handled: ${bad}`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -162,7 +164,7 @@ test("pickSession tolerates malformed entries and missing fields", () => {
   assert.equal(ok.goalText, "g");
 });
 
-test("sidebarView 'ready' state when every gate passes and tree is clean", () => {
+test("sidebarView state 'done' (red) when every gate passes and the tree is clean", () => {
   const st = activeState({
     goalText: "Add auth tokens",
     latestVerdict: {
@@ -175,12 +177,12 @@ test("sidebarView 'ready' state when every gate passes and tree is clean", () =>
     },
     stickyGates: ["goal-security-reviewer"],
     lastEditSeq: 1,
+    reviewCycles: 2,
     dirty: false,
   });
   const v = sidebarView(st, DEFAULT_CONFIG);
-  assert.equal(v.hasGoal, true);
-  assert.equal(v.allowed, true);
-  assert.match(v.status, /6\/6 gates · ready/);
+  assert.equal(v.state, "done");
+  assert.match(v.detail, /completed · 6\/6 gates passed · 2 review cycles/);
 });
 
 // ---------------------------------------------------------------------------

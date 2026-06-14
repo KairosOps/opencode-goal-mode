@@ -40,9 +40,10 @@ const tui = sidebarMod.tui || sidebarMod.default?.tui; // entry exports `default
 const { stateBaseDir, projectKey } = await import(join(REPO, "plugins/goal-guard/persistence.js"));
 const { createState } = await import(join(REPO, "plugins/goal-guard/state.js"));
 
-const YELLOW = [255, 215, 0];
-const GREY = [128, 128, 128];
-const GREEN = [0, 255, 0];
+const YELLOW = [255, 215, 0]; // running
+const RED = [255, 85, 85]; // done
+const GREY = [128, 128, 128]; // no goal
+const GREEN = [0, 255, 0]; // custom
 
 function writeSnapshot(worktree, sessions) {
   const dir = stateBaseDir(process.env);
@@ -95,35 +96,36 @@ try {
   {
     writeSnapshot("/proj/withgoal", [["s1", session({ contract: { original: "Ship the OAuth refactor" }, touchedAt: 9 })]]);
     const { frame, spans } = await render({ worktree: "/proj/withgoal" });
-    banner("Goal set"); show(frame);
+    banner("Goal RUNNING (yellow)"); show(frame);
     check("shows the goal text", frame.includes("Ship the OAuth refactor"));
     check("shows the GOAL label", frame.includes("GOAL"));
     check("does NOT show 'No goal'", !frame.includes("No goal"));
     check("goal text is shining yellow", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, YELLOW));
     check("GOAL label is bold", spanFor(spans, "GOAL")?.attr === 1);
-    check("shows a gate count", /\d\/\d gates/.test(frame));
+    check("generated detail says 'in progress'", /in progress · \d\/\d gates/.test(frame), frame.split("\n")[1]);
   }
   {
     writeSnapshot("/proj/nogoal", [["s1", session({ touchedAt: 3 })]]);
     const { frame, spans } = await render({ worktree: "/proj/nogoal" });
-    banner("Running task, no goal"); show(frame);
-    check("shows 'No goal'", frame.includes("No goal"));
+    banner("Task running, NO goal (grey)"); show(frame);
+    check("shows 'No goal available'", frame.includes("No goal available"));
     check("nothing else (no glyph/gates)", !frame.includes("◆") && !frame.includes("gates"));
-    check("'No goal' is grey", sameColor(spanFor(spans, "No goal")?.rgba, GREY));
-    check("'No goal' is not bold", spanFor(spans, "No goal")?.attr === 0);
+    check("'No goal available' is grey", sameColor(spanFor(spans, "No goal available")?.rgba, GREY));
   }
   {
     const { frame, spans } = await render({ worktree: "/proj/never-touched" });
-    banner("No guard state at all"); show(frame);
-    check("grey 'No goal' fallback", frame.includes("No goal") && sameColor(spanFor(spans, "No goal")?.rgba, GREY));
+    banner("No guard state at all (grey)"); show(frame);
+    check("grey 'No goal available' fallback", frame.includes("No goal available") && sameColor(spanFor(spans, "No goal available")?.rgba, GREY));
   }
   {
     const passing = {};
     for (const g of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) passing[g] = { verdict: "PASS", seq: 40 };
-    writeSnapshot("/proj/ready", [["s1", session({ goalText: "Fix the parser bug", latestVerdict: passing, lastEditSeq: 1, touchedAt: 9 })]]);
-    const { frame } = await render({ worktree: "/proj/ready" });
-    banner("All gates pass (ready)"); show(frame);
-    check("status shows 'ready'", /5\/5 gates · ready/.test(frame), frame.split("\n")[1]);
+    writeSnapshot("/proj/done", [["s1", session({ goalText: "Fix the parser bug", latestVerdict: passing, lastEditSeq: 1, reviewCycles: 2, touchedAt: 9 })]]);
+    const { frame, spans } = await render({ worktree: "/proj/done" });
+    banner("Goal DONE (red)"); show(frame);
+    check("shows the goal + ✓", frame.includes("Fix the parser bug") && frame.includes("✓"));
+    check("done goal is RED", sameColor(spanFor(spans, "Fix the parser bug")?.rgba, RED), JSON.stringify(spanFor(spans, "Fix the parser bug")?.rgba));
+    check("generated detail says 'completed'", /completed · 5\/5 gates passed · 2 review cycles/.test(frame.replace(/\s+/g, " ")), frame.replace(/\s+/g, " "));
   }
   {
     writeSnapshot("/proj/green", [["s1", session({ goalText: "Custom colour goal", touchedAt: 9 })]]);

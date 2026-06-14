@@ -21,14 +21,18 @@ export function shortGoalLabel(state, max = 80) {
   return `${base.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Sentinel for "a task is running but no goal is set" — the sidebar shows a muted "No goal". */
-export const NO_GOAL = Object.freeze({ hasGoal: false });
+/** Sentinel for "a task is running but no goal is set" — the sidebar shows a muted "No goal available". */
+export const NO_GOAL = Object.freeze({ state: "none", goal: "", detail: "" });
 
 /**
- * Compact projection for the TUI sidebar banner. ALWAYS returns an object so the
- * sidebar can render unconditionally:
- *   - `{ hasGoal: false }` when no active goal is set (render a muted "No goal").
- *   - `{ hasGoal: true, goal, status, … }` when a goal is active (render in colour).
+ * Compact projection for the TUI sidebar banner. ALWAYS returns an object with a
+ * three-way `state` so the sidebar renders unconditionally:
+ *   - `state: "none"`    → no active goal: grey "No goal available".
+ *   - `state: "running"` → goal in progress: yellow, with a generated status line.
+ *   - `state: "done"`    → goal complete (all required gates pass, tree clean):
+ *                           red, with a generated completion line.
+ * `goal` is the short goal label; `detail` is generated descriptive text derived
+ * from the current goal's gate/cycle/dirty state.
  */
 export function sidebarView(state, config) {
   if (!state || !state.active) return NO_GOAL;
@@ -37,9 +41,30 @@ export function sidebarView(state, config) {
   const required = requiredGates(state, config);
   const missing = missingGates(state, config);
   const passing = required.length - missing.length;
-  const allowed = required.length > 0 && missing.length === 0 && !state.dirty;
-  const status = `${passing}/${required.length} gates` + (state.dirty ? " · dirty" : "") + (allowed ? " · ready" : "");
-  return { hasGoal: true, goal, status, allowed, reviewCycles: state.reviewCycles, passing, required: required.length, dirty: Boolean(state.dirty) };
+  const cycles = Number(state.reviewCycles) || 0;
+  const done = required.length > 0 && missing.length === 0 && !state.dirty;
+  if (done) {
+    return {
+      state: "done",
+      goal,
+      detail: `completed · ${passing}/${required.length} gates passed · ${cycles} review cycle${cycles === 1 ? "" : "s"}`,
+      passing,
+      required: required.length,
+      reviewCycles: cycles,
+    };
+  }
+  const bits = [`${passing}/${required.length} gates`];
+  if (state.dirty) bits.push("changes pending");
+  if (cycles) bits.push(`cycle ${cycles}`);
+  return {
+    state: "running",
+    goal,
+    detail: `in progress · ${bits.join(" · ")}`,
+    passing,
+    required: required.length,
+    reviewCycles: cycles,
+    dirty: Boolean(state.dirty),
+  };
 }
 
 export function summarizeState(state, config) {

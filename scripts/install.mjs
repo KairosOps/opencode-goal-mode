@@ -125,6 +125,36 @@ function loadManifest() {
   }
 }
 
+/**
+ * Register (or remove) the TUI sidebar plugin in `<target>/tui.json`.
+ *
+ * TUI plugins are NOT loaded from the `plugins/` dir (that path is for server
+ * plugins); OpenCode loads them only from tui.json. We reference the published
+ * npm package by name so OpenCode resolves it with its `@opentui/solid` runtime.
+ * Merge-safe: preserves any existing entries and only touches our own.
+ */
+const TUI_PLUGIN_SPEC = pkg.name;
+function ensureTuiPlugin(remove = false) {
+  const tuiPath = join(target, "tui.json");
+  let data = { $schema: "https://opencode.ai/tui.json", plugin: [] };
+  try {
+    const existing = JSON.parse(readFileSync(tuiPath, "utf8"));
+    if (existing && typeof existing === "object") data = existing;
+  } catch {
+    /* missing or invalid → start fresh */
+  }
+  if (!Array.isArray(data.plugin)) data.plugin = [];
+  const has = data.plugin.includes(TUI_PLUGIN_SPEC);
+  if (remove ? !has : has) return false;
+  data.plugin = remove ? data.plugin.filter((p) => p !== TUI_PLUGIN_SPEC) : [...data.plugin, TUI_PLUGIN_SPEC];
+  if (!data.$schema) data.$schema = "https://opencode.ai/tui.json";
+  if (!values["dry-run"]) {
+    mkdirSync(target, { recursive: true });
+    writeFileSync(tuiPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Uninstall
 // ---------------------------------------------------------------------------
@@ -144,7 +174,9 @@ if (values.uninstall) {
     }
   }
   if (!values["dry-run"] && existsSync(manifestPath)) rmSync(manifestPath, { force: true });
+  const tuiRemoved = ensureTuiPlugin(true);
   if (!values["dry-run"]) pruneEmptyDirs(target, Object.keys(manifest.files));
+  if (tuiRemoved) console.log(`${values["dry-run"] ? "Would remove" : "Removed"} the sidebar entry from ${join(target, "tui.json")}`);
   const verb = values["dry-run"] ? "Would remove" : "Removed";
   console.log(`${verb} ${removed.length} Goal Mode files from ${target}.`);
   if (kept.length) {
@@ -234,9 +266,12 @@ if (!values["dry-run"]) {
   writeFileSync(manifestPath, JSON.stringify({ version: pkg.version, files: newManifestFiles }, null, 2), "utf8");
 }
 
+const tuiAdded = ensureTuiPlugin(false);
+
 const verb = values["dry-run"] ? "Would install" : "Installed";
 console.log(`${verb} OpenCode Goal Mode ${pkg.version} into ${target}`);
 console.log(
   `Files copied: ${summary.copied.length}; unchanged: ${summary.unchanged.length}; pruned: ${summary.pruned.length}`,
 );
+if (tuiAdded) console.log(`Registered the experimental sidebar in ${join(target, "tui.json")}`);
 console.log("Restart OpenCode for agents, commands, and plugins to load.");

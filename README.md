@@ -18,6 +18,10 @@ npm install -g opencode-goal-mode && opencode-goal-mode-install --global
 
 ![OpenCode Goal Mode sidebar banner](docs/sidebar-demo.svg)
 
+<sub>↑ Illustrative mockup of the **experimental** sidebar banner. The enforcement
+core (guard + agents) is the verified product; the TUI sidebar is opt-in and its
+live render depends on your OpenCode build — see [TUI integration](#tui-integration).</sub>
+
 **[Quick start](#quick-start) · [Install](#install) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
 
 ## Quick start
@@ -172,24 +176,31 @@ Goal Mode is a **plugin pair**: the server-side `goal-guard` plugin owns
 enforcement and writes its state to disk, and an experimental TUI plugin
 (`plugins/goal-sidebar.js`) reads that same state to render a live banner.
 
-- **Sidebar goal banner (experimental).** The current goal renders in shining
-  yellow in the sidebar (`sidebar_content` slot), with a `passing/total gates ·
-  dirty/ready` status line, and updates as reviews land. When a task is running
-  but **no goal is set**, it shows a clean grey `No goal`. Set
-  `sidebarBanner: false` (or `GOAL_GUARD_SIDEBAR_BANNER=0`) to disable,
-  `sidebarColor` to recolour the goal, or `sidebarMutedColor` for the "No goal"
-  line.
+- **Sidebar goal banner.** In the sidebar's content area, under the session
+  title/context, it shows the current goal with generated status text, colour-coded
+  by lifecycle:
+  - **yellow** — a goal is set and running (`◆ GOAL …` + `in progress · N/M gates`);
+  - **red** — the goal is done (all required gates pass, tree clean: `✓ GOAL …` +
+    `completed · N/M gates passed · K review cycles`);
+  - **grey** — a task is running with no goal set (`No goal available`).
 
-  **Verification status, honestly:** the component is rendered and asserted
-  (text + exact colours) by a real headless OpenTUI renderer in the
-  [visual test](tools/visual-test/README.md) (`npm run test:visual`, 17/17), and
-  OpenCode discovers and boots it as a plugin without error. It needs a recent
-  OpenCode that mounts file-based TUI plugins into the `sidebar_content` slot and
-  provides the `@opentui/solid` runtime; on a build without that, it simply does
-  not appear (it never errors or breaks the TUI — the enforcement core is a
-  separate server plugin and is unaffected). The banner appears in a **session**
-  view, not the home screen. If it doesn't show, that's the TUI-plugin runtime,
-  not Goal Mode's enforcement.
+  Toggle/recolour with `sidebarBanner`, `sidebarColor` (running), `sidebarDoneColor`
+  (done), `sidebarMutedColor` (no goal), or the `GOAL_GUARD_SIDEBAR_*` env vars.
+
+  **How it loads — important.** TUI plugins are **not** loaded from the `plugins/`
+  dir; OpenCode loads them from `~/.config/opencode/tui.json`. The installer writes
+  that for you (merge-safe):
+
+  ```json
+  { "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
+  ```
+
+  Restart OpenCode after install so it picks up the TUI plugin (it resolves the
+  package and provides the `@opentui/solid` runtime). The banner appears in a
+  **session** view (not the home screen). The three states are rendered and
+  asserted — text + exact colours — by a real headless OpenTUI renderer in the
+  [visual test](tools/visual-test/README.md) (`npm run test:visual`, 18/18). The
+  enforcement core is a separate server plugin and works regardless of the sidebar.
 - **Toasts.** Review verdicts and completion-unlock events surface as toasts
   (`toastOnReview`), and blocked destructive commands / premature completions
   toast as before (`toastOnBlock`).
@@ -270,8 +281,9 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `toastOnBlock` / `GOAL_GUARD_TOAST_ON_BLOCK` | `true` | Toast when something is blocked. |
 | `toastOnReview` / `GOAL_GUARD_TOAST_ON_REVIEW` | `true` | Toast on each review verdict and when completion unlocks. |
 | `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the experimental yellow goal banner in the TUI sidebar. |
-| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Foreground colour of the sidebar goal banner. |
-| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Colour of the muted "No goal" line when no goal is set. |
+| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Colour of a **running** goal in the sidebar (yellow). |
+| `sidebarDoneColor` / `GOAL_GUARD_SIDEBAR_DONE_COLOR` | `#FF5555` | Colour of a **done** goal in the sidebar (red). |
+| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Colour of the "No goal available" line (grey). |
 
 ## Custom tools
 

@@ -1,8 +1,9 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
+  "main": "plugins/goal-sidebar.js",
   "engines": {
     "node": ">=20.11"
   },

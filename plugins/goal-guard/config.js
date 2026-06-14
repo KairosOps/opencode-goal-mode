@@ -32,7 +32,9 @@ export const DEFAULT_CONFIG = Object.freeze({
   sidebarBanner: true,
   /** Foreground colour (hex) for the sidebar goal banner. */
   sidebarColor: "#FFD700",
-  /** Foreground colour (hex) for the muted "No goal" sidebar line. */
+  /** Foreground colour (hex) for a completed goal in the sidebar (running → done turns yellow → red). */
+  sidebarDoneColor: "#FF5555",
+  /** Foreground colour (hex) for the muted "No goal available" sidebar line. */
   sidebarMutedColor: "#808080",
   /** Phrase that, at the start of an assistant message, claims completion. */
   completionMarker: "Goal Completed",
@@ -70,6 +72,7 @@ function fromEnv(env) {
     GOAL_GUARD_TOAST_ON_REVIEW: ["toastOnReview", coerceBool],
     GOAL_GUARD_SIDEBAR_BANNER: ["sidebarBanner", coerceBool],
     GOAL_GUARD_SIDEBAR_COLOR: ["sidebarColor", (v) => (v == null ? undefined : String(v))],
+    GOAL_GUARD_SIDEBAR_DONE_COLOR: ["sidebarDoneColor", (v) => (v == null ? undefined : String(v))],
     GOAL_GUARD_SIDEBAR_MUTED_COLOR: ["sidebarMutedColor", (v) => (v == null ? undefined : String(v))],
   };
   for (const [key, [field, coerce]] of Object.entries(map)) {

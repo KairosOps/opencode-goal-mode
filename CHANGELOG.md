@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.3.6
+
+- **FIX: the sidebar never loaded.** TUI plugins are loaded from
+  `~/.config/opencode/tui.json` — NOT the `plugins/` dir (that is server plugins
+  only). The installer never created tui.json, so OpenCode never loaded the
+  sidebar (it only showed the session title + context). The installer now
+  registers the sidebar in `tui.json` (`plugin: ["opencode-goal-mode"]`,
+  merge-safe), and the package `main` points at the TUI plugin so OpenCode loads
+  it with its `@opentui/solid` runtime. Confirmed OpenCode reads tui.json.
+- **Sidebar behaviour, as requested:** under the sidebar's content/"context"
+  area it now shows the goal with generated status text, colour-coded by
+  lifecycle: **yellow** while the goal is running, **red** when it is done (all
+  required gates pass, tree clean), and **grey "No goal available"** when a task
+  is running with no goal set. New `sidebarDoneColor` option
+  (`GOAL_GUARD_SIDEBAR_DONE_COLOR`, default `#FF5555`).
+- `summary.sidebarView` now returns `{ state: "none"|"running"|"done", goal,
+  detail }`; the headless visual test renders and asserts all three states (text
+  + exact colours), 18/18.
+
 ## v0.3.5
 
 - Verified the package against the **current** OpenCode plugin API

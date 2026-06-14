@@ -1,38 +1,37 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Goal Mode — experimental TUI sidebar banner.
+ * Goal Mode — TUI sidebar goal banner.
  *
- * EXPERIMENTAL. This is a TUI plugin module (the companion to the server-side
- * goal-guard plugin). It renders the current goal as a short, shining-yellow
- * banner in the OpenCode sidebar, with a compact `passing/total gates ·
- * dirty/ready` status line, and updates as reviews land.
+ * This is a TUI plugin module (companion to the server-side goal-guard plugin).
+ * It renders, in the sidebar's content area, the current goal with generated
+ * status text and a colour that tracks the goal's lifecycle:
+ *   - RUNNING (goal set, in progress)        → yellow
+ *   - DONE    (all required gates pass, clean) → red
+ *   - NONE    (a task is running, no goal set) → grey "No goal available"
  *
- * It only does anything inside a TUI-plugin-capable OpenCode (one exposing
- * `api.slots.register`). On any older runtime, missing API, or render error it
- * silently no-ops — it can never break your TUI.
+ * IMPORTANT — how OpenCode loads this: TUI plugins are NOT loaded from the
+ * regular `plugin` array / plugins dir (that is server plugins). They are listed
+ * in `~/.config/opencode/tui.json`:
+ *     { "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
+ * The installer writes that automatically. OpenCode then loads this module
+ * (the package `main`) and provides the `@opentui/solid` + `solid-js` runtime
+ * (declared here as peer deps), so its slot shares OpenCode's renderer.
  *
- * Pairing: it reads the SAME on-disk snapshot the goal-guard server plugin
- * writes (see goal-guard/persistence.js), so the two stay in sync with no extra
- * IPC. The pure projection (`summary.sidebarView`) is shared with the server
- * plugin and unit-tested via goal-guard/sidebar-data.js; only the file read and
- * state-path computation are reimplemented here.
- *
- * Runtime constraints (mirrored from working OpenCode TUI plugins):
- *  - TUI plugin modules export `export default { id, tui }`.
- *  - The Bun TUI plugin runtime does NOT support top-level ESM imports of Node
- *    built-ins, so `node:fs`/`node:path`/`node:os`/`node:crypto` are `require()`d
- *    lazily inside functions. Top-level imports of regular packages (solid-js)
- *    and of our Node-built-in-free local modules are fine.
- *  - This file uses Solid/opentui JSX and is loaded only by OpenCode's (Bun) TUI
- *    runtime, which transpiles it; it is never imported by the Node test suite.
+ * Runtime constraints (from working OpenCode TUI plugins):
+ *  - the module exports a single `export default { id, tui }`;
+ *  - the Bun TUI runtime does not support top-level ESM imports of Node built-ins,
+ *    so node:fs/path/os/crypto are require()d lazily inside functions;
+ *  - it is never imported by the Node test suite (the pure projection it uses,
+ *    summary.sidebarView, is tested via goal-guard/sidebar-data.js).
  */
 
 import { createSignal, onCleanup, Show } from "solid-js";
 import { sidebarView, NO_GOAL } from "./goal-guard/summary.js";
 import { DEFAULT_CONFIG } from "./goal-guard/config.js";
 
-const DEFAULT_COLOR = "#FFD700"; // shining yellow
-const DEFAULT_MUTED = "#808080"; // clean grey for "No goal"
+const DEFAULT_COLOR = "#FFD700"; // shining yellow — running
+const DEFAULT_DONE = "#FF5555"; // red — completed
+const DEFAULT_MUTED = "#808080"; // grey — no goal
 const POLL_MS = 1500;
 
 function resolveOptions(options, env) {
@@ -41,16 +40,15 @@ function resolveOptions(options, env) {
   const enabledEnv = e.GOAL_GUARD_SIDEBAR_BANNER;
   const disabled =
     enabledOpt === false || enabledEnv === "0" || enabledEnv === "false" || enabledEnv === "off";
-  const color = options?.sidebarColor || e.GOAL_GUARD_SIDEBAR_COLOR || DEFAULT_COLOR;
-  const muted = options?.sidebarMutedColor || e.GOAL_GUARD_SIDEBAR_MUTED_COLOR || DEFAULT_MUTED;
-  return { enabled: !disabled, color, muted };
+  return {
+    enabled: !disabled,
+    color: options?.sidebarColor || e.GOAL_GUARD_SIDEBAR_COLOR || DEFAULT_COLOR,
+    doneColor: options?.sidebarDoneColor || e.GOAL_GUARD_SIDEBAR_DONE_COLOR || DEFAULT_DONE,
+    muted: options?.sidebarMutedColor || e.GOAL_GUARD_SIDEBAR_MUTED_COLOR || DEFAULT_MUTED,
+  };
 }
 
-/**
- * Read the guard's persisted snapshot for a worktree. The state-path logic is
- * kept identical to goal-guard/persistence.js (stateBaseDir + projectKey); node
- * built-ins are required lazily to satisfy the TUI runtime.
- */
+/** Read the guard's persisted snapshot for a worktree (path logic mirrors persistence.js). */
 function readSnapshot(worktree) {
   try {
     const fs = require("node:fs");
@@ -100,7 +98,7 @@ const id = "goal-mode-sidebar";
 /** @type {import("@opencode-ai/plugin/tui").TuiPlugin} */
 const tui = async (api, options) => {
   try {
-    const { enabled, color, muted } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
+    const { enabled, color, doneColor, muted } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
     if (!enabled) return;
     if (!api?.slots?.register) return; // runtime without the slot API → no-op.
 
@@ -120,16 +118,21 @@ const tui = async (api, options) => {
           const [model, setModel] = createSignal(read());
           const timer = setInterval(() => setModel(read()), POLL_MS);
           onCleanup(() => clearInterval(timer));
-          // Always render: a muted "No goal" when none is set, the goal in colour otherwise.
+          const fg = () => (model().state === "done" ? doneColor : color);
+          // Always render: grey "No goal available" when none, else the goal in
+          // yellow (running) / red (done) with generated status text.
           return (
-            <box flexDirection="column">
-              <Show when={model().hasGoal} fallback={<text fg={muted}>No goal</text>}>
-                <text fg={color}>
-                  {"◆ "}
+            <box flexDirection="column" paddingTop={1}>
+              <Show
+                when={model().state !== "none"}
+                fallback={<text fg={muted}>No goal available</text>}
+              >
+                <text fg={fg()}>
+                  {model().state === "done" ? "✓ " : "◆ "}
                   <b>GOAL</b>
                   {`  ${model().goal}`}
                 </text>
-                <text fg={color}>{model().status}</text>
+                <text fg={fg()}>{model().detail}</text>
               </Show>
             </box>
           );
