@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.9
 
 - Installer docs and `--help` now put the one-command `npx opencode-goal-mode --global`
   flow first, clarify global vs project targets, and document the merge-safe
