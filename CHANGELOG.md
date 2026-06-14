@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.4
+
+### Sidebar todos and gates stay correct and up to date
+
+- **Acceptance-criterion todos now check off.** They were matched against the
+  *display-clipped* criterion text, so any criterion longer than the sidebar width
+  never showed as done even with exact matching evidence. Matching now uses the full
+  criterion text (clipping is display-only). Verified live in the OpenCode TUI.
+- **The Goal section refreshes promptly.** It now updates on OpenCode activity
+  events (`message.part.updated`, …) — the same mechanism the reference TUI plugin
+  uses — in addition to the polling fallback, and forces a repaint on each refresh,
+  so gates and todos track the goal's real state as reviewers pass and evidence is
+  recorded instead of going stale.
+
+### Docs
+
+- The README preview is now a real TUI screenshot (`docs/sidebar-preview.png`).
+
 ## v0.4.3
 
 ### Build mode no longer behaves like a goal
