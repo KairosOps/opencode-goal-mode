@@ -54,9 +54,12 @@ function sidebarTodos(state, required, missing) {
   const criteria = Array.isArray(state?.contract?.acceptanceCriteria) ? state.contract.acceptanceCriteria : [];
   const items = [];
   for (const criterion of criteria.slice(0, 4)) {
-    const text = clip(criterion, 52);
-    if (!text) continue;
-    items.push({ status: criterionEvidenceFresh(state, text) ? "done" : "todo", text });
+    // Match evidence against the FULL criterion text; clip only for display. (Clipping
+    // before matching meant any criterion longer than the display width never checked
+    // off — the recorded evidence carries the full text.)
+    const full = String(criterion || "").replace(/\s+/g, " ").trim();
+    if (!full) continue;
+    items.push({ status: criterionEvidenceFresh(state, full) ? "done" : "todo", text: clip(full, 52) });
   }
   if (state?.dirty) items.push({ status: "todo", text: "Re-verify & re-review after recent edits" });
   // One row per missing/stale review gate, by friendly name — more scannable than a

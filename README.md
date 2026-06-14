@@ -60,7 +60,7 @@ config, including `.opencode/tui.json`. See [Installer options](#installer-optio
 [![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
 [![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
 
-<img width="4950" height="2160" alt="image" src="https://github.com/user-attachments/assets/dc961e05-3534-4914-a356-7f86d7334313" />
+![OpenCode Goal Mode sidebar todo section](docs/sidebar-demo.svg)
 
 <sub>↑ In goal mode, the Goal plugin takes over the sidebar todo section with a
 structured, evidence-aware Goal todo list — a bold `GOAL` label, then the goal

@@ -75,6 +75,18 @@ test("sidebarView state 'running' with a stacked GOAL label, gates + status line
   assert.ok(v.todos.some((item) => item.text.includes("Re-verify")));
 });
 
+test("a long acceptance criterion still checks off with matching fresh evidence (clip-before-match regression)", () => {
+  const long = "math.js exists with an add(a, b) function that returns a + b"; // 60 chars > display width
+  const st = activeState({
+    contract: { title: "Math", acceptanceCriteria: [long] },
+    evidence: [{ command: "node math.js", result: "5", criteria: [long], seq: 3 }],
+    lastEditSeq: 2,
+  });
+  const row = sidebarView(st, DEFAULT_CONFIG).todos[0];
+  assert.equal(row.status, "done", "a long criterion with fresh matching evidence must be marked done");
+  assert.ok(row.text.endsWith("…") && row.text.length <= 53, "the row text is clipped for display only");
+});
+
 test("sidebarView builds structured Goal todos from acceptance criteria and evidence", () => {
   const st = activeState({
     contract: { title: "Ship installer", acceptanceCriteria: ["README explains install", "Installer dry-run works"] },

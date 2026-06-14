@@ -167,9 +167,42 @@ const tui = async (api, options) => {
             // Returning undefined at mount (the old behavior) meant the poll never
             // ran and the Goal section never showed even once a goal existed.
             const first = read();
-            const [model, setModel] = createSignal(first);
-            const timer = setInterval(() => setModel(read()), POLL_MS);
+            // equals:false → every refresh re-notifies, so a changed snapshot always
+            // repaints (gates/todos stay live even when the new object compares equal).
+            const [model, setModel] = createSignal(first, { equals: false });
+            const refresh = () => setModel(read());
+            // Refresh on OpenCode activity. Tool calls (verdicts, evidence, edits)
+            // change the gates/todos and emit message-part events, so subscribing here
+            // keeps the section up to date promptly — this is the mechanism the
+            // reference OpenCode TUI plugin uses. The interval is a fallback for any
+            // quiet period or runtime where the event bus is unavailable.
+            const offs = [];
+            try {
+              const bus = api && api.event;
+              if (bus && typeof bus.on === "function") {
+                for (const ev of ["message.part.updated", "message.updated", "session.idle"]) {
+                  try {
+                    const off = bus.on(ev, refresh);
+                    if (typeof off === "function") offs.push(off);
+                  } catch {
+                    /* unknown event type on this OpenCode build — skip it */
+                  }
+                }
+              }
+            } catch {
+              /* no event bus — rely on the interval */
+            }
+            const timer = setInterval(refresh, POLL_MS);
             onCleanup(() => clearInterval(timer));
+            onCleanup(() => {
+              for (const off of offs) {
+                try {
+                  off();
+                } catch {
+                  /* ignore */
+                }
+              }
+            });
             // First-display rainbow: starts the moment a goal FIRST appears. If a goal
             // is already present at mount it starts immediately; otherwise the effect
             // fires when the goal later appears (the common case — the goal is set
