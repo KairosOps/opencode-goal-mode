@@ -41,8 +41,9 @@ opencode agent list | grep goal
    The `goal` agent writes a contract, delegates research/review to subagents, and
    **cannot** answer `Goal Completed` until every required review gate passes — the
    guard rewrites a premature claim to `Goal Not Completed`. Try a destructive
-   command mid-session (e.g. `rm -rf build`) and watch it get blocked. The active
-   goal shows in the sidebar in yellow.
+   command mid-session (e.g. `rm -rf build`) and watch it get blocked. If your
+   OpenCode build supports TUI plugins, the active goal also appears in the sidebar
+   in yellow (experimental — see [TUI integration](#tui-integration)).
 
 That's it. Everything below is detail.
 
@@ -174,14 +175,21 @@ enforcement and writes its state to disk, and an experimental TUI plugin
 - **Sidebar goal banner (experimental).** The current goal renders in shining
   yellow in the sidebar (`sidebar_content` slot), with a `passing/total gates ·
   dirty/ready` status line, and updates as reviews land. When a task is running
-  but **no goal is set**, it shows a clean grey `No goal` and nothing else. It
-  requires a TUI-plugin-capable OpenCode (one exposing `api.slots.register`); on
-  any older runtime it silently no-ops, so it can never break your TUI. Set
+  but **no goal is set**, it shows a clean grey `No goal`. Set
   `sidebarBanner: false` (or `GOAL_GUARD_SIDEBAR_BANNER=0`) to disable,
   `sidebarColor` to recolour the goal, or `sidebarMutedColor` for the "No goal"
-  line. It is rendered-and-asserted headlessly by the
-  [visual test](tools/visual-test/README.md) (`npm run test:visual`); still worth
-  a glance in your own TUI.
+  line.
+
+  **Verification status, honestly:** the component is rendered and asserted
+  (text + exact colours) by a real headless OpenTUI renderer in the
+  [visual test](tools/visual-test/README.md) (`npm run test:visual`, 17/17), and
+  OpenCode discovers and boots it as a plugin without error. It needs a recent
+  OpenCode that mounts file-based TUI plugins into the `sidebar_content` slot and
+  provides the `@opentui/solid` runtime; on a build without that, it simply does
+  not appear (it never errors or breaks the TUI — the enforcement core is a
+  separate server plugin and is unaffected). The banner appears in a **session**
+  view, not the home screen. If it doesn't show, that's the TUI-plugin runtime,
+  not Goal Mode's enforcement.
 - **Toasts.** Review verdicts and completion-unlock events surface as toasts
   (`toastOnReview`), and blocked destructive commands / premature completions
   toast as before (`toastOnBlock`).

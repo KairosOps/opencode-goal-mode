@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.5
+
+- Verified the package against the **current** OpenCode plugin API
+  (`@opencode-ai/plugin@1.17.6`, matching OpenCode 1.17.6, now the dev pin): all
+  guard hooks (`chat.message`/`params`, `tool.execute.before`/`after`,
+  `experimental.chat.system.transform`/`text.complete`/`session.compacting`)
+  exist; the guard plugin loads with zero errors; and in a real OpenCode the
+  agent list shows `goal` as the only user-selectable agent with 26 subagents and
+  reviewer `edit`/`task: deny` applied. The enforcement core is unchanged and
+  fully intact.
+- Declared `@opentui/solid`, `solid-js`, `@opencode-ai/plugin` as **optional**
+  peer dependencies (the TUI runtime the sidebar uses).
+- Docs: stated the sidebar's verification status honestly — the experimental TUI
+  banner is verified to load and to render in a real headless OpenTUI test, but
+  its live in-session render depends on your OpenCode build's file-based
+  TUI-plugin support; it never errors and never affects the enforcement core.
+
 ## v0.3.4
 
 Critical fixes found by testing against a real OpenCode (1.17.6) install — the
