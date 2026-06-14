@@ -33,8 +33,8 @@ opencode-goal-mode --global          # alias of opencode-goal-mode-install
 # Preview first, then install (no writes on --dry-run)
 opencode-goal-mode --global --dry-run
 
-# Temporary npx install (server-side components work; for the TUI sidebar,
-# prefer the global install above so OpenCode can resolve the package later)
+# One-off install with npx (no global package needed; OpenCode still loads the TUI
+# sidebar — it resolves that from its own plugin cache, not the global install)
 npx opencode-goal-mode --global
 
 # Into a single project (writes ./.opencode, including ./.opencode/tui.json)

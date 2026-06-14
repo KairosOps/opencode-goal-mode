@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.4.5
+
+### Install experience
+
+- Verified every documented install path end-to-end in clean Linux containers and
+  on macOS: the one-command global install, the auto-update `postinstall`,
+  `npm install -g` on its own, the `opencode-goal-mode-install` alias,
+  `npx … --global`, the `npx` project install (`./.opencode`), `--dry-run`,
+  `--uninstall`, and the from-source `npm ci && npm run install:global`.
+- The installer now prints clear next steps after installing (restart OpenCode, pick
+  the `goal` agent or run `/goal …`) and an explicit "nothing was written" line on
+  `--dry-run`.
+- Docs: corrected the `npx` note — OpenCode loads the TUI sidebar from its own
+  plugin cache (fetched from npm), so the sidebar works after an `npx … --global`
+  install too, not only a global npm install.
+
 ## v0.4.4
 
 ### Sidebar todos and gates stay correct and up to date

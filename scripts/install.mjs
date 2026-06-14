@@ -337,4 +337,9 @@ const cacheCleared = refreshTuiPluginCache();
 if (cacheCleared.length) {
   console.log(`${values["dry-run"] ? "Would clear" : "Cleared"} OpenCode's stale TUI plugin cache so the sidebar reloads at the installed version.`);
 }
-console.log("Restart OpenCode for agents, commands, and plugins to load.");
+if (values["dry-run"]) {
+  console.log("Dry run — nothing was written.");
+} else {
+  console.log("\nNext: restart OpenCode, then pick the `goal` agent (or run `/goal <your goal>`).");
+  console.log("Only `goal` is user-selectable; it drives the review subagents automatically.");
+}
