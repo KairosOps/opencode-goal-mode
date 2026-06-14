@@ -1,5 +1,5 @@
 /**
- * Visual + behavioral test for the real goal-sidebar.js TUI component.
+ * Visual + behavioral test for the real goal-sidebar.tsx TUI component.
  *
  * Renders the actual shipped slot component HEADLESSLY with @opentui/solid's
  * testRender, prints each frame so the rendering is visible, and asserts both the
@@ -42,7 +42,6 @@ const { createState } = await import(join(REPO, "plugins/goal-guard/state.js"));
 
 const YELLOW = [255, 215, 0]; // running
 const RED = [255, 85, 85]; // done
-const GREY = [128, 128, 128]; // no goal
 const GREEN = [0, 255, 0]; // custom
 
 function writeSnapshot(worktree, sessions) {
@@ -68,10 +67,10 @@ async function render({ worktree, sessionId = "s1", options, width = 44, height 
   const { api, getSlot } = mockApi(worktree);
   await tui(api, options);
   const slot = getSlot();
-  if (typeof slot !== "function") throw new Error("sidebar_content slot was not registered");
+  if (typeof slot !== "function") return { frame: "", spans: [], t: null, registered: false };
   const t = await testRender(() => slot({}, { session_id: sessionId }), { width, height });
   await t.renderOnce();
-  return { frame: t.captureCharFrame(), spans: t.renderer.currentRenderBuffer.getSpanLines(), t };
+  return { frame: t.captureCharFrame(), spans: t.renderer.currentRenderBuffer.getSpanLines(), t, registered: true };
 }
 function spanFor(spans, substr) {
   for (const line of spans || []) for (const s of line.spans || []) {
@@ -96,28 +95,41 @@ try {
   {
     writeSnapshot("/proj/withgoal", [["s1", session({ contract: { title: "Ship the OAuth refactor", original: "the user wants us to finish migrating the oauth flow and delete the legacy code path entirely" }, touchedAt: 9 })]]);
     const { frame, spans } = await render({ worktree: "/proj/withgoal" });
-    banner("Goal RUNNING (yellow, AI title)"); show(frame);
+    banner("Goal RUNNING (rainbow first display, AI title)"); show(frame);
     check("shows the AI title, not the long original", frame.includes("Ship the OAuth refactor") && !frame.includes("legacy code path"));
-    check("shows the GOAL label", frame.includes("GOAL"));
+    check("shows the Goal todos label", frame.includes("Goal todos"));
     check("NO orb (◆) before GOAL", !frame.includes("◆"));
     check("does NOT show 'No goal'", !frame.includes("No goal"));
-    check("goal text is shining yellow", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, YELLOW));
-    check("GOAL label is bold", spanFor(spans, "GOAL")?.attr === 1);
-    check("line 2 is the gate count", /\d\/\d gates/.test(frame), frame);
-    check("line 3 is the status 'in progress'", /in progress/.test(frame), frame);
+    check("goal text starts with rainbow red", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, [255, 85, 85]));
+    check("Goal todos label is bold", spanFor(spans, "Goal todos")?.attr === 1);
+    check("line 2 contains gates and status", /\d\/\d gates · in progress/.test(frame), frame);
   }
   {
     writeSnapshot("/proj/nogoal", [["s1", session({ touchedAt: 3 })]]);
-    const { frame, spans } = await render({ worktree: "/proj/nogoal" });
-    banner("Task running, NO goal (grey)"); show(frame);
-    check("shows 'No goal available'", frame.includes("No goal available"));
-    check("nothing else (no glyph/gates)", !frame.includes("◆") && !frame.includes("gates"));
-    check("'No goal available' is grey", sameColor(spanFor(spans, "No goal available")?.rgba, GREY));
+    const { frame, registered } = await render({ worktree: "/proj/nogoal" });
+    banner("Task running, NO goal (native todo untouched)"); show(frame);
+    check("does not register the slot so native todo can remain", registered === false && !frame.includes("No goal") && !frame.includes("Goal todos"));
   }
   {
-    const { frame, spans } = await render({ worktree: "/proj/never-touched" });
-    banner("No guard state at all (grey)"); show(frame);
-    check("grey 'No goal available' fallback", frame.includes("No goal available") && sameColor(spanFor(spans, "No goal available")?.rgba, GREY));
+    writeSnapshot("/proj/mixed", [
+      ["goal-session", session({ goalText: "Visible only in Goal", touchedAt: 9 })],
+      ["build-session", Object.assign(createState("2026-01-01T00:00:00.000Z"), { active: false, touchedAt: 10 })],
+    ]);
+    const { api, getSlot } = mockApi("/proj/mixed");
+    await tui(api, { sidebarRainbowMs: 0 });
+    const slot = getSlot();
+    const t = await testRender(() => slot({}, { session_id: "build-session" }), { width: 44, height: 5 });
+    await t.renderOnce();
+    const frame = t.captureCharFrame();
+    banner("Mixed worktree, Build session"); show(frame);
+    check("registered Goal slot does not render for Build session", !frame.includes("Visible only in Goal") && !frame.includes("Goal todos"));
+    const noProps = slot({}, {});
+    check("slot invocation without session id returns nothing", noProps === undefined);
+  }
+  {
+    const { frame, registered } = await render({ worktree: "/proj/never-touched" });
+    banner("No guard state at all (native todo untouched)"); show(frame);
+    check("no slot registered for non-Goal sessions", registered === false && !frame.includes("No goal") && !frame.includes("Goal todos"));
   }
   {
     const passing = {};
@@ -131,7 +143,7 @@ try {
   }
   {
     writeSnapshot("/proj/green", [["s1", session({ goalText: "Custom colour goal", touchedAt: 9 })]]);
-    const { frame, spans } = await render({ worktree: "/proj/green", options: { sidebarColor: "#00FF00" } });
+    const { frame, spans } = await render({ worktree: "/proj/green", options: { sidebarColor: "#00FF00", sidebarRainbowMs: 0 } });
     banner("Custom colour (#00FF00)"); show(frame);
     check("goal uses the custom colour", sameColor(spanFor(spans, "Custom colour goal")?.rgba, GREEN));
   }
@@ -154,7 +166,7 @@ try {
   {
     writeSnapshot("/proj/narrow", [["s1", session({ goalText: "Narrow", touchedAt: 9 })]]);
     const { t, frame } = await render({ worktree: "/proj/narrow", width: 16, height: 4 });
-    t.resize(10, 4); await t.renderOnce();
+    t?.resize(10, 4); await t?.renderOnce();
     banner("Narrow resize"); show(frame);
     check("narrow render produced output", frame.length > 0);
   }

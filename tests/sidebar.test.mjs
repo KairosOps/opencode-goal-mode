@@ -68,6 +68,21 @@ test("sidebarView state 'running' (yellow) with stacked gates + status lines", (
   assert.equal(v.passing, 0);
   assert.equal(v.gates, "0/5 gates");
   assert.equal(v.status, "in progress · changes pending");
+  assert.equal(v.todoTitle, "Goal todos");
+  assert.ok(v.todos.some((item) => item.text.includes("Rerun verification")));
+});
+
+test("sidebarView builds structured Goal todos from acceptance criteria and evidence", () => {
+  const st = activeState({
+    contract: { title: "Ship installer", acceptanceCriteria: ["README explains install", "Installer dry-run works"] },
+    evidence: [{ command: "npm test", result: "passed", criteria: ["README explains install"], seq: 2 }],
+    lastEditSeq: 1,
+  });
+  const v = sidebarView(st, DEFAULT_CONFIG);
+  assert.deepEqual(v.todos.slice(0, 2), [
+    { status: "done", text: "README explains install" },
+    { status: "todo", text: "Installer dry-run works" },
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -123,6 +138,7 @@ test("new toggles default on and coerce from options/env", () => {
   assert.equal(DEFAULT_CONFIG.sidebarColor, "#FFD700");
   assert.equal(DEFAULT_CONFIG.sidebarDoneColor, "#FF5555");
   assert.equal(DEFAULT_CONFIG.sidebarMutedColor, "#808080");
+  assert.equal(DEFAULT_CONFIG.sidebarRainbowMs, 4500);
 
   const c = resolveConfig({ toastOnReview: false, sidebarColor: "#00FF00", sidebarDoneColor: "#FF0000", sidebarMutedColor: "#111111" }, {});
   assert.equal(c.toastOnReview, false);
@@ -135,18 +151,20 @@ test("new toggles default on and coerce from options/env", () => {
     GOAL_GUARD_SIDEBAR_COLOR: "#123456",
     GOAL_GUARD_SIDEBAR_DONE_COLOR: "#abcdef",
     GOAL_GUARD_SIDEBAR_MUTED_COLOR: "#654321",
+    GOAL_GUARD_SIDEBAR_RAINBOW_MS: "1000",
   });
   assert.equal(e.sidebarBanner, false);
   assert.equal(e.sidebarColor, "#123456");
   assert.equal(e.sidebarDoneColor, "#abcdef");
   assert.equal(e.sidebarMutedColor, "#654321");
+  assert.equal(e.sidebarRainbowMs, 1000);
 });
 
 // ---------------------------------------------------------------------------
 // Robustness: a running task with no goal, and malformed/partial state
 // ---------------------------------------------------------------------------
 
-test("active session with no goal text → state 'none' (renders 'No goal available')", () => {
+test("active session with no goal text → state 'none' (TUI renders nothing)", () => {
   const running = activeState(); // active but no contract/goalText
   assert.equal(sidebarView(running, DEFAULT_CONFIG).state, "none");
 });
@@ -198,6 +216,7 @@ test("sidebarView state 'done' (red) when every gate passes and the tree is clea
   assert.equal(v.state, "done");
   assert.equal(v.gates, "6/6 gates");
   assert.equal(v.status, "completed · 2 review cycles");
+  assert.ok(v.todos.every((item) => item.status === "done"));
 });
 
 // ---------------------------------------------------------------------------

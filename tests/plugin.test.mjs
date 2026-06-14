@@ -231,6 +231,19 @@ test("completion claim in a non-goal session is left untouched", async () => {
   assert.doesNotMatch(out.text, /Goal Not Completed/);
 });
 
+test("risky bash in build mode does not turn the session into a goal", async () => {
+  const { hooks, store } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "build-mode", agent: "build" }, {});
+  await assert.rejects(
+    () => hooks["tool.execute.before"]({ tool: "bash", sessionID: "build-mode", callID: "c" }, { args: { command: "rm -rf dist" } }),
+    /blocked/i,
+  );
+  assert.equal(store.stateFor("build-mode").active, false);
+  const out = { text: "Goal Completed by the test fixture." };
+  await hooks["experimental.text.complete"]({ sessionID: "build-mode", messageID: "m", partID: "p" }, out);
+  assert.doesNotMatch(out.text, /Goal Not Completed/);
+});
+
 // ---------------------------------------------------------------------------
 // Contextual gates (previously dead code)
 // ---------------------------------------------------------------------------

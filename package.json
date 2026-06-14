@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "main": "plugins/goal-sidebar.tsx",
@@ -99,8 +99,14 @@
     "solid-js": "*"
   },
   "peerDependenciesMeta": {
-    "@opencode-ai/plugin": { "optional": true },
-    "@opentui/solid": { "optional": true },
-    "solid-js": { "optional": true }
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   }
 }

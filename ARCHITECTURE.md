@@ -15,9 +15,9 @@ configuration directory:
    — a runtime guard that enforces review discipline, blocks destructive shell
    commands, preserves state across compaction and restarts, and exposes
    first-class `goal_*` tools.
-4. **An experimental TUI companion** (`plugins/goal-sidebar.js`) — a separate
-   `{ tui }` plugin module that renders the active goal as a yellow sidebar
-   banner. It is *paired* with the server plugin purely through the on-disk state
+4. **An experimental TUI companion** (`plugins/goal-sidebar.tsx`) — a separate
+   `{ tui }` plugin module that renders Goal sessions as a Goal-owned sidebar
+   todo section. It is *paired* with the server plugin purely through the on-disk state
    snapshot (no extra IPC) and no-ops on any runtime without the slot API.
 
 This document focuses on the plugin, where the engineering lives.
@@ -54,7 +54,7 @@ as plugins. Each module is independently unit-tested.
 | `goal-guard/system.js` | Live state block injected into the system prompt. |
 | `goal-guard/summary.js` | Status/evidence projections, the short goal label, and the sidebar view. |
 | `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
-| `goal-guard/sidebar-data.js` | Pure reader that projects the persisted snapshot into the sidebar banner model. |
+| `goal-guard/sidebar-data.js` | Pure reader that projects the persisted snapshot into the sidebar todo model. |
 | `goal-guard/logger.js` | Best-effort logging/toasts over the OpenCode client. |
 
 ## Hooks used
@@ -165,14 +165,15 @@ hooks still load.
 
 ## TUI companion (experimental)
 
-`plugins/goal-sidebar.js` is a TUI plugin module — `export const tui = async (api)
-=> …` — distinct from the server plugin (`@opencode-ai/plugin` types it as a
-`{ tui }` module, mutually exclusive with `{ server }`). It registers a
-`sidebar_content` slot via `api.slots.register({ slots: { sidebar_content } })`
-and renders, in the configured colour (`#FFD700` by default), the short goal
-label plus a `passing/total gates · dirty/ready` line. It renders
-unconditionally: when a task is running with no goal set, it shows a muted grey
-`No goal` (`sidebarView` returns `{ hasGoal: false }`) rather than a blank slot.
+`plugins/goal-sidebar.tsx` is a TUI plugin module — default-exporting `{ id, tui }`
+— distinct from the server plugin. It waits until the persisted state contains an
+active Goal session, then registers a `sidebar_content` slot via
+`api.slots.register({ slots: { sidebar_content } })` and renders the short goal
+label, gate/status line, and structured Goal todos derived from acceptance
+criteria, evidence freshness, dirty state, and missing gates. It starts with a
+brief rainbow foreground effect, then returns to the configured running colour
+(`#FFD700` by default). When there is no active Goal session it does not register
+the slot, so Build and other modes keep OpenCode's native todo section in place.
 
 It is *paired* with the server plugin only through the persisted state file:
 `sidebar-data.js` recomputes the same `stateBaseDir`/`projectKey` path the guard
@@ -187,7 +188,7 @@ progress is visible even without the banner.
 The JSX renderer is verified headlessly with `@opentui/solid`'s `testRender` in
 `tools/visual-test/sidebar-visual.jsx` (`npm run test:visual`, needs Bun + the
 OpenTUI stack): it asserts the rendered text, the exact foreground colours, and
-the bold attribute for goal / "No goal" / ready states. That tool is excluded from
+the bold attribute for Goal todo / done / native-todo-preserved states. That tool is excluded from
 the npm package and from `node --test`/CI.
 
 ## Configuration

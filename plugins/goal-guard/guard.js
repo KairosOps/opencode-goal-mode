@@ -136,7 +136,6 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         const blockDestructive = config.blockDestructive && analysis.destructive;
         const blockNetwork = config.blockNetworkExec && analysis.networkExec;
         if (blockDestructive || blockNetwork) {
-          state.active = true;
           state.dirtyReasons.push(`blocked risky bash: ${analysis.reasons.join("; ") || "destructive"}`);
           if (config.toastOnBlock) logger.toast("Goal Guard blocked a destructive command", "error");
           persist();

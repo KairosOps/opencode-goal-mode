@@ -7,23 +7,24 @@
 [![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
 [![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
 
-Strict Goal Mode for OpenCode: a primary `goal` agent, a matrix of specialized
-review subagents, slash commands, a `goal-guard` plugin that enforces review
-discipline and blocks destructive shell commands, and a live goal banner in the
+Strict Goal Mode for OpenCode: a primary `goal` agent, specialized review
+subagents, slash commands, a `goal-guard` plugin that enforces review discipline
+and blocks destructive shell commands, and a live Goal-owned todo section in the
 TUI sidebar.
 
 ## Install
 
-**One command** (needs [Node](https://nodejs.org) 20.11+ and [OpenCode](https://opencode.ai)):
+**One command** (recommended; needs [Node](https://nodejs.org) 20.11+ and a working [OpenCode](https://opencode.ai) install):
 
 ```bash
 npx opencode-goal-mode --global
 ```
 
-Then **restart OpenCode**. That's the whole install — it copies the Goal agent,
-review subagents, slash commands, and the guard plugin into `~/.config/opencode`,
-and registers the sidebar in `~/.config/opencode/tui.json`. In the agent picker
-you'll see only the **`goal`** agent (the reviewers are subagents it drives).
+Then **restart OpenCode**. That's the whole install: it copies the Goal agent,
+review subagents, slash commands, and guard plugin into `~/.config/opencode`, and
+merge-safely registers the Goal todo sidebar in `~/.config/opencode/tui.json`.
+In the agent picker you'll see only the **`goal`** agent; reviewers are subagents
+it drives automatically. Goal Mode inherits your existing OpenCode model/provider.
 
 <details>
 <summary>Other ways to install</summary>
@@ -33,7 +34,7 @@ you'll see only the **`goal`** agent (the reviewers are subagents it drives).
 npm install -g opencode-goal-mode
 opencode-goal-mode --global          # alias of opencode-goal-mode-install
 
-# Into a single project (writes ./.opencode + ./tui.json)
+# Into a single project (writes ./.opencode, including ./.opencode/tui.json)
 npx opencode-goal-mode
 
 # From source
@@ -41,14 +42,18 @@ git clone https://github.com/devinoldenburg/opencode-goal-mode
 cd opencode-goal-mode && npm ci && npm run install:global
 ```
 
-`--dry-run` previews changes; `--uninstall` removes only what it installed (and its
-tui.json entry), leaving your edits untouched. See [Installer options](#installer-options).
+Use global install for normal daily use. Use project install only when you want
+Goal Mode scoped to one repo and your OpenCode build reads project `.opencode`
+config, including `.opencode/tui.json`. `--dry-run` previews changes;
+`--uninstall` removes only what it installed (and its `tui.json` entry), leaving
+your edits untouched. See [Installer options](#installer-options).
 </details>
 
-![OpenCode Goal Mode sidebar banner](docs/sidebar-demo.svg)
+![OpenCode Goal Mode sidebar todo section](docs/sidebar-demo.svg)
 
-<sub>↑ The sidebar goal banner: yellow while a goal runs, red when done, grey "No
-goal available" otherwise — see [TUI integration](#tui-integration).</sub>
+<sub>↑ In Goal mode, the sidebar todo slot becomes a Goal-owned todo section with
+a first-display rainbow effect, then normal goal colours. Build and other modes
+keep OpenCode's native todo section — see [TUI integration](#tui-integration).</sub>
 
 **[Quick start](#quick-start) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
 
@@ -74,8 +79,8 @@ opencode agent list | grep goal
    **cannot** answer `Goal Completed` until every required review gate passes — the
    guard rewrites a premature claim to `Goal Not Completed`. Try a destructive
    command mid-session (e.g. `rm -rf build`) and watch it get blocked. If your
-   OpenCode build supports TUI plugins, the active goal also appears in the sidebar
-   in yellow (experimental — see [TUI integration](#tui-integration)).
+   OpenCode build supports TUI plugins, Goal sessions also get the Goal-owned
+   sidebar todo section (experimental — see [TUI integration](#tui-integration)).
 
 That's it. Everything below is detail.
 
@@ -159,7 +164,12 @@ second) — negligible for a per-tool-call guard:
 ## Requirements
 
 - Node.js 20.11 or newer.
-- OpenCode configured to load local agents, commands, and plugins.
+- OpenCode configured to load local agents, commands, and plugins. The package is
+  tested against `@opencode-ai/plugin` 1.17.6 and declares compatibility with the
+  1.15+ plugin hook surface used here; newer OpenCode builds that change plugin
+  or TUI slot APIs may need a package update.
+- A working OpenCode provider/model; Goal Mode does not configure API keys or
+  choose a model for you.
 
 ## What it adds
 
@@ -192,9 +202,10 @@ second) — negligible for a per-tool-call guard:
   - **TUI toasts**: a toast on each review verdict (PASS/FAIL), with the
     reviewer's friendly name, and a single "completion unlocked" toast the moment
     the last required gate clears.
-- An **experimental** companion TUI plugin (`plugins/goal-sidebar.js`) that shows
-  the active goal as a shining-yellow banner in the sidebar with a compact gate
-  status line. See [TUI integration](#tui-integration).
+- An **experimental** companion TUI plugin (`plugins/goal-sidebar.tsx`) that, in
+  Goal sessions only, replaces the native todo sidebar area with a Goal-owned,
+  evidence-aware todo section. It shows a brief rainbow effect the first time it
+  appears, then normal goal colours. See [TUI integration](#tui-integration).
 - A test suite validating the analyzer, plugin hooks, state store, install
   safety, and config compatibility.
 
@@ -202,32 +213,38 @@ second) — negligible for a per-tool-call guard:
 
 Goal Mode is a **plugin pair**: the server-side `goal-guard` plugin owns
 enforcement and writes its state to disk, and an experimental TUI plugin
-(`plugins/goal-sidebar.js`) reads that same state to render a live banner.
+(`plugins/goal-sidebar.tsx`) reads that same state to render a live todo section.
 
-- **Sidebar goal banner.** In the sidebar's content area, under the session
-  title/context, it shows the current goal with generated status text, colour-coded
-  by lifecycle:
-  - **yellow** — a goal is set and running (`◆ GOAL …` + `in progress · N/M gates`);
-  - **red** — the goal is done (all required gates pass, tree clean: `✓ GOAL …` +
-    `completed · N/M gates passed · K review cycles`);
-  - **grey** — a task is running with no goal set (`No goal available`).
+- **Goal-mode todo replacement.** In a `goal` session, the sidebar content/todo
+  area is replaced by a Goal-owned todo section: short goal title, gate progress,
+  lifecycle status, and structured todo rows derived from acceptance criteria,
+  evidence freshness, dirty state, and missing review gates. It starts with a
+  brief rainbow foreground effect (`sidebarRainbowMs`) so the replacement is
+  visible, then returns to the normal lifecycle colours:
+  - **yellow** — a goal is set and running;
+  - **red** — the goal is done (all required gates pass and the tree is clean);
+  - **no render** — Build and every non-Goal mode keep OpenCode's native todo
+    section in the same sidebar position instead of being classified as a goal.
 
   Toggle/recolour with `sidebarBanner`, `sidebarColor` (running), `sidebarDoneColor`
-  (done), `sidebarMutedColor` (no goal), or the `GOAL_GUARD_SIDEBAR_*` env vars.
+  (done), `sidebarMutedColor`, `sidebarRainbowMs`, or the `GOAL_GUARD_SIDEBAR_*`
+  env vars.
 
   **How it loads — important.** TUI plugins are **not** loaded from the `plugins/`
-  dir; OpenCode loads them from `~/.config/opencode/tui.json`. The installer writes
-  that for you (merge-safe):
+  dir; OpenCode loads them from `tui.json`. The Goal sidebar waits to register its
+  `sidebar_content` slot until a real Goal session exists, so non-Goal modes do not
+  get a blank replacement slot. With `--global`, the installer writes
+  `~/.config/opencode/tui.json` for you (merge-safe):
 
   ```json
   { "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
   ```
 
   Restart OpenCode after install so it picks up the TUI plugin (it resolves the
-  package and provides the `@opentui/solid` runtime). The banner appears in a
-  **session** view (not the home screen). The three states are rendered and
-  asserted — text + exact colours — by a real headless OpenTUI renderer in the
-  [visual test](tools/visual-test/README.md) (`npm run test:visual`, 18/18). The
+  package and provides the `@opentui/solid` runtime). The Goal todo section appears
+  in a **Goal session** view (not the home screen and not Build mode). The visual
+  harness renders it with a headless OpenTUI renderer in
+  [visual test](tools/visual-test/README.md) (`npm run test:visual`). The
   enforcement core is a separate server plugin and works regardless of the sidebar.
 - **Toasts.** Review verdicts and completion-unlock events surface as toasts
   (`toastOnReview`), and blocked destructive commands / premature completions
@@ -236,16 +253,22 @@ enforcement and writes its state to disk, and an experimental TUI plugin
 ## Installer options
 
 ```bash
+npx opencode-goal-mode --global --dry-run
+npx opencode-goal-mode --global
+opencode-goal-mode-install --global --uninstall
 node scripts/install.mjs --dry-run
 node scripts/install.mjs --target /path/to/opencode-config
 node scripts/install.mjs --global --force
 node scripts/install.mjs --global --uninstall
 ```
 
-The installer records a manifest of the files it writes. On upgrade it replaces
-files it owns but refuses to clobber files you have locally modified unless
-`--force` is passed. `--uninstall` removes only the files it installed and leaves
-your local edits in place.
+Default target rules are simple: `--global` writes to `~/.config/opencode`; no
+flag writes to `./.opencode`; `--target` writes to exactly the directory you pass.
+In every target, the installer copies only `agents/`, `commands/`, `plugins/`,
+writes `.goal-mode-manifest.json`, and merge-safely adds `opencode-goal-mode` to
+`tui.json` in that same target. On upgrade it replaces files it owns but refuses
+to clobber files you have locally modified unless `--force` is passed.
+`--uninstall` removes only owned files and removes only its own `tui.json` entry.
 
 ## Configuration
 
@@ -274,10 +297,11 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `sessionTtlMs` / `GOAL_GUARD_SESSION_TTL_MS` | `86400000` | Idle session TTL. |
 | `toastOnBlock` / `GOAL_GUARD_TOAST_ON_BLOCK` | `true` | Toast when something is blocked. |
 | `toastOnReview` / `GOAL_GUARD_TOAST_ON_REVIEW` | `true` | Toast on each review verdict and when completion unlocks. |
-| `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the experimental yellow goal banner in the TUI sidebar. |
-| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Colour of a **running** goal in the sidebar (yellow). |
+| `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the experimental Goal todo section in the TUI sidebar. |
+| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Normal colour of a **running** goal after the first-show rainbow. |
 | `sidebarDoneColor` / `GOAL_GUARD_SIDEBAR_DONE_COLOR` | `#FF5555` | Colour of a **done** goal in the sidebar (red). |
-| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Colour of the "No goal available" line (grey). |
+| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Reserved muted colour for no-goal projections. |
+| `sidebarRainbowMs` / `GOAL_GUARD_SIDEBAR_RAINBOW_MS` | `4500` | First-display rainbow duration for the Goal todo section. |
 
 ## Custom tools
 
@@ -297,7 +321,7 @@ criterion against recorded evidence, reviewer status, gaps, and the next
 required action. The command is backed by the `goal_evidence_map` tool, so it
 uses persisted Goal Guard state rather than relying on transcript memory.
 
-## Validation
+## Contributor validation
 
 ```bash
 npm test

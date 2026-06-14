@@ -40,11 +40,13 @@ if (values.help) {
   console.log(`Install or remove OpenCode Goal Mode components.
 
 Usage:
+  npx opencode-goal-mode --global
+  opencode-goal-mode-install --global
   node scripts/install.mjs [--global | --target <dir>] [--force] [--dry-run]
   node scripts/install.mjs --uninstall [--global | --target <dir>] [--dry-run]
 
 Options:
-  --global       Install into ~/.config/opencode.
+  --global       Install into ~/.config/opencode (recommended for everyday use).
   --target DIR   Install into a specific OpenCode config directory.
   --force        Replace destination files even if locally modified.
   --uninstall    Remove files this installer previously wrote (per manifest).
@@ -53,7 +55,8 @@ Options:
 
 The installer records a manifest of the files it writes so that a later
 upgrade can distinguish files it owns (safe to replace) from files you have
-locally customized (left untouched unless --force).`);
+locally customized (left untouched unless --force). It also merge-safely adds
+the Goal sidebar plugin to <target>/tui.json; --uninstall removes that entry.`);
   process.exit(0);
 }
 
@@ -73,6 +76,15 @@ function resolveTarget() {
 
 function fileHash(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 16);
+}
+
+function safeTargetPath(rel) {
+  const dest = resolve(target, rel);
+  const back = relative(target, dest);
+  if (back === "" || back.startsWith("..") || resolve(back) === back) {
+    throw new Error(`Refusing to operate outside target: ${rel}`);
+  }
+  return dest;
 }
 
 /** Recursively list regular files under a directory, returning paths relative to
@@ -140,8 +152,13 @@ function ensureTuiPlugin(remove = false) {
   try {
     const existing = JSON.parse(readFileSync(tuiPath, "utf8"));
     if (existing && typeof existing === "object") data = existing;
-  } catch {
-    /* missing or invalid → start fresh */
+  } catch (err) {
+    if (existsSync(tuiPath)) {
+      if (!values.force) throw new Error(`Refusing to replace invalid ${tuiPath}. Fix it or rerun with --force.`);
+      const backupPath = `${tuiPath}.goal-mode-backup`;
+      if (!values["dry-run"]) copyFileSync(tuiPath, backupPath);
+      console.log(`${values["dry-run"] ? "Would back up" : "Backed up"} invalid ${tuiPath} to ${backupPath}`);
+    }
   }
   if (!Array.isArray(data.plugin)) data.plugin = [];
   const has = data.plugin.includes(TUI_PLUGIN_SPEC);
@@ -164,7 +181,7 @@ if (values.uninstall) {
   const removed = [];
   const kept = [];
   for (const [rel, hash] of Object.entries(manifest.files)) {
-    const dest = join(target, rel);
+    const dest = safeTargetPath(rel);
     if (!existsSync(dest)) continue;
     if (fileHash(dest) === hash) {
       if (!values["dry-run"]) rmSync(dest, { force: true });
@@ -242,7 +259,7 @@ for (const dir of COMPONENT_DIRS) {
 // plugin split into modules), but only if the user hasn't modified them.
 for (const [relKey, oldHash] of Object.entries(manifest.files)) {
   if (newManifestFiles[relKey] !== undefined) continue;
-  const dest = join(target, relKey);
+  const dest = safeTargetPath(relKey);
   if (!existsSync(dest)) continue;
   if (fileHash(dest) === oldHash) {
     if (!values["dry-run"]) rmSync(dest, { force: true });

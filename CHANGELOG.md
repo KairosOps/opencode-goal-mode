@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Installer docs and `--help` now put the one-command `npx opencode-goal-mode --global`
+  flow first, clarify global vs project targets, and document the merge-safe
+  `tui.json` registration/uninstall behavior.
+- The TUI companion now renders a Goal-owned, structured todo section only for
+  active Goal sessions, with a first-display rainbow effect before returning to
+  normal lifecycle colours. Non-Goal modes render nothing from the Goal plugin so
+  OpenCode's native todo section remains in place.
+- Destructive-command blocking no longer activates Goal enforcement for Build or
+  other non-Goal sessions, preventing non-Goal tasks from being classified as goals.
+
 ## v0.3.7
 
 - **FIX: the sidebar now actually loads.** OpenCode loads a TUI plugin via the

@@ -28,14 +28,16 @@ export const DEFAULT_CONFIG = Object.freeze({
   toastOnBlock: true,
   /** Emit a TUI toast when a review gate records a PASS/FAIL, and when completion unlocks. */
   toastOnReview: true,
-  /** Show the experimental yellow goal banner in the TUI sidebar (TUI-plugin-capable OpenCode only). */
+  /** Show the experimental goal todo section in the TUI sidebar (TUI-plugin-capable OpenCode only). */
   sidebarBanner: true,
-  /** Foreground colour (hex) for the sidebar goal banner. */
+  /** Foreground colour (hex) for the sidebar goal todo section after the first-show rainbow. */
   sidebarColor: "#FFD700",
   /** Foreground colour (hex) for a completed goal in the sidebar (running → done turns yellow → red). */
   sidebarDoneColor: "#FF5555",
-  /** Foreground colour (hex) for the muted "No goal available" sidebar line. */
+  /** Reserved muted foreground colour for no-goal projections. */
   sidebarMutedColor: "#808080",
+  /** Duration for the first-display rainbow effect on the Goal todo section. */
+  sidebarRainbowMs: 4500,
   /** Phrase that, at the start of an assistant message, claims completion. */
   completionMarker: "Goal Completed",
   /** Replacement marker when completion is blocked. */
@@ -74,6 +76,7 @@ function fromEnv(env) {
     GOAL_GUARD_SIDEBAR_COLOR: ["sidebarColor", (v) => (v == null ? undefined : String(v))],
     GOAL_GUARD_SIDEBAR_DONE_COLOR: ["sidebarDoneColor", (v) => (v == null ? undefined : String(v))],
     GOAL_GUARD_SIDEBAR_MUTED_COLOR: ["sidebarMutedColor", (v) => (v == null ? undefined : String(v))],
+    GOAL_GUARD_SIDEBAR_RAINBOW_MS: ["sidebarRainbowMs", coerceInt],
   };
   for (const [key, [field, coerce]] of Object.entries(map)) {
     if (env[key] !== undefined) out[field] = coerce(env[key], DEFAULT_CONFIG[field]);

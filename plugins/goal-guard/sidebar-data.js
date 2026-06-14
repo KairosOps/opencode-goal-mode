@@ -1,5 +1,5 @@
 /**
- * Read-only projection of persisted guard state for the TUI sidebar banner.
+ * Read-only projection of persisted guard state for the TUI sidebar todo section.
  *
  * The sidebar plugin runs in OpenCode's TUI process, separate from the server
  * plugin that owns the live store. The two are paired through the same on-disk
@@ -49,10 +49,9 @@ export function pickSession(snapshot, sessionId) {
 }
 
 /**
- * Build the sidebar banner model for a worktree. ALWAYS returns an object so the
- * sidebar renders unconditionally: `{ hasGoal: false }` when there is no state,
- * no active session, or no goal (render a muted "No goal"); otherwise
- * `{ hasGoal: true, goal, status, … }` (see summary.sidebarView).
+ * Build the sidebar todo model for a worktree. ALWAYS returns an object: `state:
+ * "none"` when there is no Goal session (render nothing and keep native todos), otherwise
+ * `state: "running"|"done", goal, status, todos, …` (see summary.sidebarView).
  *
  * @param {object} opts
  * @param {string} opts.worktree   Project worktree root (same key the guard uses).

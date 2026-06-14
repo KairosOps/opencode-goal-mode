@@ -27,18 +27,40 @@ export function shortGoalLabel(state, max = 80) {
   return `${base.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Sentinel for "a task is running but no goal is set" — the sidebar shows a muted "No goal available". */
+/** Sentinel for "no active Goal session" — the TUI plugin renders nothing so native todos remain. */
 export const NO_GOAL = Object.freeze({ state: "none", goal: "", gates: "", status: "" });
 
+function criterionEvidenceFresh(state, criterion) {
+  const entries = Array.isArray(state.evidence) ? state.evidence : [];
+  return entries.some((entry) => evidenceMatchesCriterion(entry, criterion) && evidenceFresh(entry, state));
+}
+
+function sidebarTodos(state, required, missing) {
+  const criteria = Array.isArray(state?.contract?.acceptanceCriteria) ? state.contract.acceptanceCriteria : [];
+  const items = [];
+  for (const criterion of criteria.slice(0, 5)) {
+    const text = String(criterion || "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    items.push({
+      status: criterionEvidenceFresh(state, text) ? "done" : "todo",
+      text: text.length <= 58 ? text : `${text.slice(0, 57).trimEnd()}…`,
+    });
+  }
+  if (state?.dirty) items.push({ status: "todo", text: "Rerun verification and reviews after latest changes" });
+  if (missing.length > 0) items.push({ status: "todo", text: `Clear review gates: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}` });
+  if (items.length === 0 && required.length > 0) items.push({ status: "todo", text: "Record Goal Contract acceptance criteria" });
+  return items.slice(0, 7);
+}
+
 /**
- * Compact projection for the TUI sidebar banner. ALWAYS returns an object with a
+ * Compact projection for the TUI sidebar todo section. ALWAYS returns an object with a
  * three-way `state`, plus three lines that stack vertically in the sidebar:
  *   - `goal`   → line 1: the short AI goal title.
  *   - `gates`  → line 2: the gate count, e.g. "0/7 gates".
  *   - `status` → line 3: the lifecycle status, e.g. "in progress · changes pending"
  *                or "completed · 2 review cycles".
- * State drives colour: "running" = yellow, "done" = red, "none" = grey
- * ("No goal available").
+ * State drives colour: "running" = rainbow first, then yellow; "done" = red;
+ * "none" = render nothing so non-Goal modes keep the native todo section.
  */
 export function sidebarView(state, config) {
   if (!state || !state.active) return NO_GOAL;
@@ -49,6 +71,7 @@ export function sidebarView(state, config) {
   const passing = required.length - missing.length;
   const cycles = Number(state.reviewCycles) || 0;
   const gates = `${passing}/${required.length} gates`;
+  const todos = sidebarTodos(state, required, missing);
   const done = required.length > 0 && missing.length === 0 && !state.dirty;
   if (done) {
     return {
@@ -56,6 +79,8 @@ export function sidebarView(state, config) {
       goal,
       gates,
       status: `completed · ${cycles} review cycle${cycles === 1 ? "" : "s"}`,
+      todoTitle: "Goal todos",
+      todos: todos.length ? todos.map((item) => ({ ...item, status: "done" })) : [{ status: "done", text: "All Goal completion gates are clear" }],
       passing,
       required: required.length,
       reviewCycles: cycles,
@@ -66,6 +91,8 @@ export function sidebarView(state, config) {
     goal,
     gates,
     status: `in progress${state.dirty ? " · changes pending" : ""}`,
+    todoTitle: "Goal todos",
+    todos,
     passing,
     required: required.length,
     reviewCycles: cycles,

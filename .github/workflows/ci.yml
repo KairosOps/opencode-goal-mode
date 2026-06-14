@@ -41,3 +41,53 @@ jobs:
 
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
+
+  visual:
+    name: Visual sidebar test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install OpenTUI peers
+        run: npm install --no-save @opentui/solid@0.4.1 @opentui/core@0.4.1 solid-js@1.9.12
+
+      - name: Run visual sidebar test
+        run: npm run test:visual
+
+  installer-macos:
+    name: Installer lifecycle on macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify installer lifecycle
+        run: |
+          tmpdir="$(mktemp -d /tmp/goal-install-ci.XXXXXX)"
+          node scripts/install.mjs --target "$tmpdir/cfg" --dry-run
+          node scripts/install.mjs --target "$tmpdir/cfg"
+          node scripts/install.mjs --target "$tmpdir/cfg"
+          node scripts/install.mjs --target "$tmpdir/cfg" --uninstall
+          test -f "$tmpdir/cfg/tui.json"
