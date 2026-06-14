@@ -95,10 +95,10 @@ function readModel(worktree, sessionId) {
   }
 }
 
-export const id = "goal-mode-sidebar";
+const id = "goal-mode-sidebar";
 
 /** @type {import("@opencode-ai/plugin/tui").TuiPlugin} */
-export const tui = async (api, options) => {
+const tui = async (api, options) => {
   try {
     const { enabled, color, muted } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
     if (!enabled) return;

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -42,11 +43,16 @@ if (!commandFiles.includes("goal.md")) throw new Error("primary goal command mis
 if (!pluginFiles.includes("goal-guard.js")) throw new Error("goal guard plugin missing");
 
 // The experimental sidebar is a TUI plugin module (Solid/opentui JSX) that the
-// Node runtime cannot import; validate its contract textually instead.
+// Node runtime cannot import; validate its contract textually instead. It must
+// follow the proven TUI-plugin shape: a SINGLE `export default { id, tui }` (no
+// stray `export const`, which OpenCode's loader would treat as extra plugins).
 if (!pluginFiles.includes("goal-sidebar.js")) throw new Error("goal sidebar TUI plugin missing");
 const sidebarSrc = readFileSync(join(root, "plugins", "goal-sidebar.js"), "utf8");
-if (!/export\s+const\s+tui\b/.test(sidebarSrc)) {
-  throw new Error("goal-sidebar.js must export a `tui` plugin entry");
+if (!/export default \{[^}]*\btui\b/.test(sidebarSrc)) {
+  throw new Error("goal-sidebar.js must `export default { id, tui }`");
+}
+if (/^export\s+const\s/m.test(sidebarSrc)) {
+  throw new Error("goal-sidebar.js must not use `export const` (OpenCode loads every export; use a single default object)");
 }
 
 const forbiddenComponentName = /(auth|session|token|secret|preauth|failures|hosts\.ya?ml)/i;
@@ -79,21 +85,33 @@ function assertCleanBody(file, body) {
 // be `subagent` so the user can only ever pick Goal — the specialist subagents are
 // invoked by the Goal agent (via the task tool), never selected by the user. `all`
 // is forbidden because it would expose a subagent in the user's agent picker.
+//
+// The frontmatter is parsed as REAL YAML (not regex): OpenCode itself parses it
+// with a YAML parser, and a malformed value (e.g. an invalid `\.` escape in an
+// `external_directory` glob, or an unquoted `: ` in a description) makes OpenCode
+// silently drop to `mode: all` with NO permissions applied. Regex matching missed
+// that class of bug, so it shipped; YAML.parse here catches it.
 let primaryCount = 0;
 for (const file of agentFiles) {
   const text = readFileSync(join(root, "agents", file), "utf8");
   const [fm, body] = splitFrontmatter(file, text);
-  if (!/^description:/m.test(fm)) throw new Error(`${file} missing description`);
-  const modeMatch = fm.match(/^mode:\s+(primary|subagent|all)\s*$/m);
-  if (!modeMatch) throw new Error(`${file} has invalid mode`);
-  const mode = modeMatch[1];
-  if (file === "goal.md") {
-    if (mode !== "primary") throw new Error("goal.md must be the primary agent");
-    primaryCount += 1;
-  } else if (mode !== "subagent") {
-    throw new Error(`${file} must be mode: subagent (only goal is user-selectable; found "${mode}")`);
+
+  let meta;
+  try {
+    meta = parseYaml(fm);
+  } catch (err) {
+    throw new Error(`${file} frontmatter is not valid YAML (OpenCode would drop it to mode:all): ${String(err.message).split("\n")[0]}`);
   }
-  if (!/^permission:/m.test(fm)) throw new Error(`${file} missing permission`);
+  if (!meta || typeof meta !== "object") throw new Error(`${file} frontmatter did not parse to a mapping`);
+  if (typeof meta.description !== "string" || !meta.description.trim()) throw new Error(`${file} missing description`);
+  if (!["primary", "subagent", "all"].includes(meta.mode)) throw new Error(`${file} has invalid mode: ${JSON.stringify(meta.mode)}`);
+  if (file === "goal.md") {
+    if (meta.mode !== "primary") throw new Error(`goal.md must be the primary agent (found "${meta.mode}")`);
+    primaryCount += 1;
+  } else if (meta.mode !== "subagent") {
+    throw new Error(`${file} must be mode: subagent (only goal is user-selectable; found "${meta.mode}")`);
+  }
+  if (meta.permission === undefined) throw new Error(`${file} missing permission`);
   assertCleanBody(file, body);
 }
 if (primaryCount !== 1) throw new Error(`expected exactly one primary agent (goal), found ${primaryCount}`);
@@ -101,8 +119,9 @@ if (primaryCount !== 1) throw new Error(`expected exactly one primary agent (goa
 const reviewerNames = agentFiles.filter((f) => /(reviewer|auditor|verifier|quality-gate|completion-guard)/.test(f));
 for (const file of reviewerNames) {
   const [fm] = splitFrontmatter(file, readFileSync(join(root, "agents", file), "utf8"));
-  if (!/edit:\s+deny/.test(fm)) throw new Error(`${file} (a review gate) must deny edit`);
-  if (!/task:\s+deny/.test(fm)) throw new Error(`${file} (a review gate) must deny task nesting`);
+  const perm = parseYaml(fm)?.permission || {};
+  if (perm.edit !== "deny") throw new Error(`${file} (a review gate) must set permission.edit: deny`);
+  if (perm.task !== "deny") throw new Error(`${file} (a review gate) must set permission.task: deny`);
 }
 
 for (const file of commandFiles) {
@@ -114,6 +133,13 @@ for (const file of commandFiles) {
 }
 
 const plugin = await import(join(root, "plugins", "goal-guard.js"));
+// OpenCode loads EVERY export of a plugin file as a plugin factory, so the entry
+// must export ONLY the default function. Any extra export (a test helper object,
+// a second factory) makes OpenCode fail with "Plugin export is not a function".
+const extraEntryExports = Object.keys(plugin).filter((k) => k !== "default");
+if (extraEntryExports.length) {
+  throw new Error(`goal-guard.js must export ONLY a default plugin; extra exports break OpenCode loading: ${extraEntryExports.join(", ")}`);
+}
 if (typeof plugin.default !== "function") throw new Error("goal-guard plugin must default-export a function");
 const hooks = await plugin.default({ client: { app: { log: async () => undefined } } });
 for (const hook of [

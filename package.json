@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "engines": {
@@ -83,6 +83,7 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "1.15.13",
-    "fast-check": "^4.8.0"
+    "fast-check": "^4.8.0",
+    "yaml": "^2.6.1"
   }
 }

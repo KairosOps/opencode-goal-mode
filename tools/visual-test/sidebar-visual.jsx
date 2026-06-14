@@ -35,7 +35,8 @@ const REPO = new URL("../../", import.meta.url).pathname;
 const XDG = mkdtempSync(join(tmpdir(), "goal-sidebar-visual-"));
 process.env.XDG_STATE_HOME = XDG;
 
-const { tui } = await import(join(REPO, "plugins/goal-sidebar.js"));
+const sidebarMod = await import(join(REPO, "plugins/goal-sidebar.js"));
+const tui = sidebarMod.tui || sidebarMod.default?.tui; // entry exports `default { id, tui }`
 const { stateBaseDir, projectKey } = await import(join(REPO, "plugins/goal-guard/persistence.js"));
 const { createState } = await import(join(REPO, "plugins/goal-guard/state.js"));
 

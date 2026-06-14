@@ -1,5 +1,5 @@
 ---
-description: Use proactively for generating, updating, and improving documentation: READMEs, API docs, manuals, runbooks, inline help, release notes, and ADRs.
+description: "Use proactively for generating, updating, and improving documentation: READMEs, API docs, manuals, runbooks, inline help, release notes, and ADRs."
 mode: subagent
 temperature: 0
 color: info

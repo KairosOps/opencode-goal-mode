@@ -18,7 +18,33 @@ npm install -g opencode-goal-mode && opencode-goal-mode-install --global
 
 ![OpenCode Goal Mode sidebar banner](docs/sidebar-demo.svg)
 
-**[Install](#install) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
+**[Quick start](#quick-start) · [Install](#install) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
+
+## Quick start
+
+```bash
+# 1. Install (needs Node 20.11+ and OpenCode)
+npm install -g opencode-goal-mode
+opencode-goal-mode-install --global
+
+# 2. Restart OpenCode, then verify it loaded — you should see ONLY `goal (primary)`,
+#    with every specialist as a (subagent):
+opencode agent list | grep goal
+```
+
+3. In OpenCode, start a goal:
+
+   ```
+   /goal add rate limiting to the login endpoint and prove it works
+   ```
+
+   The `goal` agent writes a contract, delegates research/review to subagents, and
+   **cannot** answer `Goal Completed` until every required review gate passes — the
+   guard rewrites a premature claim to `Goal Not Completed`. Try a destructive
+   command mid-session (e.g. `rm -rf build`) and watch it get blocked. The active
+   goal shows in the sidebar in yellow.
+
+That's it. Everything below is detail.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and [research/](research/)
 for the platform reference, comparison, and threat model.

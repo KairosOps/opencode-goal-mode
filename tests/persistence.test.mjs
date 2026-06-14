@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createPersistence, projectKey, stateBaseDir } from "../plugins/goal-guard/persistence.js";
 import { createStore } from "../plugins/goal-guard/state.js";
-import { createGuard } from "../plugins/goal-guard.js";
+import { createGuard } from "../plugins/goal-guard/guard.js";
 
 function tempEnv() {
   const dir = mkdtempSync(join(tmpdir(), "goal-persist-"));

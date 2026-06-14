@@ -26,8 +26,8 @@ permission:
   external_directory:
     "*": ask
     "/projects/**": allow
-    "~/\.config/opencode/**": allow
-    "~/\.local/share/opencode/tool-output/**": allow
+    "~/.config/opencode/**": allow
+    "~/.local/share/opencode/tool-output/**": allow
   todowrite: allow
   question: allow
   webfetch: allow

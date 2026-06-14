@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createGuard } from "../plugins/goal-guard.js";
+import { createGuard } from "../plugins/goal-guard/guard.js";
 
 const noopPersistence = { load: () => null, save: () => {}, flush: () => false, file: "", isDegraded: () => false };
 

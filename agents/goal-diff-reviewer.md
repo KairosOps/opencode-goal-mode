@@ -24,7 +24,7 @@ permission:
   external_directory:
     "*": ask
     "/projects/**": allow
-    "~/\.config/opencode/**": allow
+    "~/.config/opencode/**": allow
   todowrite: deny
   question: ask
   webfetch: allow

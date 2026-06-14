@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __test } from "../plugins/goal-guard.js";
+import { __test } from "../plugins/goal-guard/guard.js";
 import { prettyAgentName } from "../plugins/goal-guard/agents.js";
 
 test("prettyAgentName de-hyphenates, drops the goal- prefix, and keeps acronyms", () => {

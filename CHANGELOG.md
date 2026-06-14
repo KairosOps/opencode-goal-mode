@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.3.4
+
+Critical fixes found by testing against a real OpenCode (1.17.6) install — the
+prior releases did not actually work end-to-end.
+
+- **FIX: the guard plugin did not load.** OpenCode loads *every* export of a
+  plugin file as a plugin factory, so `goal-guard.js` exporting a test helper and
+  extra factories made OpenCode fail with `Plugin export is not a function` — the
+  entire enforcement layer was silently dead. The entry now exports **only** the
+  default plugin; the factory and test surface moved to
+  `plugins/goal-guard/guard.js` (nested, so OpenCode does not load it directly).
+- **FIX: 14 of 27 agents had invalid YAML frontmatter** (an invalid `\.` escape in
+  `external_directory` globs, and an unquoted `: ` in one description). OpenCode
+  silently dropped those agents to `mode: all` with **no permissions applied** —
+  they became user-selectable and the review gates' `edit: deny` / `task: deny`
+  were ignored. Fixed; verified in OpenCode that `goal` is the only `primary`
+  agent and all 26 specialists are `subagent` with their deny-permissions applied.
+- **Hardened the validator** so this can't regress: it now parses each agent's
+  frontmatter as real YAML (not regex), enforces reviewer `edit`/`task: deny` from
+  parsed values, and asserts the plugin entry exports only a default function.
+- `goal-sidebar.js` now `export default { id, tui }` only (the supported TUI
+  plugin shape), matching working OpenCode TUI plugins.
+- README: a "Quick start" (install → verify → use) at the top.
+
 ## v0.3.3
 
 - Release notes: the GitHub Release body is now generated from the matching
