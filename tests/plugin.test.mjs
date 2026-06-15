@@ -445,6 +445,68 @@ test("goal_contract records a contract and activates enforcement", async () => {
   assert.equal(st.contract.acceptanceCriteria.length, 2);
 });
 
+test("a NEW goal in the same session does not inherit the previous goal's gates/status", async () => {
+  const guard = makeGuard();
+  const tools = await loadTools(guard);
+  const { sidebarView } = await import("../plugins/goal-guard/summary.js");
+  await guard.hooks["chat.params"]({ sessionID: "switch", agent: "goal" }, {});
+
+  // Goal A — neutral text (only the base gates fire), then pass every gate so the
+  // sidebar reads as DONE (completed).
+  await tools.goal_contract.execute(
+    { title: "Polish the welcome banner", original: "make the welcome banner look nicer", acceptanceCriteria: ["the banner greeting reads well"] },
+    { sessionID: "switch" },
+  );
+  await passAllBaseGates(guard.hooks, guard.store, "switch");
+  let view = sidebarView(guard.store.stateFor("switch"), guard.config);
+  assert.equal(view.goal, "Polish the welcome banner");
+  assert.equal(view.state, "done");
+  assert.ok(view.reviewCycles >= 1);
+
+  // Goal B — a genuinely different goal recorded in the SAME session.
+  await tools.goal_contract.execute(
+    { title: "Refresh the changelog", original: "rewrite the changelog wording", acceptanceCriteria: ["entries read clearly"] },
+    { sessionID: "switch" },
+  );
+  view = sidebarView(guard.store.stateFor("switch"), guard.config);
+  const st = guard.store.stateFor("switch");
+
+  // The sidebar must show the NEW goal, fresh — not the old one or its completed
+  // gates/status/review-cycle count, and the old goal text must not bleed in.
+  assert.equal(view.goal, "Refresh the changelog");
+  assert.equal(view.state, "running");
+  assert.equal(view.passing, 0);
+  assert.equal(view.reviewCycles, 0);
+  assert.equal(st.verdicts.length, 0);
+  assert.equal(Object.keys(st.latestVerdict).length, 0);
+  assert.ok(!/welcome banner/i.test(st.goalText));
+});
+
+test("re-recording the SAME goal's contract preserves progress (no spurious reset)", async () => {
+  const guard = makeGuard();
+  const tools = await loadTools(guard);
+  await guard.hooks["chat.params"]({ sessionID: "refine", agent: "goal" }, {});
+  await tools.goal_contract.execute(
+    { title: "Build the feature", original: "build the feature", acceptanceCriteria: ["x"] },
+    { sessionID: "refine" },
+  );
+  await passAllBaseGates(guard.hooks, guard.store, "refine");
+  const before = guard.store.stateFor("refine");
+  const cyclesBefore = before.reviewCycles;
+  const verdictsBefore = before.verdicts.length;
+  assert.ok(verdictsBefore >= 5);
+
+  // Refine the SAME goal (identical original) — add an acceptance criterion.
+  await tools.goal_contract.execute(
+    { title: "Build the feature", original: "build the feature", acceptanceCriteria: ["x", "y"] },
+    { sessionID: "refine" },
+  );
+  const after = guard.store.stateFor("refine");
+  assert.equal(after.reviewCycles, cyclesBefore, "progress preserved on refine");
+  assert.equal(after.verdicts.length, verdictsBefore);
+  assert.equal(after.contract.acceptanceCriteria.length, 2);
+});
+
 test("mutating goal tools do not activate Build or non-Goal sessions", async () => {
   const guard = makeGuard();
   const tools = await loadTools(guard);

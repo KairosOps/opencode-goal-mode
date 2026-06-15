@@ -15,7 +15,7 @@ import { tool } from "@opencode-ai/plugin";
 import { evidenceMapReport, reviewerMemoryReport, statusReport } from "./summary.js";
 import { recordEvidence } from "./events.js";
 import { refreshStickyGates } from "./gates.js";
-import { createState } from "./state.js";
+import { createState, resetGoalProgress } from "./state.js";
 import { isPrimaryAgent } from "./agents.js";
 
 const s = tool.schema;
@@ -127,6 +127,17 @@ export function createGoalTools({ store, config, persist }) {
         const state = store.stateFor(ctx.sessionID);
         if (!requireGoalMode(state)) return goalModeOnlyResult();
         state.active = true;
+        // A genuinely NEW goal in this session (a different verbatim request) must
+        // not inherit the previous goal's gates, verdicts, dirty flags, review
+        // cycles, or accumulated goal text — otherwise the TUI sidebar keeps showing
+        // the old goal (even its "completed" status). Re-recording/refining the SAME
+        // goal (same `original`) preserves progress.
+        const norm = (v) => String(v || "").replace(/\s+/g, " ").trim().toLowerCase();
+        const newOriginal = norm(args.original);
+        if (state.contract && newOriginal && newOriginal !== norm(state.contract.original)) {
+          resetGoalProgress(state, store.nowIso());
+          state.active = true;
+        }
         state.contract = {
           title: String(args.title || "").replace(/\s+/g, " ").trim(),
           original: String(args.original || ""),

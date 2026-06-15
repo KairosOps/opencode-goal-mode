@@ -52,6 +52,42 @@ export function createState(nowIso) {
 
 const KNOWN_FIELDS = Object.keys(createState());
 
+/**
+ * Fields that belong to a SINGLE goal rather than the session. When a brand-new
+ * goal starts in an existing session these are cleared (see resetGoalProgress);
+ * the session-identity fields — `active`, `currentAgent`, `createdAt`, and the
+ * store-managed `touched*` — are deliberately NOT in this list.
+ */
+const GOAL_PROGRESS_FIELDS = Object.freeze([
+  "goalText", "contract", "stickyGates", "dirty", "dirtyReasons", "changedFiles",
+  "reviewCycles", "lastEditSeq", "lastVerificationSeq", "lastReviewSeq",
+  "lastEditAt", "lastReviewAt", "lastVerificationAt", "verdicts", "reviewerMemory",
+  "evidence", "latestVerdict", "completedBlocked", "completionRejections",
+  "verificationSeen", "lastCompletionRejectAt",
+]);
+
+/**
+ * Reset a session's per-GOAL progress IN PLACE, preserving its session identity
+ * (the `active` flag, `currentAgent`, and `createdAt`).
+ *
+ * Used when a genuinely new goal is recorded in an existing session: without
+ * this, the previous goal's contract, accumulated goal text, sticky gates,
+ * verdicts, dirty flags, evidence, and review-cycle count all bled into the new
+ * goal — so the TUI sidebar kept showing the old goal (and even its "completed"
+ * status). Re-recording/refining the SAME goal must NOT call this.
+ *
+ * @param {object} state  The session state to mutate.
+ * @param {string} [nowIso]  Timestamp used for `updatedAt`.
+ * @returns {object} the same `state`, mutated.
+ */
+export function resetGoalProgress(state, nowIso) {
+  if (!state || typeof state !== "object") return state;
+  const fresh = createState(nowIso || state.createdAt);
+  for (const field of GOAL_PROGRESS_FIELDS) state[field] = fresh[field];
+  if (nowIso) state.updatedAt = nowIso;
+  return state;
+}
+
 /** Rebuild a state object from persisted JSON, dropping unknown fields. */
 function reviveState(raw) {
   const base = createState();

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.7
+
+### Sidebar / goal state
+
+- **Fixed: starting a new goal — or switching goals — in the same session left the
+  sidebar stuck on the old goal.** Recording a new goal via `goal_contract` replaced
+  the contract but kept the previous goal's accumulated goal text, sticky review
+  gates, verdicts, dirty flags, evidence, and review-cycle count. So the new goal
+  inherited the old goal's gate status (even a stale "completed · N review cycles")
+  and, when no fresh contract had been recorded yet, its title — the section just
+  kept showing the old goal and never updated. A genuinely new goal (a different
+  original request) now resets that per-goal progress while keeping the session
+  active, so the sidebar reflects the new goal immediately. Re-recording or refining
+  the *same* goal still preserves its review progress.
+- Regression tests cover both directions: a new goal no longer inherits the prior
+  goal's completed gates/cycles/goal-text, and refining the same goal keeps its
+  progress.
+
 ## v0.4.6
 
 ### Sidebar
