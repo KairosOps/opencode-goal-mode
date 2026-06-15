@@ -65,7 +65,7 @@ config, including `.opencode/tui.json`. See [Installer options](#installer-optio
 <sub>↑ In goal mode, the Goal plugin takes over the sidebar todo section with a
 structured, evidence-aware Goal todo list — a bold `GOAL` label, then the goal
 title, gate progress, and per-acceptance/gate todo rows, each on its own line in
-its own colour, with a first-display rainbow. Build and every other mode keep
+its own colour. Build and every other mode keep
 OpenCode's native todo section — see [TUI integration](#tui-integration).</sub>
 
 **[Quick start](#quick-start) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
@@ -228,8 +228,7 @@ second) — negligible for a per-tool-call guard:
 - An **experimental** companion TUI plugin (`plugins/goal-sidebar.tsx`) that, in
   Goal sessions only, takes over the sidebar todo area with a structured,
   evidence-aware Goal todo list (`GOAL` label, goal title, gate progress, and
-  todo rows — each on its own line in its own colour). It shows a first-display
-  rainbow, then normal goal colours. See [TUI integration](#tui-integration).
+  todo rows — each on its own line in its own colour). See [TUI integration](#tui-integration).
 - A test suite validating the analyzer, plugin hooks, state store, install
   safety, and config compatibility.
 
@@ -254,9 +253,8 @@ enforcement and writes its state to disk, and an experimental TUI plugin
     changed, and one row per still-missing review gate by friendly name
     (e.g. "Pass Security Reviewer").
 
-  It opens with a first-display rainbow (`sidebarRainbowMs`) so the takeover is
-  visible, then settles to the lifecycle colours (running → yellow label; done →
-  red). Because OpenCode renders the native todo list as that slot's *fallback*,
+  Each line uses its lifecycle colour (running → yellow label; done → red).
+  Because OpenCode renders the native todo list as that slot's *fallback*,
   on builds that render `sidebar_content` in replace/single-winner mode the Goal
   section **replaces** the native todo list while a goal is active; in append mode
   it sits alongside it. In every case:
@@ -266,8 +264,7 @@ enforcement and writes its state to disk, and an experimental TUI plugin
     Build session in the same worktree never inherits another session's goal.
 
   Toggle/recolour with `sidebarBanner`, `sidebarColor` (running), `sidebarDoneColor`
-  (done), `sidebarMutedColor`, `sidebarRainbowMs`, or the `GOAL_GUARD_SIDEBAR_*`
-  env vars.
+  (done), `sidebarMutedColor`, or the `GOAL_GUARD_SIDEBAR_*` env vars.
 
   **How it loads — important.** TUI plugins are **not** loaded from the `plugins/`
   dir; OpenCode loads them from `tui.json`. The Goal sidebar registers a
@@ -346,10 +343,9 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `toastOnBlock` / `GOAL_GUARD_TOAST_ON_BLOCK` | `true` | Toast when something is blocked. |
 | `toastOnReview` / `GOAL_GUARD_TOAST_ON_REVIEW` | `true` | Toast on each review verdict and when completion unlocks. |
 | `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the experimental Goal todo section in the TUI sidebar. |
-| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Normal colour of a **running** goal after the first-show rainbow. |
+| `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Colour of the GOAL label for a **running** goal. |
 | `sidebarDoneColor` / `GOAL_GUARD_SIDEBAR_DONE_COLOR` | `#FF5555` | Colour of a **done** goal in the sidebar (red). |
 | `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Reserved muted colour for no-goal projections. |
-| `sidebarRainbowMs` / `GOAL_GUARD_SIDEBAR_RAINBOW_MS` | `4500` | First-display rainbow duration for the Goal todo section. |
 
 ## Custom tools
 

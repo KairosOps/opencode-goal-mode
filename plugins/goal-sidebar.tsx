@@ -23,7 +23,7 @@
  * the Node test suite.
  */
 
-import { createSignal, createEffect, onCleanup, For, Show } from "solid-js";
+import { createSignal, onCleanup, For, Show } from "solid-js";
 import { sidebarView, NO_GOAL } from "./goal-guard/summary.js";
 import { DEFAULT_CONFIG } from "./goal-guard/config.js";
 
@@ -36,7 +36,6 @@ const STATUS_COLOR = "#FFB86C"; // status line (running) — orange, distinct fr
 const TODO_DONE_COLOR = "#50FA7B"; // ✓ done todo rows — green
 const POLL_MS = 1500;
 const GOAL_AGENT = "goal"; // the primary Goal agent id (mirrors agents.js PRIMARY_AGENT)
-const RAINBOW = ["#FF5555", "#FFAA00", "#FFFF55", "#55FF55", "#55FFFF", "#5599FF", "#FF55FF"];
 
 function resolveOptions(options, env) {
   const e = env || {};
@@ -49,7 +48,6 @@ function resolveOptions(options, env) {
     color: options?.sidebarColor || e.GOAL_GUARD_SIDEBAR_COLOR || DEFAULT_COLOR,
     doneColor: options?.sidebarDoneColor || e.GOAL_GUARD_SIDEBAR_DONE_COLOR || DEFAULT_DONE,
     muted: options?.sidebarMutedColor || e.GOAL_GUARD_SIDEBAR_MUTED_COLOR || DEFAULT_MUTED,
-    rainbowMs: Number(options?.sidebarRainbowMs ?? e.GOAL_GUARD_SIDEBAR_RAINBOW_MS ?? 4500),
   };
 }
 
@@ -115,7 +113,7 @@ const id = "goal-mode-sidebar";
 /** @type {import("@opencode-ai/plugin/tui").TuiPlugin} */
 const tui = async (api, options) => {
   try {
-    const { enabled, color, doneColor, muted, rainbowMs } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
+    const { enabled, color, doneColor, muted } = resolveOptions(options, typeof process !== "undefined" ? process.env : {});
     if (!enabled) return;
     if (!api?.slots?.register) return; // runtime without the slot API → no-op.
 
@@ -203,38 +201,17 @@ const tui = async (api, options) => {
                 }
               }
             });
-            // First-display rainbow: starts the moment a goal FIRST appears. If a goal
-            // is already present at mount it starts immediately; otherwise the effect
-            // fires when the goal later appears (the common case — the goal is set
-            // after the sidebar mounts). Either way it settles after rainbowMs.
-            const [rainbow, setRainbow] = createSignal(false);
-            let rainbowStarted = false;
-            let rainbowTimer;
-            const startRainbow = () => {
-              if (rainbowStarted || (rainbowMs || 0) <= 0) return;
-              rainbowStarted = true;
-              setRainbow(true);
-              rainbowTimer = setTimeout(() => setRainbow(false), Math.max(0, rainbowMs));
-            };
-            if (first.state !== "none") startRainbow();
-            createEffect(() => {
-              if (model().state !== "none") startRainbow();
-            });
-            onCleanup(() => clearTimeout(rainbowTimer));
-            const isRainbow = () => rainbow() && model().state === "running";
-            // Settled (post-rainbow) colour for each header line. When done, every
-            // line is red; while running each line gets its OWN highlight colour so
-            // the GOAL label, the goal title, and the status never read as one text.
-            const settled = (kind) => {
+            // Per-line colour. When done, every line is red; while running each
+            // header line gets its OWN highlight colour so the GOAL label, the goal
+            // title, the gate count, and the status never read as one block of text.
+            const lineColor = (kind) => {
               if (model().state === "done") return doneColor;
               if (kind === "label") return color; // GOAL — yellow
               if (kind === "title") return TITLE_COLOR; // goal title — bright white
               if (kind === "gates") return META_COLOR; // gate count — cyan
               return STATUS_COLOR; // lifecycle status — orange
             };
-            const lineColor = (index, kind) => (isRainbow() ? RAINBOW[index % RAINBOW.length] : settled(kind));
-            const todoColor = (index, item) => {
-              if (isRainbow()) return RAINBOW[index % RAINBOW.length];
+            const todoColor = (item) => {
               if (item.status === "done") return TODO_DONE_COLOR;
               return model().state === "done" ? doneColor : muted;
             };
@@ -245,12 +222,12 @@ const tui = async (api, options) => {
             return (
               <Show when={model().state !== "none"}>
                 <box flexDirection="column" paddingTop={1}>
-                  <text fg={lineColor(0, "label")}><b>{model().label || "GOAL"}</b></text>
-                  <text fg={lineColor(1, "title")}>{model().goal}</text>
-                  <text fg={lineColor(2, "gates")}>{model().gates}</text>
-                  <text fg={lineColor(3, "status")}>{model().status}</text>
+                  <text fg={lineColor("label")}><b>{model().label || "GOAL"}</b></text>
+                  <text fg={lineColor("title")}>{model().goal}</text>
+                  <text fg={lineColor("gates")}>{model().gates}</text>
+                  <text fg={lineColor("status")}>{model().status}</text>
                   <For each={model().todos || []}>
-                    {(item, index) => <text fg={todoColor(index() + 4, item)}>{`${item.status === "done" ? "✓" : "□"} ${item.text}`}</text>}
+                    {(item) => <text fg={todoColor(item)}>{`${item.status === "done" ? "✓" : "□"} ${item.text}`}</text>}
                   </For>
                 </box>
               </Show>

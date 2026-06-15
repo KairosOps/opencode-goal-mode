@@ -186,7 +186,6 @@ test("new toggles default on and coerce from options/env", () => {
   assert.equal(DEFAULT_CONFIG.sidebarColor, "#FFD700");
   assert.equal(DEFAULT_CONFIG.sidebarDoneColor, "#FF5555");
   assert.equal(DEFAULT_CONFIG.sidebarMutedColor, "#808080");
-  assert.equal(DEFAULT_CONFIG.sidebarRainbowMs, 4500);
 
   const c = resolveConfig({ toastOnReview: false, sidebarColor: "#00FF00", sidebarDoneColor: "#FF0000", sidebarMutedColor: "#111111" }, {});
   assert.equal(c.toastOnReview, false);
@@ -199,13 +198,11 @@ test("new toggles default on and coerce from options/env", () => {
     GOAL_GUARD_SIDEBAR_COLOR: "#123456",
     GOAL_GUARD_SIDEBAR_DONE_COLOR: "#abcdef",
     GOAL_GUARD_SIDEBAR_MUTED_COLOR: "#654321",
-    GOAL_GUARD_SIDEBAR_RAINBOW_MS: "1000",
   });
   assert.equal(e.sidebarBanner, false);
   assert.equal(e.sidebarColor, "#123456");
   assert.equal(e.sidebarDoneColor, "#abcdef");
   assert.equal(e.sidebarMutedColor, "#654321");
-  assert.equal(e.sidebarRainbowMs, 1000);
 });
 
 // ---------------------------------------------------------------------------

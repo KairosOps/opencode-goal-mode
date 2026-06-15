@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.6
+
+### Sidebar
+
+- **Removed the random rainbow effect that played on load.** When a goal first
+  appeared, the Goal todo section briefly cycled its header lines and todos through
+  rainbow colours before settling into the lifecycle colours. It was a flashy
+  load-time animation that served no purpose — unnecessary and useless for
+  productivity — so it is gone. The section now renders its settled per-line
+  colours from the very first frame: a yellow `GOAL` label, a white goal title, a
+  cyan gate count, and an orange lifecycle status (all red when done). The
+  colouring is unchanged; only the random rainbow flash on load is removed.
+- Removed the now-defunct `sidebarRainbowMs` option and its
+  `GOAL_GUARD_SIDEBAR_RAINBOW_MS` environment variable.
+- Verified via the headless sidebar visual harness (`npm run test:visual`): the
+  `GOAL` label renders yellow, the title white, the gate count cyan, and the
+  status orange from the first frame, with no rainbow phase.
+
 ## v0.4.5
 
 ### Install experience

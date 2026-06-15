@@ -175,9 +175,8 @@ fallback, so a Build (or any non-Goal) session in the same worktree never inheri
 another session's goal — it renders nothing and keeps OpenCode's native todo
 section. When it does render, it shows the short goal label, gate/status line, and
 structured Goal todos derived from acceptance criteria, evidence freshness, dirty
-state, and missing gates, starting with a brief per-line rainbow foreground effect
-and then settling to the configured running colour (`#FFD700` by default; red when
-done).
+state, and missing gates, with each header line in its own colour (the GOAL label
+uses the configured running colour, `#FFD700` by default; red when done).
 
 It is *paired* with the server plugin only through the persisted state file:
 `sidebar-data.js` recomputes the same `stateBaseDir`/`projectKey` path the guard

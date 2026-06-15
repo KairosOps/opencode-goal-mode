@@ -46,9 +46,12 @@ function modelFor(worktree, sessionId = "s1") {
   return readSidebarModel({ worktree, sessionId, env: process.env });
 }
 
-const YELLOW = [255, 215, 0]; // running
+const YELLOW = [255, 215, 0]; // running — GOAL label
 const RED = [255, 85, 85]; // done
 const GREEN = [0, 255, 0]; // custom
+const WHITE = [255, 255, 255]; // running — goal title
+const CYAN = [139, 233, 253]; // running — gate count
+const ORANGE = [255, 184, 108]; // running — lifecycle status
 
 function writeSnapshot(worktree, sessions) {
   const dir = stateBaseDir(process.env);
@@ -108,14 +111,16 @@ try {
   {
     writeSnapshot("/proj/withgoal", [["s1", session({ contract: { title: "Ship the OAuth refactor", original: "the user wants us to finish migrating the oauth flow and delete the legacy code path entirely" }, touchedAt: 9 })]]);
     const { frame, spans } = await render({ worktree: "/proj/withgoal" });
-    banner("Goal RUNNING (rainbow first display, AI title)"); show(frame);
+    banner("Goal RUNNING (settled per-line colours, AI title)"); show(frame);
     check("shows the AI title, not the long original", frame.includes("Ship the OAuth refactor") && !frame.includes("legacy code path"));
     check("shows the GOAL label", frame.includes("GOAL"));
     check("GOAL label is on its OWN line (not joined to the goal title)", frame.split("\n").some((l) => l.trim() === "GOAL") && !/GOAL +Ship the OAuth/.test(frame));
     check("NO orb (◆)", !frame.includes("◆"));
     check("does NOT show 'No goal'", !frame.includes("No goal"));
-    check("GOAL label starts rainbow red (first-display)", sameColor(spanFor(spans, "GOAL")?.rgba, [255, 85, 85]));
-    check("goal title is rainbow orange on the next line (first-display)", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, [255, 170, 0]));
+    check("GOAL label is yellow from first display (no rainbow)", sameColor(spanFor(spans, "GOAL")?.rgba, YELLOW), JSON.stringify(spanFor(spans, "GOAL")?.rgba));
+    check("goal title is white — its own settled colour, not rainbow", sameColor(spanFor(spans, "Ship the OAuth refactor")?.rgba, WHITE), JSON.stringify(spanFor(spans, "Ship the OAuth refactor")?.rgba));
+    check("gate count line keeps its cyan colour", sameColor(spanFor(spans, "gates")?.rgba, CYAN), JSON.stringify(spanFor(spans, "gates")?.rgba));
+    check("lifecycle status line keeps its orange colour", sameColor(spanFor(spans, "in progress")?.rgba, ORANGE), JSON.stringify(spanFor(spans, "in progress")?.rgba));
     check("GOAL label is bold", spanFor(spans, "GOAL")?.attr === 1);
     check(
       "gates and status are on SEPARATE lines (no 'gates · in progress'), no 'changes pending'",
@@ -138,7 +143,7 @@ try {
       ["build-session", Object.assign(createState("2026-01-01T00:00:00.000Z"), { active: false, touchedAt: 10 })],
     ]);
     const { api, getSlot } = mockApi("/proj/mixed");
-    await tui(api, { sidebarRainbowMs: 0 });
+    await tui(api, {});
     const slot = getSlot();
     banner("Mixed worktree, Build session");
     // The Build session has its own state (active:false) — its projection must be
@@ -156,7 +161,7 @@ try {
       ["sess-beta", session({ contract: { title: "Goal Beta", original: "beta" }, touchedAt: 99 })],
     ]);
     const { api, getSlot } = mockApi("/proj/two-goals");
-    await tui(api, { sidebarRainbowMs: 0 });
+    await tui(api, {});
     const slot = getSlot();
     const renderSession = async (sid) => {
       const t = await testRender(() => slot({}, { session_id: sid }), { width: 44, height: 10 });
@@ -188,7 +193,7 @@ try {
   }
   {
     writeSnapshot("/proj/green", [["s1", session({ goalText: "Custom colour goal", touchedAt: 9 })]]);
-    const { frame, spans } = await render({ worktree: "/proj/green", options: { sidebarColor: "#00FF00", sidebarRainbowMs: 0 } });
+    const { frame, spans } = await render({ worktree: "/proj/green", options: { sidebarColor: "#00FF00" } });
     banner("Custom colour (#00FF00)"); show(frame);
     check("GOAL label uses the custom colour (goal title stays its own colour)", sameColor(spanFor(spans, "GOAL")?.rgba, GREEN));
   }

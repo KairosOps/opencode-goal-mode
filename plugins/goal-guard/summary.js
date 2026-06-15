@@ -83,8 +83,9 @@ function sidebarTodos(state, required, missing) {
  *                "5/5 gates · completed · 2 review cycles". No "changes pending"
  *                noise — pending work surfaces as a structured todo row instead.
  *   - `todos`  → following lines: structured acceptance/verification/gate todos.
- * State drives colour: "running" = rainbow first, then yellow; "done" = red;
- * "none" = render nothing so non-Goal / no-goal sessions keep the native todo section.
+ * State drives colour: "running" = yellow GOAL label (each header line its own
+ * colour); "done" = red; "none" = render nothing so non-Goal / no-goal sessions
+ * keep the native todo section.
  */
 export const GOAL_LABEL = "GOAL";
 
