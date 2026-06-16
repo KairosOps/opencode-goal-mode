@@ -39,6 +39,15 @@ test("restrictSubagents defaults on and is configurable via options and env", ()
   assert.equal(resolveConfig({ restrictSubagents: true }, { GOAL_GUARD_RESTRICT_SUBAGENTS: "off" }).restrictSubagents, true);
 });
 
+test("autoContinue defaults on and is configurable via options and env", () => {
+  assert.equal(DEFAULT_CONFIG.autoContinue, true);
+  assert.equal(DEFAULT_CONFIG.maxAutoContinue, 50);
+  assert.equal(resolveConfig({ autoContinue: false }, {}).autoContinue, false);
+  assert.equal(resolveConfig({ maxAutoContinue: 10 }, {}).maxAutoContinue, 10);
+  assert.equal(resolveConfig(undefined, { GOAL_GUARD_AUTO_CONTINUE: "off" }).autoContinue, false);
+  assert.equal(resolveConfig(undefined, { GOAL_GUARD_MAX_AUTO_CONTINUE: "5" }).maxAutoContinue, 5);
+});
+
 test("boolean coercion accepts common string forms", () => {
   for (const truthy of ["1", "true", "yes", "on", "TRUE"]) {
     assert.equal(resolveConfig({ persist: truthy }).persist, true, truthy);

@@ -207,6 +207,12 @@ second) — negligible for a per-tool-call guard:
     false-positiving harmless commands like `git checkout -b`.
   - **Completion enforcement**: a premature `Goal Completed` is rewritten to
     `Goal Not Completed` with the exact missing review gates.
+  - **Never stops early**: if a goal session goes idle while the goal is still
+    incomplete, the guard automatically continues the agent (telling it exactly
+    what's left) so it keeps working until the goal is actually done — never sitting
+    idle on an unfinished goal. Two backstops keep it safe: a hard per-session cap
+    (`maxAutoContinue`) and a no-progress circuit-breaker that pauses for you if the
+    agent stops making progress. Toggle with `autoContinue`.
   - **Contextual gating**: the goal text and changed files determine which
     specialist reviewers are required.
   - **Goal-only subagents**: the `goal-*` specialist subagents are mechanically
@@ -334,6 +340,8 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `blockDestructive` / `GOAL_GUARD_BLOCK_DESTRUCTIVE` | `true` | Block destructive bash before execution. |
 | `blockNetworkExec` / `GOAL_GUARD_BLOCK_NETWORK_EXEC` | `true` | Block `curl \| sh`-style remote execution. |
 | `enforceCompletion` / `GOAL_GUARD_ENFORCE_COMPLETION` | `true` | Rewrite premature `Goal Completed`. |
+| `autoContinue` / `GOAL_GUARD_AUTO_CONTINUE` | `true` | Auto-continue an idle goal that isn't complete yet, so it never stops early. |
+| `maxAutoContinue` / `GOAL_GUARD_MAX_AUTO_CONTINUE` | `50` | Hard cap on automatic continuations per goal session. |
 | `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live state into the prompt. |
 | `persist` / `GOAL_GUARD_PERSIST` | `true` | Persist state under the XDG state dir. |
 | `contextualGates` / `GOAL_GUARD_CONTEXTUAL_GATES` | `true` | Require specialist gates by goal keywords. |

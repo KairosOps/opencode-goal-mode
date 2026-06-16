@@ -70,7 +70,7 @@ Verified against `@opencode-ai/plugin@1.15.13` source.
 | `tool.execute.after` | Record edits, verification, mutations, and review verdicts. |
 | `experimental.text.complete` | Rewrite premature `Goal Completed` claims. |
 | `experimental.session.compacting` | Preserve guard state across compaction. |
-| `event` | Track `file.edited` (subagent edits), flush state on `session.idle`. |
+| `event` | Track `file.edited` (subagent edits); on `session.idle`, flush state and auto-continue an incomplete goal (via `client.session.promptAsync`) so it never stops early. |
 | `tool` | Register the custom `goal_*` tools. |
 | `dispose` | Flush persisted state. |
 

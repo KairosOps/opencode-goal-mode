@@ -27,6 +27,7 @@ import { isPrimaryAgent, isReviewAgent, isGoalAgent, CYCLE_CLOSING_AGENT, pretty
 import { textOf, parseVerdict, recordVerdict } from "./verdicts.js";
 import { completionAllowed, missingGates, refreshStickyGates } from "./gates.js";
 import { evaluateCompletionClaim } from "./completion.js";
+import { evaluateAutoContinue } from "./autocontinue.js";
 import { summarizeState } from "./summary.js";
 import { buildSystemInjection } from "./system.js";
 import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass } from "./events.js";
@@ -316,9 +317,21 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           return;
         }
         if (event.type === "session.idle" && event.properties?.sessionID) {
-          const state = store.stateFor(event.properties.sessionID);
+          const sessionID = event.properties.sessionID;
+          const state = store.stateFor(sessionID);
+          // Never stop an active goal before it is actually complete: if the session
+          // went idle with the goal still incomplete, send the agent onward. Backstops
+          // (hard cap + no-progress breaker) live in evaluateAutoContinue so this can
+          // never loop forever.
+          const decision = evaluateAutoContinue(state, config);
           persistence.flush(() => store.snapshot());
-          if (state.dirty) {
+          if (decision.continue) {
+            await logger.toast("Goal not complete — continuing automatically", "info");
+            await logger.continueSession(sessionID, decision.message);
+          } else if (decision.stopReason) {
+            await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
+            await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");
+          } else if (state.dirty) {
             await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
           }
         }

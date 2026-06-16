@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.8
+
+### Never stop before the goal is complete (auto-continue)
+
+- A goal session that goes **idle while the goal is still incomplete** is now
+  automatically continued: the guard sends the agent a "do not stop — here's what's
+  left" message (via `session.promptAsync`) so it keeps working until the goal is
+  actually done. Previously the agent could stop on an unfinished goal (e.g. a
+  failing or missing `goal-final-auditor` gate) and just sit idle — it now picks
+  itself back up and resumes, naming the outstanding gates/changes.
+- **Safe by construction.** Two backstops prevent any runaway: a hard per-session
+  cap (`maxAutoContinue`, default 50) and a no-progress circuit-breaker that pauses
+  auto-continue (with a clear toast/log) if the agent stops making progress, so it
+  can never loop forever or burn tokens endlessly. Disable with `autoContinue`.
+- Verified that `session.promptAsync` starts a fresh turn against a live OpenCode
+  server, and that the decision logic continues incomplete goals, stops on complete
+  ones, ignores Build/non-goal sessions, and honors both backstops.
+
 ## v0.4.7
 
 ### Sidebar / goal state

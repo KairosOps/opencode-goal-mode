@@ -14,6 +14,11 @@ export const DEFAULT_CONFIG = Object.freeze({
   blockNetworkExec: true,
   /** Rewrite premature `Goal Completed` claims in experimental.text.complete. */
   enforceCompletion: true,
+  /** Auto-continue an active goal when the session goes idle but the goal is not yet
+   * complete, so the agent never stops before the goal is actually done. */
+  autoContinue: true,
+  /** Hard cap on automatic continuations per goal session (backstop against runaway). */
+  maxAutoContinue: 50,
   /** Inject a live Goal Guard state block into the system prompt. */
   injectSystemState: true,
   /** Persist guard state to disk so it survives OpenCode restarts. */
@@ -65,6 +70,8 @@ function fromEnv(env) {
     GOAL_GUARD_BLOCK_DESTRUCTIVE: ["blockDestructive", coerceBool],
     GOAL_GUARD_BLOCK_NETWORK_EXEC: ["blockNetworkExec", coerceBool],
     GOAL_GUARD_ENFORCE_COMPLETION: ["enforceCompletion", coerceBool],
+    GOAL_GUARD_AUTO_CONTINUE: ["autoContinue", coerceBool],
+    GOAL_GUARD_MAX_AUTO_CONTINUE: ["maxAutoContinue", coerceInt],
     GOAL_GUARD_INJECT_SYSTEM_STATE: ["injectSystemState", coerceBool],
     GOAL_GUARD_PERSIST: ["persist", coerceBool],
     GOAL_GUARD_CONTEXTUAL_GATES: ["contextualGates", coerceBool],

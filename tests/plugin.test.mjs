@@ -380,6 +380,66 @@ test("whole-word gating: 'capital' does not pull in the api reviewer", async () 
 });
 
 // ---------------------------------------------------------------------------
+// Auto-continue (never stop before the goal is complete)
+// ---------------------------------------------------------------------------
+
+function makeGuardWithSession() {
+  const sent = [];
+  let t = 1_000;
+  const guard = __test.createGuard(
+    {
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+        session: { promptAsync: async (opts) => void sent.push(opts) },
+      },
+    },
+    {},
+    { persistence: noopPersistence, clock: () => (t += 1) },
+  );
+  return { ...guard, sent };
+}
+
+test("an idle goal that is NOT complete auto-continues (sends one continuation prompt)", async () => {
+  const { hooks, sent } = makeGuardWithSession();
+  await hooks["chat.params"]({ sessionID: "ac", agent: "goal" }, {});
+  await hooks["chat.message"]({ sessionID: "ac", agent: "goal" }, { parts: [{ type: "text", text: "build a thing" }] });
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "ac" } } });
+  assert.equal(sent.length, 1, "an incomplete goal must be continued, not stopped");
+  assert.equal(sent[0].path.id, "ac");
+  assert.match(sent[0].body.parts[0].text, /not complete|continue/i);
+});
+
+test("a COMPLETE goal is allowed to stop (no auto-continue)", async () => {
+  const { hooks, store, sent } = makeGuardWithSession();
+  await hooks["chat.params"]({ sessionID: "ok", agent: "goal" }, {});
+  await hooks["chat.message"]({ sessionID: "ok", agent: "goal" }, { parts: [{ type: "text", text: "tiny task" }] });
+  await passAllBaseGates(hooks, store, "ok");
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "ok" } } });
+  assert.equal(sent.length, 0, "a complete goal must not be force-continued");
+});
+
+test("a Build (non-goal) idle session is never auto-continued", async () => {
+  const { hooks, sent } = makeGuardWithSession();
+  await hooks["chat.params"]({ sessionID: "b", agent: "build" }, {});
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "b" } } });
+  assert.equal(sent.length, 0);
+});
+
+test("auto-continue can be disabled via config", async () => {
+  const sent = [];
+  const guard = __test.createGuard(
+    { client: { app: { log: async () => undefined }, tui: { showToast: async () => undefined }, session: { promptAsync: async (o) => void sent.push(o) } } },
+    { autoContinue: false },
+    { persistence: noopPersistence },
+  );
+  await guard.hooks["chat.params"]({ sessionID: "off", agent: "goal" }, {});
+  await guard.hooks["chat.message"]({ sessionID: "off", agent: "goal" }, { parts: [{ type: "text", text: "x" }] });
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "off" } } });
+  assert.equal(sent.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // System-prompt injection
 // ---------------------------------------------------------------------------
 
