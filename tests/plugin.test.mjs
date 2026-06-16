@@ -454,6 +454,10 @@ test("system transform injects live state only for active goal sessions", async 
   await hooks["experimental.chat.system.transform"]({ sessionID: "y", model: {} }, active);
   assert.equal(active.system.length, 1);
   assert.match(active.system[0], /Goal Guard — live enforcement state/);
+  // With gates still missing, the injection forces the reviews each turn.
+  assert.match(active.system[0], /MANDATORY NEXT ACTION/);
+  assert.match(active.system[0], /task tool/);
+  assert.match(active.system[0], /cannot be skipped/i);
 });
 
 // ---------------------------------------------------------------------------

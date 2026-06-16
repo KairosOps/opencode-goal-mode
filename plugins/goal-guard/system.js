@@ -33,6 +33,16 @@ export function buildSystemInjection(state, config) {
   lines.push(`- Verification observed: ${r.verificationSeen ? "yes" : "no"}.`);
   lines.push(`- Required review gates: ${bullet(r.requiredGates)}.`);
   lines.push(`- Gates still missing or stale: ${bullet(r.missingGates)}.`);
+  if (r.missingGates.length) {
+    lines.push(
+      `- MANDATORY NEXT ACTION — run the outstanding reviews now: invoke each of these ` +
+        `review subagents with the task tool (one task call per reviewer), then fix every ` +
+        `blocking finding and re-run until each returns "Verdict: PASS": ${bullet(r.missingGates)}. ` +
+        `These reviews are not optional and cannot be skipped — completion is blocked until they pass, ` +
+        `and if you stop early the harness will automatically re-prompt you to run them. Do this before ` +
+        `any summary or completion claim.`,
+    );
+  }
   if (r.reviewerMemory.open.length) {
     lines.push(`- Open Reviewer Memory: ${r.reviewerMemory.open.map((m) => `${m.agent}: ${m.finding}`).join(" | ")}.`);
   }

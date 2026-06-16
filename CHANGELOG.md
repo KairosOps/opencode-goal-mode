@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.9
+
+### Required reviews are now programmatically forced
+
+- The required reviews are no longer just *required* — they are *forced*. While any
+  review gate is outstanding, BOTH the per-turn system-prompt injection AND every
+  auto-continue now issue an explicit, non-optional directive naming the exact
+  missing review subagents and commanding the agent to invoke each via the task tool
+  immediately (one task call per reviewer) and re-run until each returns
+  `Verdict: PASS` — before any summary or completion claim.
+- Together with the completion gate (cannot finish without the reviews) and
+  auto-continue (cannot stop while incomplete), this makes skipping the reviews
+  effectively impossible: the goal cannot complete, the agent cannot stop, and every
+  turn/continuation drives the outstanding reviews to actually run.
+
 ## v0.4.8
 
 ### Never stop before the goal is complete (auto-continue)

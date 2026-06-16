@@ -15,12 +15,17 @@ function allBaseGatesPassing(seq = 10) {
   return v;
 }
 
-test("an active incomplete goal that goes idle → continue with an actionable message", () => {
+test("an active incomplete goal that goes idle → continue with a FORCING review directive", () => {
   const st = goalState({ goalText: "ship the feature" });
   const d = evaluateAutoContinue(st, DEFAULT_CONFIG);
   assert.equal(d.continue, true);
   assert.match(d.message, /not complete/i);
   assert.match(d.message, /goal_status/);
+  // Reviews are programmatically forced: the message names the outstanding reviewers,
+  // commands invoking them via the task tool, and states they cannot be skipped.
+  assert.match(d.message, /task tool/i);
+  assert.match(d.message, /cannot be skipped/i);
+  assert.match(d.message, /goal-reviewer/);
   assert.equal(st.autoContinueCount, 1);
 });
 

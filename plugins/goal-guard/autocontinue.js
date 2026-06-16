@@ -34,18 +34,26 @@ export function progressSignature(state) {
   ].join(":");
 }
 
-/** Build the "keep going" message the agent receives, naming what is still owed. */
+/** Build the "keep going" message the agent receives, naming what is still owed.
+ * When review gates are outstanding it is an explicit, non-optional directive to
+ * run those exact reviews via the task tool before anything else — the reviews are
+ * forced, not suggested. */
 export function continuationMessage(state, config) {
   const missing = missingGates(state, config);
-  const lines = ["The goal is NOT complete yet — do not stop. Continue working now."];
+  const lines = ["The goal is NOT complete — do not stop. Continue working now."];
   if (state?.dirty) {
-    lines.push("There are changes that are not yet reviewed/verified: re-run verification and the required reviews after your latest edits.");
+    lines.push("There are changes that are not yet reviewed/verified after your latest edits — re-run verification.");
   }
   if (missing.length) {
-    lines.push(`Required review gates still missing or stale: ${missing.join(", ")}. Run those reviewers and fix every blocking finding, then re-review.`);
+    lines.push(
+      `REQUIRED REVIEWS ARE NOT DONE and cannot be skipped. Invoke each of these review ` +
+        `subagents with the task tool RIGHT NOW — one task call per reviewer — and fix every ` +
+        `blocking finding, re-running until each returns "Verdict: PASS": ${missing.join(", ")}. ` +
+        `Do not write a summary, ask the user anything, or claim completion until they all pass.`,
+    );
   }
   lines.push(
-    "Use the goal_status tool to see exactly what is required. Only finish with `Goal Completed` (and an accurate `Review cycles: N`) once goal_status reports completion is allowed.",
+    "Call goal_status if unsure what is required. Only finish with `Goal Completed` (and an accurate `Review cycles: N`) once goal_status reports completion is allowed.",
   );
   return lines.join(" ");
 }
