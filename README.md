@@ -385,6 +385,25 @@ npm run publish:check
 `npm run validate` runs the test suite, the structural config validator, the
 publish readiness check, and an `npm pack --dry-run`.
 
+### Live end-to-end suite (optional, long-running)
+
+```bash
+npm run test:e2e        # needs a working OpenCode + a free OpenCode Zen model
+```
+
+`test:e2e` boots a dedicated `opencode serve` rooted at a throwaway git project for
+each scenario, then drives a **real** goal session over the OpenCode HTTP API
+(`session.promptAsync` + the `/event` stream — the same flow the live TUI uses)
+against a free OpenCode Zen model (default `opencode/deepseek-v4-flash-free`;
+override with `GOAL_E2E_MODEL`). It asserts the guard's live behaviour — a Goal
+Contract is recorded, the required reviews are actually forced to run, no un-earned
+`Goal Completed` is let through, destructive `rm -rf` is blocked mid-run, and a Build
+session never becomes a goal (and invokes no `goal-*` subagents). Each scenario is
+fully isolated (its own server + project, so nothing touches your repo) and exits
+early the moment its assertions are observable. It is intentionally long-running
+(minutes of real model work, including the five review subagents) and not part of
+CI; it SKIPs cleanly if `opencode` or the SDK is unavailable.
+
 ## Models
 
 Agents do not pin a provider-specific model, so they inherit the model OpenCode

@@ -40,6 +40,7 @@
     "test:agents": "node --test tests/agents.test.mjs tests/commands.test.mjs",
     "test:install": "node --test tests/install.test.mjs",
     "test:visual": "bun tools/visual-test/sidebar-visual.jsx",
+    "test:e2e": "node tools/e2e/goal-e2e.mjs",
     "bench": "node benchmarks/run.mjs",
     "bench:external": "node benchmarks/external.mjs",
     "bench:corpus": "node benchmarks/build-external-corpus.mjs",
