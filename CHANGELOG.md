@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.10
+
+### Live end-to-end test suite (development tooling)
+
+- Added `npm run test:e2e`: a live end-to-end suite that drives **real** goal
+  sessions against a real OpenCode server and a free OpenCode Zen model, asserting
+  the guard's behaviour as it happens — a Goal Contract is recorded, the required
+  reviews are actually forced to run (all five review subagents), no un-earned
+  `Goal Completed` slips through, a destructive `rm -rf` is blocked mid-run, and a
+  Build session never becomes a goal nor invokes `goal-*` subagents.
+- It boots a dedicated, isolated `opencode serve` per scenario (its own throwaway
+  git project) and observes the run over the OpenCode HTTP API
+  (`session.promptAsync` + the `/event` stream — the same flow the live TUI uses),
+  so nothing leaks into your working tree.
+- **Scope:** this release is development tooling and documentation only. The suite
+  is not shipped in the npm package and not run in CI, and there are **no changes
+  to the plugin, agents, or commands** — runtime behaviour is identical to v0.4.9.
+
 ## v0.4.9
 
 ### Required reviews are now programmatically forced
