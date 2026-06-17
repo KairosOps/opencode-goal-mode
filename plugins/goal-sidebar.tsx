@@ -99,7 +99,11 @@ function readModel(worktrees, sessionId) {
       if (!snapshot) continue;
       const record = pickSession(snapshot, sessionId);
       if (!record) continue;
-      const view = sidebarView(record, DEFAULT_CONFIG);
+      // Evaluate completion with the SAME config the server resolved (persisted in the
+      // snapshot), so a non-default `contextualGates` can't make the sidebar disagree
+      // with the server. Fall back to defaults for older snapshots without `config`.
+      const cfg = snapshot.config && typeof snapshot.config === "object" ? { ...DEFAULT_CONFIG, ...snapshot.config } : DEFAULT_CONFIG;
+      const view = sidebarView(record, cfg);
       if (view && view.state !== "none") return view;
     } catch {
       /* try the next candidate */

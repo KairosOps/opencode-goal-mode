@@ -115,14 +115,27 @@ function reviveState(raw) {
  * @param {number} [opts.maxSessions=200]
  * @param {number} [opts.ttlMs=0]  Idle TTL in ms (0 disables).
  * @param {() => number} [opts.clock]  Monotonic-ish wall clock for touch/TTL.
+ * @param {(key: string) => void} [opts.onEvict]  Called with the session key whenever a
+ *   session is dropped (TTL/LRU/restore-trim), so callers can prune any out-of-store
+ *   per-session sidecars (e.g. in-memory maps) and never leak them.
  */
-export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.now() } = {}) {
+export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.now(), onEvict } = {}) {
   const sessions = new Map();
   let seq = 0;
   let touchCounter = 0;
 
   const nowIso = () => new Date(clock()).toISOString();
   const nextSeq = () => (seq += 1);
+  const drop = (key) => {
+    sessions.delete(key);
+    if (onEvict) {
+      try {
+        onEvict(key);
+      } catch {
+        /* a sidecar-prune failure must never break eviction */
+      }
+    }
+  };
 
   function evictIfNeeded() {
     // Drop TTL-expired idle sessions first.
@@ -130,7 +143,7 @@ export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.n
       const cutoff = clock() - ttlMs;
       for (const [key, st] of sessions) {
         if (st.touchedWall !== undefined && st.touchedWall < cutoff && !st.active) {
-          sessions.delete(key);
+          drop(key);
         }
       }
     }
@@ -146,7 +159,7 @@ export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.n
         }
       }
       if (oldestKey === null) break;
-      sessions.delete(oldestKey);
+      drop(oldestKey);
     }
   }
 
@@ -206,7 +219,7 @@ export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.n
         }
       }
       if (oldestKey === null) break;
-      sessions.delete(oldestKey);
+      drop(oldestKey);
     }
   }
 

@@ -25,9 +25,16 @@ export function evaluateCompletionClaim(state, config, text) {
   const marker = config.completionMarker || "Goal Completed";
   const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // The completion contract requires the message to START with the marker (the
-  // final response begins with "Goal Completed"). Anchor to the first non-space
-  // of the message or of any line, so a mid-sentence mention is not policed.
-  const markerRe = new RegExp(`^[\\s>*_#-]*${escaped}`, "im");
+  // final response begins with "Goal Completed"). Anchor to the first non-space of
+  // any line — but the agent is taught to render the marker in a code span
+  // (`Goal Completed`) and may prefix it with an emoji or an ordered-list marker,
+  // so the leading-prefix class must tolerate backticks/tildes, an optional list
+  // marker, and emoji. Still start-of-line anchored, so a mid-sentence mention is
+  // never policed.
+  // Any mix of leading whitespace, markdown punctuation, code-span backticks/tildes,
+  // emoji (+ variation selectors), and an ordered-list marker, in ANY order.
+  const PREFIX = "(?:[\\s>*_#\\-`~]|\\p{Extended_Pictographic}|\\uFE0F|\\d+[.)])*";
+  const markerRe = new RegExp(`^${PREFIX}${escaped}`, "imu");
 
   if (!text || !markerRe.test(text)) return { blocked: false };
   // Only police active goal sessions.
@@ -56,7 +63,7 @@ export function evaluateCompletionClaim(state, config, text) {
   // leading markdown prefix), not merely the first occurrence of the phrase —
   // otherwise an unrelated earlier mention would be mangled while the real
   // completion-claim heading stayed unflipped.
-  const markerLineRe = new RegExp(`^([\\s>*_#-]*)${escaped}`, "im");
+  const markerLineRe = new RegExp(`^(${PREFIX})${escaped}`, "imu");
   const replacement =
     text.replace(markerLineRe, (_m, prefix) => `${prefix}${blockedMarker}`) +
     `\n\nGoal Guard blocked completion: ${reason}. State: ${summary}`;

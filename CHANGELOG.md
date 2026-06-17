@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.4.12
+
+### Deep audit hardening — closes real enforcement & RCE bypasses
+
+A deep, adversarially-verified audit of the whole plugin found and this release fixes
+the following **real** defects (every fix has a regression test; 306 tests pass):
+
+**Enforcement integrity (high):**
+- **Completion gate could be bypassed by the marker's own format.** A premature
+  `` `Goal Completed` `` in a code span (the exact form the goal agent is taught to
+  emit), or prefixed by an emoji / list number (`✅ Goal Completed`, `1. Goal Completed`),
+  slipped past the gate unrewritten. The detector/rewriter now tolerate any leading mix
+  of backticks, markdown, emoji, and ordered-list markers — while still ignoring a
+  mid-sentence mention.
+
+**Shell guard — remote-code-execution holes closed (high/medium):**
+- `… | base64 -d | sh` (and other decoders: base32/xxd/openssl/tr/gunzip…) piped into a
+  shell are now flagged; a network fetcher behind the decoder still trips `networkExec`.
+- `curl … | python|node|perl|ruby|php` (interpreters reading their program from stdin)
+  is now detected as remote execution.
+- `bash <(curl …)` process-substitution RCE and `eval "$(…)"` / `sh -c "$(…)"`
+  substitution-as-code are now analyzed instead of dropped.
+- **False positive fixed:** `git restore --staged <file>` (index-only unstage) is no
+  longer blocked as destructive; `git restore` of the worktree still is.
+
+**Correctness & robustness (medium/low):**
+- The shipped `/goal-review` and `/goal-final` slash commands now run from a non-goal
+  session (they were wrongly blocked by the subagent restriction); model-emitted poach
+  attempts from a non-goal agent stay blocked.
+- `file.edited` is attributed to the single in-flight goal session instead of broadcast
+  to every active goal, so concurrent goals in one worktree are no longer cross-dirtied
+  or given each other's required gates.
+- Auto-continue: overlapping idles are fully coalesced (no duplicate continuations or
+  double-advanced backstop counters); a goal→build switch and a user-cancel clear are
+  now persisted durably; clock-skew/future-dated cancel flags fail safe; the internal
+  per-session sidecar maps are pruned on eviction (no unbounded growth).
+- The TUI sidebar now evaluates completion with the server's **resolved** config
+  (persisted in the snapshot), so a non-default `contextualGates` can't make it show a
+  finished goal as perpetually running.
+- The stuck-`dirty` case (final auditor passing before the last other gate) is fixed.
+
+**Config:** `completionMarker`/`blockedMarker` are now settable via environment
+(`GOAL_GUARD_COMPLETION_MARKER`/`_BLOCKED_MARKER`); integer options reject decimals/
+scientific notation instead of silently truncating; empty/blank string options are
+ignored (never inject an empty marker); README documents `abortGraceMs`.
+
+No change to the documented agent/command behaviour; runtime enforcement is stricter
+and safer.
+
 ## v0.4.11
 
 ### A user cancel is now honored — auto-continue never fights the stop button

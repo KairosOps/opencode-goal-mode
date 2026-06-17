@@ -70,6 +70,39 @@ const WRAPPER_VALUE_OPTS = {
 /** Commands that fetch remote content; piping them into a shell is remote code execution. */
 const NETWORK_FETCHERS = new Set(["curl", "wget", "fetch", "http", "https", "aria2c"]);
 
+/**
+ * Decoders/transforms that turn opaque bytes into a program. Piping any of them
+ * into a shell (`… | base64 -d | sh`) is never a legitimate verification step —
+ * the decoded bytes run as code — so a decoder feeding a shell fails closed.
+ */
+const DECODERS = new Set(["base64", "base32", "basenc", "openssl", "xxd", "od", "uudecode", "tr", "gunzip", "gzip", "zcat", "xz", "unxz"]);
+
+/**
+ * Language interpreters that execute their program from stdin when given no
+ * script source. `curl … | python3` is the same remote-code-execution sink as
+ * `curl … | sh`, just a different interpreter.
+ */
+const STDIN_INTERPRETERS = new Set(["python", "python2", "python3", "node", "nodejs", "perl", "ruby", "php"]);
+
+/** Flags that supply an interpreter's program inline, so it does NOT read stdin. */
+const INTERP_PROGRAM_FLAGS = new Set(["-c", "-e", "-E", "-m", "-p", "--eval", "--print"]);
+
+/**
+ * A bare interpreter reads its program from stdin: no inline-program flag and no
+ * positional (non-flag) script argument. Used to detect `curl … | python3`.
+ */
+function isBareInterpreter(args) {
+  for (const a of args) {
+    if (a.startsWith("-")) {
+      if (INTERP_PROGRAM_FLAGS.has(a)) return false;
+      continue;
+    }
+    // A positional argument is the script path → not reading stdin.
+    return false;
+  }
+  return true;
+}
+
 const SEPARATORS = new Set([";", "\n", "&&", "||", "|", "|&", "&"]);
 
 /**
@@ -278,13 +311,19 @@ function structure(tokens) {
   let words = [];
   const redirects = [];
   const substs = [];
+  // A substitution that produced the command NAME (`$(which rm) -rf /tmp/x`):
+  // its trailing args would otherwise be orphaned, so remember it per command.
+  let headSubst = null;
 
   const flushCommand = () => {
-    if (words.length || redirects.length) {
-      pipeline.push({ words: words.slice(), redirects: redirects.slice() });
+    if (words.length || redirects.length || headSubst) {
+      const cmd = { words: words.slice(), redirects: redirects.slice() };
+      if (headSubst) cmd.headSubst = headSubst;
+      pipeline.push(cmd);
     }
     words = [];
     redirects.length = 0;
+    headSubst = null;
   };
   const flushPipeline = () => {
     flushCommand();
@@ -295,7 +334,10 @@ function structure(tokens) {
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i];
     if (t.type === "subst") {
-      substs.push(t.value);
+      // A substitution in command-HEAD position (no word emitted yet) supplies
+      // the binary name; bind it to the command so its args are not orphaned.
+      if (words.length === 0 && headSubst === null) headSubst = t.value;
+      else substs.push(t.value);
       continue;
     }
     if (t.type === "word") {
@@ -496,14 +538,24 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     classifyInterpreterScript(bin, args, depth, acc);
     // deno also has subcommands; fall through handled in classifyInterpreterScript
     if (bin === "deno") classifyDeno(args, acc);
+    // A bare `node`/`nodejs` at a pipeline tail executes its piped stdin: `curl … | node` is RCE.
+    else handlePipedShell(bin, args, pipelineCmds, indexInPipeline, depth, acc);
     return;
   }
   if (bin === "python" || bin === "python3" || bin === "python2") {
     classifyPython(args, depth, acc);
+    handlePipedShell(bin, args, pipelineCmds, indexInPipeline, depth, acc);
     return;
   }
   if (bin === "perl" || bin === "ruby") {
     classifyPerlRuby(bin, args, depth, acc);
+    handlePipedShell(bin, args, pipelineCmds, indexInPipeline, depth, acc);
+    return;
+  }
+  if (bin === "php") {
+    // php has no -c-string form like node/python; a bare `php` reads its program
+    // from stdin, so `curl … | php` is RCE.
+    handlePipedShell(bin, args, pipelineCmds, indexInPipeline, depth, acc);
     return;
   }
   if (bin === "awk" || bin === "gawk" || bin === "mawk") {
@@ -673,10 +725,44 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
   // (handled at string level in analyze())
 }
 
-/** find/handle a shell that runs piped stdin: `<source> | sh`. */
+/**
+ * Conservative classification of orphaned args whose binary name came from an
+ * OPAQUE command substitution (`$(which rm) -rf /tmp/x`). The name is unknown
+ * statically, but recursive/force flags pointed at a sensitive path are a clear
+ * destructive shape regardless of the (laundered) binary — fail closed on those.
+ */
+function classifyHeadlessArgs(words, acc) {
+  const recursive = hasFlag(words, ["-r", "-R", "--recursive"]);
+  const force = hasFlag(words, ["-f", "--force"]);
+  const targets = nonFlagArgs(words);
+  const dangerous = targets.some(
+    (t) => /[*?]/.test(t) || t === "/" || t === "~" || t.endsWith("/*") || /^\/(etc|usr|bin|sbin|boot|var|lib|lib64|sys|root|dev|proc)\b/.test(t),
+  );
+  if ((recursive || force) && dangerous) {
+    acc.destructive = true;
+    acc.reasons.push("substitution-named command with recursive/force flags on a sensitive path");
+  }
+}
+
+/**
+ * Handle a code-execution sink that runs piped stdin: `<source> | sh` or
+ * `<source> | python3`. The sink is the END of a pipeline; we walk back through
+ * the upstream stages to attribute the signal.
+ *
+ * A *bare* shell (`sh`/`bash`/…) runs its stdin as a script; a *bare* language
+ * interpreter (`python3`/`node`/`perl`/…, with no -c/-e/-m/--eval/--print and no
+ * positional script) likewise executes its stdin as a program. Both are RCE
+ * sinks when an upstream stage is a network fetcher. Decoders/transforms
+ * (`base64 -d`, `xxd -r`, `tr`, …) between the source and the sink are
+ * transparent: their decoded output runs as code, so a decoder feeding the sink
+ * fails closed, and the walk continues so a fetcher behind the decoder is still
+ * attributed as networkExec.
+ */
 function handlePipedShell(shellBin, args, pipelineCmds, indexInPipeline, depth, acc) {
-  if (!STDIN_SHELLS.has(shellBin)) return;
-  if (args.some((a) => a === "-c")) return; // handled elsewhere
+  const isShell = STDIN_SHELLS.has(shellBin);
+  const isInterp = STDIN_INTERPRETERS.has(shellBin) && isBareInterpreter(args);
+  if (!isShell && !isInterp) return;
+  if (isShell && args.some((a) => a === "-c")) return; // handled elsewhere
   // Look at the upstream command in the same pipeline.
   if (!pipelineCmds || indexInPipeline <= 0) return;
   for (let k = indexInPipeline - 1; k >= 0; k -= 1) {
@@ -689,9 +775,22 @@ function handlePipedShell(shellBin, args, pipelineCmds, indexInPipeline, depth, 
       acc.reasons.push(`piping ${uhead} into ${shellBin}`);
       return;
     }
+    if (DECODERS.has(uhead)) {
+      // A decoder/transform feeding a code sink runs the decoded bytes as code;
+      // this is never a legitimate verification step. Fail closed, but keep
+      // scanning so an upstream fetcher behind the decoder still sets networkExec.
+      acc.destructive = true;
+      acc.reasons.push(`piping ${uhead} output into ${shellBin}`);
+      continue; // do NOT return — let an upstream curl/wget also set networkExec
+    }
     if (uhead === "echo" || uhead === "printf") {
-      const literal = echoCommandLiteral(uhead, upstream.words || []);
-      if (literal) analyzeInto(literal, depth + 1, acc);
+      // Only a *shell* runs an echoed literal as a script. A bare interpreter
+      // would consume the literal as program text in its own language, which our
+      // literal-as-shell-command analysis cannot meaningfully classify, so skip.
+      if (isShell) {
+        const literal = echoCommandLiteral(uhead, upstream.words || []);
+        if (literal) analyzeInto(literal, depth + 1, acc);
+      }
       return;
     }
   }
@@ -985,10 +1084,22 @@ function classifyGit(args, depth, acc) {
         acc.reasons.push("git switch --discard-changes");
       }
       return;
-    case "restore":
-      acc.destructive = true;
-      acc.reasons.push("git restore discards worktree changes");
+    case "restore": {
+      // `--staged`/`-S` restores only the INDEX from HEAD (the modern unstage,
+      // equivalent to `git reset HEAD <file>`) and never touches the worktree.
+      // `--worktree`/`-W`, or the default (no mode flag), restores the worktree
+      // and CAN discard uncommitted edits — mirror the arg-aware checkout arm.
+      const staged = hasFlag(rest, ["--staged", "-S"]);
+      const worktree = hasFlag(rest, ["--worktree", "-W"]);
+      if (worktree || !staged) {
+        acc.destructive = true;
+        acc.reasons.push("git restore discards worktree changes");
+      } else {
+        acc.mutating = true;
+        acc.reasons.push("git restore --staged (unstage)");
+      }
       return;
+    }
     case "branch":
       if (hasFlag(rest, ["-D", "-d"]) || rest.includes("-D") || rest.includes("-d") || rest.includes("--delete")) {
         acc.destructive = true;
@@ -1065,6 +1176,27 @@ function hasBareShell(pipelines) {
 }
 
 /**
+ * Does any top-level command run a captured substitution's output as code?
+ * A bare shell does (covered by hasBareShell), but so do `eval` and `sh -c`/
+ * `bash -c` — for `eval "$(echo rm -rf /)"` the lexer pulls the `$(…)` out into a
+ * standalone subst, leaving `eval` with no inline args, so without this the
+ * decoded/echoed payload is never re-analyzed as code.
+ */
+function hasCodeExecutor(pipelines) {
+  for (const pipeline of pipelines) {
+    for (const cmd of pipeline) {
+      let k = 0;
+      const words = cmd.words || [];
+      while (k < words.length && ENV_ASSIGN.test(words[k])) k += 1;
+      const head = baseName(words[k] || "");
+      if (head === "eval") return true;
+      if (DASH_C_INTERPRETERS.has(head) && words.includes("-c")) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Extract the literal text emitted by an `echo`/`printf` word list, dropping
  * only echo's own leading flags (-n/-e/-E) and printf's format string — NOT the
  * inner command's flags (so `echo rm -rf x` yields `rm -rf x`, not `rm x`).
@@ -1106,14 +1238,38 @@ function analyzeInto(rawInput, depth, acc) {
   const { pipelines, substs } = structure(tokens);
   for (const pipeline of pipelines) {
     pipeline.forEach((cmd, indexInPipeline) => {
+      if (cmd.headSubst) {
+        // A substitution produced the command name (`$(which rm) -rf /tmp/x`),
+        // so its args belong to that resolved binary. If the substitution is a
+        // literal `echo NAME`/`printf NAME`, reconstruct `NAME args` and analyze
+        // it (`$(echo rm) -rf /` → `rm -rf /`); otherwise the name is opaque, so
+        // fall back to a conservative recursion that classifies the orphaned args.
+        const literalName = echoLiteralOf(cmd.headSubst);
+        const argStr = (cmd.words || []).join(" ");
+        if (literalName) {
+          analyzeInto(`${literalName} ${argStr}`.trim(), depth + 1, acc);
+        } else {
+          analyzeInto(cmd.headSubst, depth + 1, acc);
+          classifyHeadlessArgs(cmd.words || [], acc);
+        }
+        return;
+      }
       classifyCommand(cmd.words, cmd.redirects, depth, acc, pipeline, indexInPipeline);
     });
   }
-  // When a bare shell interpreter is present (e.g. `bash <(echo rm -rf /)`), an
-  // echoed substitution is a script fed to that shell — analyze its literal as code.
-  const shellPresent = hasBareShell(pipelines);
+  // When a code executor is present (a bare shell `bash <(…)`/`… | sh`, or an
+  // `eval`/`sh -c "$(…)"`), the substitution's OUTPUT is run as code, so re-analyze
+  // its echoed literal as a command rather than as a standalone command line.
+  const shellPresent = hasBareShell(pipelines) || hasCodeExecutor(pipelines);
   for (const s of substs) {
     if (shellPresent) {
+      // `bash <(curl url)` / `sh <(wget -qO- url)`: the shell executes the
+      // substitution's output. If that output is network-fetched, it is RCE.
+      if (substHeadIsFetcher(s)) {
+        acc.networkExec = true;
+        acc.reasons.push("shell executing network-fetched process substitution");
+        continue;
+      }
       const literal = echoLiteralOf(s);
       if (literal) {
         analyzeInto(literal, depth + 1, acc);
@@ -1122,6 +1278,20 @@ function analyzeInto(rawInput, depth, acc) {
     }
     analyzeInto(s, depth + 1, acc);
   }
+}
+
+/** Is the head of any simple command inside a substitution a network fetcher? */
+function substHeadIsFetcher(substString) {
+  const { pipelines } = structure(lex(substString));
+  for (const pipeline of pipelines) {
+    for (const cmd of pipeline) {
+      const words = cmd.words || [];
+      let k = 0;
+      while (k < words.length && ENV_ASSIGN.test(words[k])) k += 1;
+      if (NETWORK_FETCHERS.has(baseName(words[k] || ""))) return true;
+    }
+  }
+  return false;
 }
 
 /**

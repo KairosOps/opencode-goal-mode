@@ -67,9 +67,29 @@ function partsText(parts) {
  */
 export function createGuard(input = {}, options = {}, overrides = {}) {
   const config = overrides.config || resolveConfig(options, overrides.env);
+
+  // In-memory only (never persisted): coalesce overlapping idle decisions, detect a
+  // user turn that starts DURING the grace sleep, and attribute project-scoped
+  // file.edited events to the goal session whose turn is actually in flight. Keeping
+  // these out of the store means a crash/restart can never wedge auto-continue, and
+  // they are pruned with the session via the store's onEvict so they never leak.
+  const decidingIdle = new Set(); // sessionIDs currently inside an idle decision
+  const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
+  const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
+  let lastActiveGoalSession = null; // sessionID of the most-recent active goal turn
+
   const store =
     overrides.store ||
-    createStore({ maxSessions: config.maxSessions, ttlMs: config.sessionTtlMs, clock: overrides.clock });
+    createStore({
+      maxSessions: config.maxSessions,
+      ttlMs: config.sessionTtlMs,
+      clock: overrides.clock,
+      onEvict: (key) => {
+        userTurnSeq.delete(key);
+        decidingIdle.delete(key);
+        if (lastActiveGoalSession === key) lastActiveGoalSession = null;
+      },
+    });
   const logger = createLogger(input.client);
   const persistence =
     overrides.persistence ||
@@ -89,14 +109,17 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
     /* ignore corrupt state */
   }
 
-  const persist = () => persistence.save(() => store.snapshot());
-
-  // In-memory only (never persisted): coalesce overlapping idle decisions and detect
-  // a user turn that starts DURING the grace sleep. Keeping these out of the store
-  // means a crash/restart can never wedge auto-continue on a stale "deciding" flag.
-  const decidingIdle = new Set(); // sessionIDs currently inside a grace-decision
-  const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
-  const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
+  // Persist the resolved config alongside the sessions so the TUI sidebar (which reads
+  // only the on-disk snapshot) evaluates completion with the SAME config the server
+  // used — otherwise a non-default `contextualGates` would make the sidebar disagree
+  // with the server (e.g. show a finished goal as perpetually running). restore()
+  // ignores the extra top-level key, so this is backward/forward compatible.
+  const snapshotFn = () => {
+    const snap = store.snapshot();
+    snap.config = config;
+    return snap;
+  };
+  const persist = () => persistence.save(snapshotFn);
 
   const hooks = {
     async "chat.message"(inp, out) {
@@ -111,12 +134,21 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         bumpUserTurn(inp.sessionID);
         if (state.abortedAt) {
           state.abortedAt = 0;
-          persist();
+          // Durable clear — matches the flushed SET, so a restart can't wedge suppression.
+          persistence.flush(snapshotFn);
         }
         // `active` reflects whether this session is CURRENTLY a Goal session. Switching
         // the session's agent to Build (or anything non-goal) must deactivate it, or
         // the sidebar/guard would keep treating an explicit Build session as a goal.
-        if (inp.agent) state.active = isPrimaryAgent(inp.agent);
+        // Persist the flip so the on-disk snapshot (the sidebar's fallback) is correct.
+        if (inp.agent) {
+          const next = isPrimaryAgent(inp.agent);
+          if (state.active !== next) {
+            state.active = next;
+            persist();
+          }
+        }
+        if (state.active) lastActiveGoalSession = inp.sessionID;
         const text = partsText(out?.parts);
         if (text && state.active) {
           // Accumulate goal text (bounded) so contextual gates can be derived.
@@ -144,8 +176,16 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // cleared in chat.message (a real user message) instead.
         // Track the current mode: a session is active (a goal) only while its agent
         // is the goal primary. Switching to Build/Plan/etc. deactivates it so the
-        // Goal sidebar and enforcement stop treating it as a goal.
-        if (inp.agent) state.active = isPrimaryAgent(inp.agent);
+        // Goal sidebar and enforcement stop treating it as a goal. Persist the flip so
+        // the on-disk snapshot (the sidebar's fallback) reflects a goal→build switch.
+        if (inp.agent) {
+          const next = isPrimaryAgent(inp.agent);
+          if (state.active !== next) {
+            state.active = next;
+            persist();
+          }
+        }
+        if (state.active) lastActiveGoalSession = normalized;
       } catch {
         /* ignore */
       }
@@ -176,7 +216,13 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (target && isGoalAgent(target)) {
           const caller = state.currentAgent;
           const callerIsGoal = isPrimaryAgent(caller) || state.active;
-          if (!callerIsGoal) {
+          // The shipped /goal-review and /goal-final slash commands run a reviewer as a
+          // subtask from the user's (possibly non-goal) session — that is a legitimate,
+          // user-initiated goal-* invocation, so allow it. Model-emitted task calls carry
+          // no `command`, so the poach case a non-goal agent calling a reviewer stays blocked.
+          const cmd = String(out?.args?.command ?? inp?.args?.command ?? "").trim();
+          const fromGoalCommand = cmd === "goal-review" || cmd === "goal-final";
+          if (!callerIsGoal && !fromGoalCommand) {
             state.dirtyReasons.push(`blocked non-Goal invocation of subagent ${target}`);
             if (config.toastOnBlock) logger.toast(`Goal Guard blocked ${prettyAgentName(target)} (Goal-only subagent)`, "error");
             persist();
@@ -268,7 +314,12 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           }
         }
 
-        if (recordedAgent === CYCLE_CLOSING_AGENT) {
+        // Try to clear `dirty` after ANY recorded verdict, not only the cycle-closing
+        // agent's: if goal-final-auditor passed earlier but another required gate was
+        // the last to clear, dirty would otherwise stay stuck true (wedging the sidebar
+        // / system prompt as forever-incomplete). maybeClearDirtyOnFinalPass still only
+        // clears when the final auditor has a FRESH pass and completion is allowed.
+        if (recordedAgent) {
           maybeClearDirtyOnFinalPass(state, config);
         }
 
@@ -325,18 +376,19 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (event.type === "file.edited") {
           const file = event.properties?.file || event.properties?.path || event.properties?.filename;
           if (!file) return;
-          // The event is project-scoped and carries no sessionID, so attribute
-          // it to every active goal session in this project (a subagent edit in
-          // a child session must still dirty the goal it serves).
-          let touched = false;
-          for (const st of store.sessions.values()) {
-            if (st.active) {
-              markFileChanged(store, st, file);
-              refreshStickyGates(st);
-              touched = true;
-            }
+          // The event is project-scoped and carries no sessionID. Attribute it to the
+          // ONE goal session whose turn is currently in flight (a subagent's child-
+          // session edit happens during its parent goal's turn) — NOT to every active
+          // session. Broadcasting would cross-dirty independent concurrent goals in the
+          // same worktree and, worse, pull a foreign file's contextual reviewers into
+          // their required-gate set. We mark only the changed file (dirtying that goal);
+          // contextual gates are refreshed solely from a session's OWN edits, via
+          // tool.execute.after — never from another session's file.
+          const target = lastActiveGoalSession && store.sessions.get(lastActiveGoalSession);
+          if (target && target.active) {
+            markFileChanged(store, target, file);
+            persist();
           }
-          if (touched) persist();
           return;
         }
         if (event.type === "session.error") {
@@ -351,7 +403,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
             const st = key && store.sessions.get(key);
             if (st && st.active) {
               st.abortedAt = Date.now();
-              persistence.flush(() => store.snapshot());
+              persistence.flush(snapshotFn);
               await logger.toast("Goal Mode: turn cancelled — not auto-continuing", "info");
             }
           }
@@ -359,48 +411,50 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         }
         if (event.type === "session.idle" && event.properties?.sessionID) {
           const sessionID = event.properties.sessionID;
-          const state = store.stateFor(sessionID);
-          // Honor a near-simultaneous user cancel regardless of hook delivery order: a
-          // cancel emits session.error(MessageAbortedError) and session.idle within
-          // milliseconds of each other, but the plugin is not guaranteed to receive
-          // the error first. An active goal therefore waits a short grace before
-          // deciding, so the abort flag (set by the session.error branch) is visible
-          // and the continuation is suppressed. No abort pending → decide immediately.
-          if (state.active && config.autoContinue && config.abortGraceMs > 0 && !state.abortedAt) {
-            // A single cancel (and bursty idles in general) can emit MORE THAN ONE
-            // session.idle. Coalesce: only ONE grace-decision runs per session at a
-            // time, so overlapping idles can't each fire a continuation or double-
-            // advance the cap / no-progress counters.
-            if (decidingIdle.has(sessionID)) return;
-            decidingIdle.add(sessionID);
-            const turnAtStart = userTurnSeq.get(sessionID) || 0;
-            try {
+          // Coalesce overlapping idles for this session: a single cancel (and bursty
+          // idles generally) can emit MORE THAN ONE session.idle. Hold a per-session
+          // "deciding" flag across the ENTIRE decision (grace + evaluate + continue) so
+          // a second idle that arrives mid-decision returns immediately and can never
+          // fire a duplicate continuation or double-advance the cap / no-progress
+          // counters. The flag is in-memory only and pruned on eviction, so it cannot
+          // wedge across a restart.
+          if (decidingIdle.has(sessionID)) return;
+          decidingIdle.add(sessionID);
+          try {
+            const state = store.stateFor(sessionID);
+            // Honor a near-simultaneous user cancel regardless of hook delivery order: a
+            // cancel emits session.error(MessageAbortedError) and session.idle within
+            // milliseconds of each other, but the plugin is not guaranteed to receive
+            // the error first. An active goal therefore waits a short grace before
+            // deciding, so the abort flag (set by session.error) is visible. No abort
+            // pending and grace disabled → decide immediately.
+            if (state.active && config.autoContinue && config.abortGraceMs > 0 && !state.abortedAt) {
+              const turnAtStart = userTurnSeq.get(sessionID) || 0;
               await sleep(config.abortGraceMs);
-            } finally {
-              decidingIdle.delete(sessionID);
+              // A new user turn during the grace (resume, or a fresh prompt) owns the
+              // session now — do not inject a stale "keep going" over it.
+              if ((userTurnSeq.get(sessionID) || 0) !== turnAtStart) return;
             }
-            // If the user started a NEW turn during the grace (resume, or a fresh
-            // prompt), that turn owns the session now — do not inject a stale
-            // "keep going" over it.
-            if ((userTurnSeq.get(sessionID) || 0) !== turnAtStart) return;
-          }
-          // Never stop an active goal before it is actually complete: if the session
-          // went idle with the goal still incomplete, send the agent onward. Backstops
-          // (hard cap + no-progress breaker) live in evaluateAutoContinue so this can
-          // never loop forever.
-          const decision = evaluateAutoContinue(state, config);
-          persistence.flush(() => store.snapshot());
-          if (decision.continue) {
-            await logger.toast("Goal not complete — continuing automatically", "info");
-            await logger.continueSession(sessionID, decision.message);
-          } else if (decision.cancelled) {
-            // User cancelled this turn — honor it. Send NO prompt; just record it.
-            await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
-          } else if (decision.stopReason) {
-            await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
-            await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");
-          } else if (state.dirty) {
-            await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
+            // Never stop an active goal before it is actually complete: if the session
+            // went idle with the goal still incomplete, send the agent onward. Backstops
+            // (hard cap + no-progress breaker) live in evaluateAutoContinue so this can
+            // never loop forever.
+            const decision = evaluateAutoContinue(state, config);
+            persistence.flush(snapshotFn);
+            if (decision.continue) {
+              await logger.toast("Goal not complete — continuing automatically", "info");
+              await logger.continueSession(sessionID, decision.message);
+            } else if (decision.cancelled) {
+              // User cancelled this turn — honor it. Send NO prompt; just record it.
+              await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
+            } else if (decision.stopReason) {
+              await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
+              await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");
+            } else if (state.dirty) {
+              await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
+            }
+          } finally {
+            decidingIdle.delete(sessionID);
           }
         }
       } catch {
@@ -410,7 +464,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
 
     async dispose() {
       try {
-        persistence.flush(() => store.snapshot());
+        persistence.flush(snapshotFn);
       } catch {
         /* ignore */
       }

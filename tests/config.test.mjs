@@ -74,3 +74,25 @@ test("string-valued config (markers) pass through", () => {
   assert.equal(c.completionMarker, "DONE");
   assert.equal(c.blockedMarker, "NOT DONE");
 });
+
+test("markers are configurable via environment variables", () => {
+  const c = resolveConfig({}, { GOAL_GUARD_COMPLETION_MARKER: "SHIPPED", GOAL_GUARD_BLOCKED_MARKER: "NOT SHIPPED" });
+  assert.equal(c.completionMarker, "SHIPPED");
+  assert.equal(c.blockedMarker, "NOT SHIPPED");
+});
+
+test("empty/blank string options are ignored (never inject an empty marker)", () => {
+  assert.equal(resolveConfig({ completionMarker: "" }).completionMarker, DEFAULT_CONFIG.completionMarker);
+  assert.equal(resolveConfig({ completionMarker: "   " }).completionMarker, DEFAULT_CONFIG.completionMarker);
+  assert.equal(resolveConfig({ blockedMarker: null }).blockedMarker, DEFAULT_CONFIG.blockedMarker);
+  assert.equal(resolveConfig({}, { GOAL_GUARD_COMPLETION_MARKER: "" }).completionMarker, DEFAULT_CONFIG.completionMarker);
+  assert.equal(resolveConfig({}, { GOAL_GUARD_BLOCKED_MARKER: "   " }).blockedMarker, DEFAULT_CONFIG.blockedMarker);
+});
+
+test("integer config rejects decimals and scientific notation (no silent truncation)", () => {
+  assert.equal(resolveConfig({ maxAutoContinue: "1.9" }).maxAutoContinue, DEFAULT_CONFIG.maxAutoContinue);
+  assert.equal(resolveConfig({ abortGraceMs: "1e3" }).abortGraceMs, DEFAULT_CONFIG.abortGraceMs);
+  assert.equal(resolveConfig({}, { GOAL_GUARD_MAX_AUTO_CONTINUE: "10.5" }).maxAutoContinue, DEFAULT_CONFIG.maxAutoContinue);
+  assert.equal(resolveConfig({ maxAutoContinue: "25" }).maxAutoContinue, 25, "a plain integer still works");
+  assert.equal(resolveConfig({}, { GOAL_GUARD_ABORT_GRACE_MS: "800" }).abortGraceMs, 800);
+});

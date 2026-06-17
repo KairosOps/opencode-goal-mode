@@ -245,6 +245,47 @@ test("integration: an abort for an UNTRACKED session is a harmless no-op", async
   assert.equal(store.size(), 0, "a stray abort must not create a spurious session entry");
 });
 
+test("integration: shipped /goal-review and /goal-final commands run from a non-goal session", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "cmd", agent: "build" }, {});
+  // A model-emitted poach (no originating command) from a non-goal session is still blocked.
+  await assert.rejects(
+    () => hooks["tool.execute.before"]({ tool: "task", sessionID: "cmd", callID: "p" }, { args: { subagent_type: "goal-reviewer" } }),
+    /Goal Mode subagent/,
+  );
+  // The shipped /goal-review and /goal-final slash commands (command field set) are allowed.
+  await assert.doesNotReject(() =>
+    hooks["tool.execute.before"]({ tool: "task", sessionID: "cmd", callID: "r" }, { args: { subagent_type: "goal-reviewer", command: "goal-review" } }),
+  );
+  await assert.doesNotReject(() =>
+    hooks["tool.execute.before"]({ tool: "task", sessionID: "cmd", callID: "f" }, { args: { subagent_type: "goal-final-auditor", command: "goal-final" } }),
+  );
+});
+
+test("integration: file.edited dirties only the in-flight goal, not a concurrent one in the same worktree", async () => {
+  const { hooks, store } = makeGuard({ contextualGates: false });
+  await hooks["chat.message"]({ sessionID: "gA", agent: "goal" }, { parts: [{ type: "text", text: "goal A" }] });
+  await hooks["chat.message"]({ sessionID: "gB", agent: "goal" }, { parts: [{ type: "text", text: "goal B" }] });
+  // gA takes the most-recent in-flight turn.
+  await hooks["chat.params"]({ sessionID: "gA", agent: "goal" }, {});
+  // A project-scoped file.edited (no sessionID) arrives while gA is in flight.
+  await hooks.event({ event: { type: "file.edited", properties: { file: "src/x.js" } } });
+  assert.equal(store.stateFor("gA").changedFiles.includes("src/x.js"), true, "the in-flight goal is dirtied");
+  assert.equal(store.stateFor("gB").changedFiles.includes("src/x.js"), false, "a concurrent goal must NOT be cross-dirtied");
+});
+
+test("integration: dirty clears even when goal-final-auditor passes before the last other gate", async () => {
+  const { hooks, store } = makeGuard({ contextualGates: false });
+  const sid = "dirty-order";
+  await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
+  await hooks["tool.execute.after"]({ tool: "edit", sessionID: sid, callID: "e1", args: {} }, { output: "", title: "", metadata: {} });
+  // Final auditor passes FIRST, then the remaining gates — order must not wedge `dirty`.
+  for (const a of ["goal-final-auditor", "goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier"]) {
+    await hooks["tool.execute.after"]({ tool: "task", sessionID: sid, callID: a, args: { subagent_type: a } }, { output: "Verdict: PASS", title: "", metadata: {} });
+  }
+  assert.equal(store.stateFor(sid).dirty, false, "dirty must clear once all gates pass regardless of final-auditor order");
+});
+
 test("integration: hooks never throw on malformed input", async () => {
   const { hooks } = makeGuard();
   await assert.doesNotReject(async () => {

@@ -131,6 +131,34 @@ test("snapshot survives a simulated restart (new guard rehydrates)", () => {
   assert.equal(s2.active, true);
 });
 
+test("persisted snapshot carries the resolved config (so the TUI sidebar agrees with the server)", async () => {
+  const env = tempEnv();
+  const timers = syncTimers();
+  const worktree = "/cfg-snap";
+  const g = createGuard({ client: {}, worktree }, { contextualGates: false }, { env, setTimer: timers.setTimer, clearTimer: timers.clearTimer });
+  await g.hooks["chat.message"]({ sessionID: "s", agent: "goal" }, { parts: [{ type: "text", text: "do a thing" }] });
+  timers.fire();
+  const p = createPersistence({ worktree, env });
+  const snap = JSON.parse(readFileSync(p.file, "utf8"));
+  assert.equal(snap.config && snap.config.contextualGates, false, "snapshot must carry the server's resolved config");
+});
+
+test("a goal→build switch is persisted (active=false on disk for the sidebar fallback)", async () => {
+  const env = tempEnv();
+  const timers = syncTimers();
+  const worktree = "/switch-persist";
+  const g = createGuard({ client: {}, worktree }, {}, { env, setTimer: timers.setTimer, clearTimer: timers.clearTimer });
+  await g.hooks["chat.message"]({ sessionID: "s", agent: "goal" }, { parts: [{ type: "text", text: "the goal" }] });
+  timers.fire();
+  await g.hooks["chat.params"]({ sessionID: "s", agent: "build" }, {}); // switch to build → active=false + persist
+  timers.fire();
+  const p = createPersistence({ worktree, env });
+  const snap = JSON.parse(readFileSync(p.file, "utf8"));
+  const rec = (snap.sessions || []).find((e) => e[0] === "s");
+  assert.ok(rec, "session present in snapshot");
+  assert.equal(rec[1].active, false, "the goal→build switch must be persisted to disk");
+});
+
 test("createGuard tolerates a valid-JSON-but-wrong-shape state file", () => {
   const env = tempEnv();
   const worktree = "/wrong-shape";

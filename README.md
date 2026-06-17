@@ -342,6 +342,7 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `enforceCompletion` / `GOAL_GUARD_ENFORCE_COMPLETION` | `true` | Rewrite premature `Goal Completed`. |
 | `autoContinue` / `GOAL_GUARD_AUTO_CONTINUE` | `true` | Auto-continue an idle goal that isn't complete yet, so it never stops early. |
 | `maxAutoContinue` / `GOAL_GUARD_MAX_AUTO_CONTINUE` | `50` | Hard cap on automatic continuations per goal session. |
+| `abortGraceMs` / `GOAL_GUARD_ABORT_GRACE_MS` | `1200` | Grace (ms) before an idle goal auto-continues, so a user cancel is honored regardless of event order. Lowering it only cuts latency; `0` removes the grace and weakens cancel detection. |
 | `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live state into the prompt. |
 | `persist` / `GOAL_GUARD_PERSIST` | `true` | Persist state under the XDG state dir. |
 | `contextualGates` / `GOAL_GUARD_CONTEXTUAL_GATES` | `true` | Require specialist gates by goal keywords. |

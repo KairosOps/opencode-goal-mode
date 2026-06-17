@@ -67,8 +67,20 @@ function coerceBool(value, fallback) {
 
 function coerceInt(value, fallback) {
   if (value === undefined || value === null || value === "") return fallback;
-  const n = Number.parseInt(String(value), 10);
+  const s = String(value).trim();
+  // Accept only a plain non-negative integer. Reject decimals ("1.9") and scientific
+  // notation ("1e3") rather than silently truncating them via parseInt.
+  if (!/^\+?\d+$/.test(s)) return fallback;
+  const n = Number.parseInt(s, 10);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/** Coerce a string config value, treating empty/blank as "unset" (use the fallback).
+ * Prevents an empty marker/colour from being interpolated downstream. */
+function coerceStr(value, fallback) {
+  if (value === undefined || value === null) return fallback;
+  const s = String(value);
+  return s.trim() === "" ? fallback : s;
 }
 
 function fromEnv(env) {
@@ -89,9 +101,11 @@ function fromEnv(env) {
     GOAL_GUARD_TOAST_ON_BLOCK: ["toastOnBlock", coerceBool],
     GOAL_GUARD_TOAST_ON_REVIEW: ["toastOnReview", coerceBool],
     GOAL_GUARD_SIDEBAR_BANNER: ["sidebarBanner", coerceBool],
-    GOAL_GUARD_SIDEBAR_COLOR: ["sidebarColor", (v) => (v == null ? undefined : String(v))],
-    GOAL_GUARD_SIDEBAR_DONE_COLOR: ["sidebarDoneColor", (v) => (v == null ? undefined : String(v))],
-    GOAL_GUARD_SIDEBAR_MUTED_COLOR: ["sidebarMutedColor", (v) => (v == null ? undefined : String(v))],
+    GOAL_GUARD_SIDEBAR_COLOR: ["sidebarColor", coerceStr],
+    GOAL_GUARD_SIDEBAR_DONE_COLOR: ["sidebarDoneColor", coerceStr],
+    GOAL_GUARD_SIDEBAR_MUTED_COLOR: ["sidebarMutedColor", coerceStr],
+    GOAL_GUARD_COMPLETION_MARKER: ["completionMarker", coerceStr],
+    GOAL_GUARD_BLOCKED_MARKER: ["blockedMarker", coerceStr],
   };
   for (const [key, [field, coerce]] of Object.entries(map)) {
     if (env[key] !== undefined) out[field] = coerce(env[key], DEFAULT_CONFIG[field]);
@@ -114,7 +128,7 @@ export function resolveConfig(options, env = process.env) {
     const def = DEFAULT_CONFIG[key];
     if (typeof def === "boolean") merged[key] = coerceBool(opts[key], merged[key]);
     else if (typeof def === "number") merged[key] = coerceInt(opts[key], merged[key]);
-    else merged[key] = opts[key];
+    else merged[key] = coerceStr(opts[key], merged[key]); // string keys: ignore empty/blank, never inject ""
   }
   return Object.freeze(merged);
 }

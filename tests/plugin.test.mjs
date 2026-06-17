@@ -201,6 +201,35 @@ test("completion blocked when zero cycles recorded", async () => {
   assert.match(out.text, /no review cycles recorded/i);
 });
 
+test("completion bypass forms are still blocked (backtick / emoji / numbered prefix)", async () => {
+  // The agent is taught to render the marker in a code span (`Goal Completed`) and
+  // may prefix it with an emoji or list marker — none of these may slip past the gate.
+  for (const [label, text] of [
+    ["backtick", "`Goal Completed`\n\nReview cycles: 0"],
+    ["emoji", "✅ Goal Completed\n\nReview cycles: 0"],
+    ["emoji+space", "🎉 Goal Completed\n\nReview cycles: 0"],
+    ["numbered", "1. Goal Completed\n\nReview cycles: 0"],
+    ["numbered-paren", "1) Goal Completed\n\nReview cycles: 0"],
+    ["backtick+emoji", "✅ `Goal Completed`\n\nReview cycles: 0"],
+  ]) {
+    const { hooks, store } = makeGuard();
+    const sid = `bypass-${label}`;
+    await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
+    const out = { text };
+    await hooks["experimental.text.complete"]({ sessionID: sid, messageID: "m", partID: "p" }, out);
+    assert.match(out.text, /Goal Not Completed/, `${label} form must be rewritten`);
+    assert.equal(store.stateFor(sid).completedBlocked >= 1, true, `${label} must increment completedBlocked`);
+  }
+});
+
+test("a mid-sentence mention of the marker is NOT policed", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "midsent", agent: "goal" }, {});
+  const out = { text: "I checked whether the Goal Completed early; it did not.\n\nReview cycles: 1" };
+  await hooks["experimental.text.complete"]({ sessionID: "midsent", messageID: "m", partID: "p" }, out);
+  assert.doesNotMatch(out.text, /Goal Not Completed/, "a mid-sentence mention must not trigger a rewrite");
+});
+
 test("completion blocked when claimed cycles do not match recorded", async () => {
   const { hooks, store } = makeGuard();
   await hooks["chat.params"]({ sessionID: "m3", agent: "goal" }, {});
