@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.13
+
+### Verification / maintenance release
+
+- **No code, agent, or command changes since v0.4.12** — runtime behaviour is identical.
+- Re-verified end to end against a real OpenCode server + a free OpenCode Zen model:
+  the full unit/integration suite (306 tests) passes; the live E2E passes 9/9 (required
+  reviews forced, destructive commands blocked, Build sessions isolated, and a user
+  cancel honored across 5/5 trials); and a clean-room install of the **published** npm
+  tarball confirms the shipped `files` are complete, the installer runs from the
+  published artifact, and all v0.4.12 fixes are present in the installed plugin.
+
 ## v0.4.12
 
 ### Deep audit hardening — closes real enforcement & RCE bypasses
