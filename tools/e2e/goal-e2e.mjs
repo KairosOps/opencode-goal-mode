@@ -212,6 +212,45 @@ async function runGoal(client, { agent = "goal", text, until, timeoutMs, label }
   return { id, ...col.state() };
 }
 
+/** Start a goal, let it begin working, then ABORT it (simulating a user cancel) and
+ * watch whether the guard wrongly auto-continues. A cancel must send NO prompt.
+ * Returns { continued, before, after }. */
+async function runCancelTrial(client, label) {
+  const created = unwrap(await client.session.create({ body: { title: `e2e-cancel-${label}` } }));
+  const id = created.id;
+  const userMsgs = new Set();
+  let firstActivity = 0;
+  let continueToast = false;
+  let aborted = false;
+  let stop = false;
+  const sub = await client.event.subscribe();
+  const stream = sub.stream || sub;
+  (async () => {
+    for await (const ev of stream) {
+      if (stop) break;
+      const t = ev.type;
+      const p = ev.properties || {};
+      const sid = p.sessionID || (p.info && p.info.sessionID) || (p.part && p.part.sessionID);
+      if ((t === "message.part.updated" || t === "message.part.delta") && sid === id && !firstActivity) firstActivity = Date.now();
+      if (t === "message.updated" && p.info && p.info.role === "user" && p.info.sessionID === id) userMsgs.add(p.info.id);
+      if (aborted && typeof t === "string" && t.includes("toast") && /continuing automatically/i.test(JSON.stringify(p))) continueToast = true;
+    }
+  })().catch(() => {});
+  await client.session.promptAsync({ path: { id }, body: { agent: "goal", model: MODEL_BODY, parts: [{ type: "text", text: "Add a subtract(a, b) function to math.js that returns a - b, and prove it works by running it with node." }] } });
+  // Wait until the model actually starts producing, then abort mid-turn (before any
+  // natural completion), so a continuation after this point can only be the bug.
+  const deadline = Date.now() + 40000;
+  while (Date.now() < deadline && !firstActivity) await sleep(300);
+  await sleep(1500);
+  const before = userMsgs.size;
+  aborted = true;
+  await client.session.abort({ path: { id } });
+  await sleep(15000); // a continuation would land within a couple of seconds
+  stop = true;
+  const after = userMsgs.size;
+  return { continued: after > before || continueToast, before, after };
+}
+
 // ---------------------------------------------------------------------------
 // Disk-state readers (per-session isolation lives inside one project file)
 // ---------------------------------------------------------------------------
@@ -353,6 +392,19 @@ try {
     check("a Build session never activates Goal state", !st || st.active !== true, `active=${st ? st.active : "n/a"}`);
     check("a Build session records no Goal Contract", !st || !st.contract, "");
     check("a Build session invokes no goal-* review subagents", !r.subagents.some((a) => /^goal-/.test(a || "")), `subagents=${JSON.stringify(r.subagents)}`);
+  });
+
+  // 4. A user cancel is honored — the guard never auto-continues a cancelled turn.
+  await withScenario(null, async ({ client }) => {
+    banner("User cancel is honored (no auto-continue after abort)");
+    const TRIALS = Number(process.env.GOAL_E2E_CANCEL_TRIALS || 3);
+    let leaks = 0;
+    for (let i = 0; i < TRIALS; i++) {
+      const r = await runCancelTrial(client, i + 1);
+      if (r.continued) leaks += 1;
+      console.log(`    · trial ${i + 1}/${TRIALS}: ${r.continued ? "LEAK (auto-continued)" : "ok — cancel honored"} (user msgs ${r.before}→${r.after})`);
+    }
+    check(`a cancelled goal turn never auto-continues (${TRIALS} live trials)`, leaks === 0, `${leaks}/${TRIALS} trials leaked a continuation`);
   });
 } catch (err) {
   console.error("\nE2E HARNESS ERROR:", err && (err.stack || err.message || err));

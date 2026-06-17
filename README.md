@@ -397,8 +397,10 @@ each scenario, then drives a **real** goal session over the OpenCode HTTP API
 against a free OpenCode Zen model (default `opencode/deepseek-v4-flash-free`;
 override with `GOAL_E2E_MODEL`). It asserts the guard's live behaviour — a Goal
 Contract is recorded, the required reviews are actually forced to run, no un-earned
-`Goal Completed` is let through, destructive `rm -rf` is blocked mid-run, and a Build
-session never becomes a goal (and invokes no `goal-*` subagents). Each scenario is
+`Goal Completed` is let through, destructive `rm -rf` is blocked mid-run, a Build
+session never becomes a goal (and invokes no `goal-*` subagents), and a **user cancel
+is honored** (cancelling a turn auto-continues nothing — verified over repeated live
+trials, `GOAL_E2E_CANCEL_TRIALS`). Each scenario is
 fully isolated (its own server + project, so nothing touches your repo) and exits
 early the moment its assertions are observable. It is intentionally long-running
 (minutes of real model work, including the five review subagents) and not part of

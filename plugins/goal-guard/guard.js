@@ -32,6 +32,8 @@ import { summarizeState } from "./summary.js";
 import { buildSystemInjection } from "./system.js";
 import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass } from "./events.js";
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function normalizedSubagent(input) {
   if (!input) return undefined;
   const agent = String(input.agent || input.args?.subagent_type || "").trim();
@@ -89,11 +91,28 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
 
   const persist = () => persistence.save(() => store.snapshot());
 
+  // In-memory only (never persisted): coalesce overlapping idle decisions and detect
+  // a user turn that starts DURING the grace sleep. Keeping these out of the store
+  // means a crash/restart can never wedge auto-continue on a stale "deciding" flag.
+  const decidingIdle = new Set(); // sessionIDs currently inside a grace-decision
+  const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
+  const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
+
   const hooks = {
     async "chat.message"(inp, out) {
       try {
         if (!inp?.sessionID) return;
         const state = store.stateFor(inp.sessionID);
+        // A genuine new user turn is starting. Mark it (so a continuation decision
+        // mid-grace can detect it was superseded) and clear any pending cancel so the
+        // guard resumes normal "never stop incomplete" behaviour. The clear is made
+        // durable (the SET is persisted, so the CLEAR must be too — otherwise a
+        // restart within the suppression window would wrongly keep suppressing).
+        bumpUserTurn(inp.sessionID);
+        if (state.abortedAt) {
+          state.abortedAt = 0;
+          persist();
+        }
         // `active` reflects whether this session is CURRENTLY a Goal session. Switching
         // the session's agent to Build (or anything non-goal) must deactivate it, or
         // the sidebar/guard would keep treating an explicit Build session as a goal.
@@ -119,6 +138,10 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (!normalized) return;
         const state = store.stateFor(normalized);
         state.currentAgent = inp.agent;
+        // NOTE: do NOT clear abortedAt here. chat.params fires on every LLM call
+        // (including intra-turn/aux requests), not only on a genuine new user turn,
+        // so clearing here could drop a legitimate pending cancel. The cancel is
+        // cleared in chat.message (a real user message) instead.
         // Track the current mode: a session is active (a goal) only while its agent
         // is the goal primary. Switching to Build/Plan/etc. deactivates it so the
         // Goal sidebar and enforcement stop treating it as a goal.
@@ -316,9 +339,51 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           if (touched) persist();
           return;
         }
+        if (event.type === "session.error") {
+          // A user cancel surfaces as a MessageAbortedError on the session. Flag it
+          // so the `session.idle` that immediately follows does NOT auto-continue —
+          // the user explicitly stopped, so we send no prompt. (session.error is
+          // emitted just before session.idle, verified live.)
+          const err = event.properties?.error;
+          const sid = event.properties?.sessionID;
+          if (sid && err && /abort/i.test(String(err.name || ""))) {
+            const key = String(sid).trim();
+            const st = key && store.sessions.get(key);
+            if (st && st.active) {
+              st.abortedAt = Date.now();
+              persistence.flush(() => store.snapshot());
+              await logger.toast("Goal Mode: turn cancelled — not auto-continuing", "info");
+            }
+          }
+          return;
+        }
         if (event.type === "session.idle" && event.properties?.sessionID) {
           const sessionID = event.properties.sessionID;
           const state = store.stateFor(sessionID);
+          // Honor a near-simultaneous user cancel regardless of hook delivery order: a
+          // cancel emits session.error(MessageAbortedError) and session.idle within
+          // milliseconds of each other, but the plugin is not guaranteed to receive
+          // the error first. An active goal therefore waits a short grace before
+          // deciding, so the abort flag (set by the session.error branch) is visible
+          // and the continuation is suppressed. No abort pending → decide immediately.
+          if (state.active && config.autoContinue && config.abortGraceMs > 0 && !state.abortedAt) {
+            // A single cancel (and bursty idles in general) can emit MORE THAN ONE
+            // session.idle. Coalesce: only ONE grace-decision runs per session at a
+            // time, so overlapping idles can't each fire a continuation or double-
+            // advance the cap / no-progress counters.
+            if (decidingIdle.has(sessionID)) return;
+            decidingIdle.add(sessionID);
+            const turnAtStart = userTurnSeq.get(sessionID) || 0;
+            try {
+              await sleep(config.abortGraceMs);
+            } finally {
+              decidingIdle.delete(sessionID);
+            }
+            // If the user started a NEW turn during the grace (resume, or a fresh
+            // prompt), that turn owns the session now — do not inject a stale
+            // "keep going" over it.
+            if ((userTurnSeq.get(sessionID) || 0) !== turnAtStart) return;
+          }
           // Never stop an active goal before it is actually complete: if the session
           // went idle with the goal still incomplete, send the agent onward. Backstops
           // (hard cap + no-progress breaker) live in evaluateAutoContinue so this can
@@ -328,6 +393,9 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           if (decision.continue) {
             await logger.toast("Goal not complete — continuing automatically", "info");
             await logger.continueSession(sessionID, decision.message);
+          } else if (decision.cancelled) {
+            // User cancelled this turn — honor it. Send NO prompt; just record it.
+            await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
           } else if (decision.stopReason) {
             await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
             await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");

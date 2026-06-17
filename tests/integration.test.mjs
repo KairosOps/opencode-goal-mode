@@ -116,6 +116,135 @@ test("integration: completion enforcement can be turned off", async () => {
   assert.doesNotMatch(out.text, /Goal Not Completed/);
 });
 
+function makeContinueGuard(opts = {}) {
+  const prompts = [];
+  let t = 0;
+  const guard = createGuard(
+    {
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+        session: { promptAsync: async (a) => { prompts.push(a); } },
+      },
+    },
+    { abortGraceMs: 60, ...opts },
+    { persistence: noopPersistence, clock: () => (t += 1) },
+  );
+  return { ...guard, prompts };
+}
+async function startGoal(hooks, sid) {
+  await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
+  await hooks["chat.message"]({ sessionID: sid, agent: "goal" }, { parts: [{ type: "text", text: "Add a feature and prove it works." }] });
+}
+const idleEv = (sid) => ({ event: { type: "session.idle", properties: { sessionID: sid } } });
+const abortEv = (sid) => ({ event: { type: "session.error", properties: { sessionID: sid, error: { name: "MessageAbortedError", data: { message: "Aborted" } } } } });
+
+test("integration: an incomplete idle auto-continues (baseline)", async () => {
+  const { hooks, prompts } = makeContinueGuard();
+  const sid = "baseline";
+  await startGoal(hooks, sid);
+  await hooks.event(idleEv(sid));
+  assert.equal(prompts.length, 1, "an incomplete goal that idles is sent onward");
+});
+
+test("integration: cancel BEFORE idle (error-first) suppresses auto-continue", async () => {
+  const { hooks, store, prompts } = makeContinueGuard();
+  const sid = "error-first";
+  await startGoal(hooks, sid);
+  await hooks.event(abortEv(sid));
+  assert.equal(store.stateFor(sid).abortedAt > 0, true, "abort flagged programmatically");
+  await hooks.event(idleEv(sid));
+  assert.equal(prompts.length, 0, "a cancelled turn must NOT send a continuation prompt");
+  assert.equal(store.stateFor(sid).abortedAt > 0, true, "the flag is NOT consumed — later idles stay suppressed too");
+});
+
+test("integration: ONE cancel suppresses MULTIPLE idles (a cancel emits >1 session.idle)", async () => {
+  // Regression: live OpenCode emits two session.idle events per abort. Consuming the
+  // flag on the first left the second free to auto-continue — the actual bug.
+  const { hooks, prompts } = makeContinueGuard();
+  const sid = "double-idle";
+  await startGoal(hooks, sid);
+  await hooks.event(abortEv(sid));
+  await hooks.event(idleEv(sid)); // idle #1
+  await hooks.event(idleEv(sid)); // idle #2 (the one that used to slip through)
+  await hooks.event(idleEv(sid)); // and any further idles
+  assert.equal(prompts.length, 0, "every idle after a single cancel must stay suppressed");
+});
+
+test("integration: cancel arriving DURING the idle grace (idle-first) still suppresses", async () => {
+  // The real live ordering: session.idle reaches the plugin first, and the cancel's
+  // session.error lands a few ms later. The grace window must catch it.
+  const { hooks, prompts } = makeContinueGuard({ abortGraceMs: 200 });
+  const sid = "idle-first";
+  await startGoal(hooks, sid);
+  const idleP = hooks.event(idleEv(sid)); // starts the grace; do NOT await yet
+  await new Promise((r) => setTimeout(r, 40));
+  await hooks.event(abortEv(sid)); // cancel lands during the grace
+  await idleP;
+  assert.equal(prompts.length, 0, "a cancel during the grace window must suppress the continuation");
+});
+
+test("integration: a user RESUME (new turn) clears the cancel and auto-continue returns", async () => {
+  const { hooks, store, prompts } = makeContinueGuard();
+  const sid = "resume";
+  await startGoal(hooks, sid);
+  await hooks.event(abortEv(sid));
+  await hooks.event(idleEv(sid)); // suppressed
+  await hooks.event(idleEv(sid)); // still suppressed
+  assert.equal(prompts.length, 0);
+
+  // The user resumes by sending a new message — the cancel is cleared.
+  await hooks["chat.message"]({ sessionID: sid, agent: "goal" }, { parts: [{ type: "text", text: "keep going" }] });
+  assert.equal(store.stateFor(sid).abortedAt, 0, "a new user turn clears the pending cancel");
+  await hooks.event(idleEv(sid)); // goal still incomplete → resumes
+  assert.equal(prompts.length, 1, "normal 'never stop incomplete' behaviour returns after a real resume");
+});
+
+test("integration: overlapping idles (no abort) are coalesced — exactly ONE continuation", async () => {
+  // The grace sleep made the idle handler re-entrant; two idles arriving within the
+  // grace must NOT each fire a continuation or double-advance the backstop counters.
+  const { hooks, store, prompts } = makeContinueGuard({ abortGraceMs: 80 });
+  const sid = "coalesce";
+  await startGoal(hooks, sid);
+  const a = hooks.event(idleEv(sid)); // enters the grace, holds the decision
+  const b = hooks.event(idleEv(sid)); // arrives during the grace → coalesced
+  await Promise.all([a, b]);
+  assert.equal(prompts.length, 1, "overlapping idles must produce exactly one continuation");
+  assert.equal(store.stateFor(sid).autoContinueCount, 1, "the cap/no-progress counter advances once, not twice");
+});
+
+test("integration: a user turn started DURING the grace supersedes a stale continuation", async () => {
+  const { hooks, prompts } = makeContinueGuard({ abortGraceMs: 120 });
+  const sid = "resume-mid-grace";
+  await startGoal(hooks, sid);
+  const idleP = hooks.event(idleEv(sid)); // starts the grace
+  await new Promise((r) => setTimeout(r, 30));
+  // The user sends a new message mid-grace — their turn owns the session now.
+  await hooks["chat.message"]({ sessionID: sid, agent: "goal" }, { parts: [{ type: "text", text: "actually do this instead" }] });
+  await idleP;
+  assert.equal(prompts.length, 0, "no stale 'keep going' may be injected over the user's new turn");
+});
+
+test("integration: chat.params does NOT clear a pending cancel (only a real user message does)", async () => {
+  const { hooks, store, prompts } = makeContinueGuard();
+  const sid = "params-no-clear";
+  await startGoal(hooks, sid);
+  await hooks.event(abortEv(sid));
+  // chat.params fires on every LLM call, not just new user turns — it must not drop the cancel.
+  await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
+  assert.equal(store.stateFor(sid).abortedAt > 0, true, "chat.params must leave the pending cancel intact");
+  await hooks.event(idleEv(sid));
+  assert.equal(prompts.length, 0, "still suppressed after chat.params");
+});
+
+test("integration: an abort for an UNTRACKED session is a harmless no-op", async () => {
+  const { hooks, store } = makeGuard();
+  await assert.doesNotReject(() =>
+    hooks.event({ event: { type: "session.error", properties: { sessionID: "never-seen", error: { name: "MessageAbortedError" } } } }),
+  );
+  assert.equal(store.size(), 0, "a stray abort must not create a spurious session entry");
+});
+
 test("integration: hooks never throw on malformed input", async () => {
   const { hooks } = makeGuard();
   await assert.doesNotReject(async () => {

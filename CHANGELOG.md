@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.4.11
+
+### A user cancel is now honored — auto-continue never fights the stop button
+
+- **Fixed:** cancelling a goal turn (the OpenCode stop/escape) no longer triggers an
+  automatic continuation. Previously the cancel still left the session idle, so
+  auto-continue re-prompted it — the task could not actually be stopped. The guard now
+  detects the cancel programmatically (the `MessageAbortedError` the cancel emits) and
+  suppresses the continuation; it sends **no** prompt. Auto-continue resumes normally
+  only when *you* start the next turn.
+- **Robust by construction, not by luck.** The cancel's error and idle events can reach
+  the plugin in either order, and one cancel emits more than one idle — both are handled:
+  a short, configurable grace (`abortGraceMs`, default 1200ms) lets a near-simultaneous
+  cancel be observed regardless of delivery order, the cancel suppresses *every* idle in
+  the window (not just the first), overlapping idles are coalesced into a single decision
+  (no double prompts or skewed backstop counters), and a new user turn that starts during
+  the grace cleanly supersedes any stale continuation. Clock-skew and persisted-flag edge
+  cases fail safe (toward honoring the cancel).
+- A subtle, informative toast ("turn cancelled — not auto-continuing") confirms the guard
+  saw your cancel.
+- Verified live against a real OpenCode server + free Zen model (cancel honored across
+  repeated trials, normal auto-continue unaffected), plus new unit/integration tests and a
+  dedicated live E2E cancel scenario.
+
 ## v0.4.10
 
 ### Live end-to-end test suite (development tooling)

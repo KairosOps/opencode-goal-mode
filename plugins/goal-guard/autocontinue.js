@@ -21,6 +21,12 @@ import { completionAllowed, missingGates } from "./gates.js";
 /** Consecutive no-change idle ticks after which auto-continue pauses for the human. */
 export const NO_PROGRESS_LIMIT = 4;
 
+/** How long after a user cancel (MessageAbortedError) an idle is treated as the
+ * cancel's own idle and the auto-continue is suppressed. The real gap between the
+ * abort and its idle is ~milliseconds; this window only guards against a stale flag
+ * wrongly suppressing a much later, legitimate idle. */
+export const ABORT_SUPPRESS_MS = 2 * 60 * 1000;
+
 /** A fingerprint of goal PROGRESS — changes whenever the agent did something useful. */
 export function progressSignature(state) {
   return [
@@ -62,15 +68,39 @@ export function continuationMessage(state, config) {
  * Decide whether to auto-continue an idle goal session. ADVANCES the per-session
  * auto-continue counters on `state`.
  *
- * @returns {{ continue: boolean, message?: string, stopReason?: string }}
+ * @returns {{ continue: boolean, message?: string, stopReason?: string, cancelled?: boolean }}
  *   - `continue:true` with a `message` to send the agent;
+ *   - `continue:false, cancelled:true` when the user cancelled this turn — honor it,
+ *     send NOTHING (no prompt);
  *   - `continue:false` with a `stopReason` when a backstop tripped (surface it);
  *   - `continue:false` with no `stopReason` when there is simply nothing to do
  *     (disabled, not a goal session, or the goal is already complete).
+ *
+ * @param {object} state
+ * @param {object} config
+ * @param {number} [now]  Wall clock (injectable for tests).
  */
-export function evaluateAutoContinue(state, config) {
+export function evaluateAutoContinue(state, config, now = Date.now()) {
   if (!config?.autoContinue) return { continue: false };
   if (!state || !state.active) return { continue: false };
+
+  // Honor a user cancel: a MessageAbortedError sets `state.abortedAt`. Never
+  // re-prompt a turn the user explicitly stopped. A single cancel emits MORE THAN
+  // ONE session.idle, so the flag is NOT consumed here — every idle inside the
+  // window is suppressed. It is cleared only when the user actually resumes (a new
+  // turn clears it in chat.message/chat.params). A stale flag outside the window is
+  // cleared defensively.
+  if (state.abortedAt) {
+    const sinceAbort = now - Number(state.abortedAt);
+    // Suppress while within the window. A NEGATIVE elapsed (wall clock moved
+    // backwards, or a future-dated/persisted abortedAt) is treated as still-fresh —
+    // never as "stale" — so a genuine cancel is never dropped by clock skew. The flag
+    // is cleared only once the window has genuinely elapsed.
+    if (sinceAbort < ABORT_SUPPRESS_MS) {
+      return { continue: false, cancelled: true };
+    }
+    state.abortedAt = 0; // genuinely past the window — clear and fall through
+  }
 
   if (completionAllowed(state, config)) {
     // Goal is complete — let it stop, and reset the counters for the next goal.

@@ -19,6 +19,13 @@ export const DEFAULT_CONFIG = Object.freeze({
   autoContinue: true,
   /** Hard cap on automatic continuations per goal session (backstop against runaway). */
   maxAutoContinue: 50,
+  /** Grace delay (ms) before an idle goal auto-continues, so a near-simultaneous user
+   * cancel (session.error → MessageAbortedError) is observed first and the continuation
+   * is suppressed — regardless of hook delivery order. It must comfortably exceed the
+   * worst-case error/idle hook-delivery skew; the default has a wide margin. Lowering
+   * it only reduces auto-continue latency; setting it to 0 removes the grace entirely,
+   * which weakens cancel detection when the idle is delivered before the error. */
+  abortGraceMs: 1200,
   /** Inject a live Goal Guard state block into the system prompt. */
   injectSystemState: true,
   /** Persist guard state to disk so it survives OpenCode restarts. */
@@ -72,6 +79,7 @@ function fromEnv(env) {
     GOAL_GUARD_ENFORCE_COMPLETION: ["enforceCompletion", coerceBool],
     GOAL_GUARD_AUTO_CONTINUE: ["autoContinue", coerceBool],
     GOAL_GUARD_MAX_AUTO_CONTINUE: ["maxAutoContinue", coerceInt],
+    GOAL_GUARD_ABORT_GRACE_MS: ["abortGraceMs", coerceInt],
     GOAL_GUARD_INJECT_SYSTEM_STATE: ["injectSystemState", coerceBool],
     GOAL_GUARD_PERSIST: ["persist", coerceBool],
     GOAL_GUARD_CONTEXTUAL_GATES: ["contextualGates", coerceBool],

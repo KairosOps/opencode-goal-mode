@@ -47,6 +47,7 @@ export function createState(nowIso) {
     autoContinueCount: 0,
     autoContinueNoProgress: 0,
     lastAutoContinueSig: "",
+    abortedAt: 0,
     createdAt: at,
     updatedAt: at,
     touchedAt: 0,
@@ -67,7 +68,7 @@ const GOAL_PROGRESS_FIELDS = Object.freeze([
   "lastEditAt", "lastReviewAt", "lastVerificationAt", "verdicts", "reviewerMemory",
   "evidence", "latestVerdict", "completedBlocked", "completionRejections",
   "verificationSeen", "lastCompletionRejectAt",
-  "autoContinueCount", "autoContinueNoProgress", "lastAutoContinueSig",
+  "autoContinueCount", "autoContinueNoProgress", "lastAutoContinueSig", "abortedAt",
 ]);
 
 /**
