@@ -474,11 +474,15 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
               const model = sessionModel.get(sessionID);
               const hasWork = state.dirty || (state.lastEditSeq || 0) > 0;
               if (config.programmaticReview && hasWork && model && clientCanReview(input.client)) {
-                if ((state.reviewCycles || 0) >= config.maxReviewCycles) {
-                  await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles}`, { state: summarizeState(state, config) });
+                // Bound the loop by review-cycle RUNS (not reviewCycles, which only counts
+                // concluded final-auditor verdicts) — otherwise a reviewer that never renders
+                // a verdict pins reviewCycles at 0 and the loop runs away.
+                if ((state.reviewRunCount || 0) >= config.maxReviewCycles) {
+                  await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles} review runs`, { state: summarizeState(state, config) });
                   await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
                 } else {
-                  await logger.toast(`Goal: running required reviews (cycle ${(state.reviewCycles || 0) + 1})…`, "info");
+                  state.reviewRunCount = (state.reviewRunCount || 0) + 1;
+                  await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
                   const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
                   let res = null;
                   try {

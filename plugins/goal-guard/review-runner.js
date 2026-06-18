@@ -69,39 +69,49 @@ async function readAssistantText(client, sessionID) {
 
 /**
  * Launch ONE reviewer subagent and return its verdict ("PASS"|"FAIL"|null).
- * Polls the reviewer session's messages until a verdict line appears or it times out.
+ * Polls until the reviewer FINISHES streaming (its text stabilizes), then parses the
+ * final verdict — so an interim mid-stream verdict can't be latched. The reviewer
+ * session is always aborted afterward (even if prompting threw).
  */
 async function runReviewer(client, agent, state, model, { timeoutMs, pollMs, sleep }) {
-  let sessionID;
+  let sessionID = null;
   try {
     const created = unwrap(await client.session.create({ body: { title: `goal-review:${agent}` } }));
     sessionID = created?.id;
-    if (!sessionID) return { verdict: null, text: "", error: "no session" };
+    if (!sessionID) return { verdict: null, text: "" };
     await client.session.promptAsync({
       path: { id: sessionID },
       body: { agent, ...(model ? { model } : {}), parts: [{ type: "text", text: reviewerPrompt(agent, state) }] },
     });
+    const start = Date.now();
+    let prevText = null;
+    let stable = "";
+    while (Date.now() - start < timeoutMs) {
+      await sleep(pollMs);
+      const text = await readAssistantText(client, sessionID);
+      // Trust a verdict only once the reviewer has FINISHED: the assistant text must be
+      // non-empty AND unchanged since the previous poll. Parsing mid-stream could latch
+      // an interim "Verdict: PASS" the reviewer later revises to FAIL.
+      if (text && text === prevText) {
+        stable = text;
+        break;
+      }
+      prevText = text;
+    }
+    const finalText = stable || prevText || "";
+    return { verdict: parseVerdict(finalText), text: finalText };
   } catch (err) {
     return { verdict: null, text: "", error: String(err?.message || err) };
-  }
-  const start = Date.now();
-  let verdict = null;
-  let text = "";
-  while (Date.now() - start < timeoutMs) {
-    await sleep(pollMs);
-    text = await readAssistantText(client, sessionID);
-    const v = parseVerdict(text);
-    if (v) {
-      verdict = v;
-      break;
+  } finally {
+    // Always clean up the reviewer session — even if promptAsync threw after create.
+    if (sessionID) {
+      try {
+        await client.session.abort({ path: { id: sessionID } });
+      } catch {
+        /* ignore */
+      }
     }
   }
-  try {
-    await client.session.abort({ path: { id: sessionID } });
-  } catch {
-    /* ignore */
-  }
-  return { verdict, text };
 }
 
 /**

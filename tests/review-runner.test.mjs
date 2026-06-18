@@ -5,6 +5,7 @@ import { markEdit } from "../plugins/goal-guard/events.js";
 import { DEFAULT_CONFIG } from "../plugins/goal-guard/config.js";
 import { completionAllowed } from "../plugins/goal-guard/gates.js";
 import { runReviewCycle, clientCanReview, reviewerPrompt } from "../plugins/goal-guard/review-runner.js";
+import { parseVerdict } from "../plugins/goal-guard/verdicts.js";
 
 /** A mock OpenCode client whose "reviewer" sessions return a Verdict line per agent. */
 function mockReviewClient(verdictFor) {
@@ -100,6 +101,54 @@ test("a reviewer that never renders a verdict fails closed (gate stays open)", a
   const res = await runReviewCycle(client, store, state, DEFAULT_CONFIG, { sleep: async () => {}, pollMs: 1, timeoutMs: 20 });
   assert.equal(res.completionAllowed, false);
   assert.ok(res.failed.length >= 5, "unconcluded reviewers are treated as not-passed");
+});
+
+test("[bughunt rl3] parseVerdict ignores a quoted/example verdict and uses the real conclusion", () => {
+  // A FAIL conclusion followed by a quoted example PASS must read FAIL (not the example).
+  assert.equal(parseVerdict('Findings: plaintext password.\n\nVerdict: FAIL\n\n(a clean run ends with "> Verdict: PASS".)'), "FAIL");
+  assert.equal(parseVerdict("Verdict: FAIL\nFor reference, end with `Verdict: PASS`."), "FAIL");
+  // genuine last-wins is preserved (FAIL then a real, unquoted PASS after fixes).
+  assert.equal(parseVerdict("First pass: Verdict: FAIL\nAfter fixes confirmed: Verdict: PASS"), "PASS");
+});
+
+test("[bughunt rl5] a reviewer session is aborted even when promptAsync throws after create", async () => {
+  const aborted = [];
+  const client = {
+    session: {
+      create: async () => ({ data: { id: "rX" } }),
+      promptAsync: async () => { throw new Error("boom"); },
+      messages: async () => ({ data: [] }),
+      abort: async ({ path }) => { aborted.push(path.id); },
+    },
+  };
+  const store = createStore();
+  const state = goalState(store, "leak");
+  await runReviewCycle(client, store, state, DEFAULT_CONFIG, fastOpts);
+  assert.ok(aborted.includes("rX"), "the created reviewer session is aborted despite the prompt throwing");
+});
+
+test("[bughunt rl4] runReviewer waits for the reviewer to finish — an interim PASS is not latched over the final FAIL", async () => {
+  // Each reviewer session streams an interim PASS, then stabilizes on FAIL.
+  const polls = new Map();
+  const seq = ["Analyzing… Verdict: PASS (tentative)", "Analyzing… Verdict: PASS (tentative). Wait—", "Found a blocker.\nVerdict: FAIL", "Found a blocker.\nVerdict: FAIL"];
+  let id = 0;
+  const client = {
+    session: {
+      create: async () => ({ data: { id: `r${++id}` } }),
+      promptAsync: async () => {},
+      messages: async ({ path }) => {
+        const p = polls.get(path.id) || 0;
+        polls.set(path.id, p + 1);
+        return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: seq[Math.min(p, seq.length - 1)] }] }] };
+      },
+      abort: async () => {},
+    },
+  };
+  const store = createStore();
+  const state = goalState(store, "stream");
+  const res = await runReviewCycle(client, store, state, DEFAULT_CONFIG, { sleep: async () => {}, pollMs: 1, timeoutMs: 1000 });
+  assert.equal(res.completionAllowed, false, "the final FAIL wins; the mid-stream PASS must not be latched");
+  assert.equal(state.latestVerdict["goal-final-auditor"].verdict, "FAIL");
 });
 
 test("reviewerPrompt includes the goal, the verdict instruction, and the reviewer name", () => {

@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.6.1
+
+### Hardening of the v0.6.0 code-driven review loop (adversarial hunt + live lab)
+
+A deep adversarial hunt on the new review loop — plus a live lab run that reproduced it
+— found and this release fixes five real defects in v0.6.0. Each has a regression test
+(**335 tests pass**). The hunt also confirmed the loop is otherwise sound (idle
+re-entrancy serialized, reviewer sessions never self-trigger a review, concurrent goals
+isolated, single-cycle launches exact, normal FAIL→fix→PASS cycle counting correct).
+
+- **Review-loop runaway (high).** The backstop counted `reviewCycles`, which only
+  increments on a *concluded* `goal-final-auditor` verdict. A reviewer that never
+  renders a `Verdict:` line (a stalling/terse model) — or a specialist gate that never
+  passes while the auditor stays fresh — pinned that counter, so the cap never tripped
+  and the loop ran to the auto-continue cap (~250 reviewer sessions) or, with that
+  disabled, unbounded. Now bounded by a dedicated **`reviewRunCount`** (review *cycles
+  run*), so the loop always stops at `maxReviewCycles` regardless of verdicts.
+- **Verdict mis-parse → completion leak (critical).** A reviewer that concluded
+  `Verdict: FAIL` but included a quoted example like `(a clean run ends with
+  "Verdict: PASS")` was recorded **PASS** — `parseVerdict` took the last positional
+  match. It now ignores a verdict enclosed in quotes/backticks on its line, so a real
+  FAIL is never overridden by an example (genuine last-wins for an unquoted fixed PASS
+  is preserved).
+- **Mid-stream verdict latch (high).** The runner polled the reviewer's messages and
+  latched the FIRST `Verdict:` it saw — an interim streaming `PASS` could win over the
+  reviewer's final `FAIL`. It now waits for the reviewer's output to stabilize before
+  reading the verdict.
+- **Reviewer session leak (high).** If `promptAsync` threw after `session.create`
+  succeeded, the created reviewer session was never aborted. Cleanup now runs in a
+  `finally`.
+
 ## v0.6.0
 
 ### Code-driven review enforcement — the guard launches the reviewers itself

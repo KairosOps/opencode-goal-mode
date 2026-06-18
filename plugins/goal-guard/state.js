@@ -47,6 +47,10 @@ export function createState(nowIso) {
     autoContinueCount: 0,
     autoContinueNoProgress: 0,
     lastAutoContinueSig: "",
+    // How many programmatic review CYCLES the guard has run for this goal. Bounds the
+    // review loop independently of reviewCycles (which only counts CONCLUDED
+    // final-auditor verdicts) so a reviewer that never renders a verdict can't run away.
+    reviewRunCount: 0,
     abortedAt: 0,
     createdAt: at,
     updatedAt: at,
@@ -68,7 +72,7 @@ const GOAL_PROGRESS_FIELDS = Object.freeze([
   "lastEditAt", "lastReviewAt", "lastVerificationAt", "verdicts", "reviewerMemory",
   "evidence", "latestVerdict", "completedBlocked", "completionRejections",
   "verificationSeen", "lastCompletionRejectAt",
-  "autoContinueCount", "autoContinueNoProgress", "lastAutoContinueSig", "abortedAt",
+  "autoContinueCount", "autoContinueNoProgress", "lastAutoContinueSig", "reviewRunCount", "abortedAt",
 ]);
 
 /**

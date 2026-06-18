@@ -72,6 +72,18 @@ test("on idle with a FAILING reviewer, the guard keeps completion blocked and fe
   assert.ok(prompts.some((p) => /blocking issues|must fix|Failing reviewers/i.test(p.text)), "guard fed the blocking findings back to the agent");
 });
 
+test("[bughunt rl1/rl2] the review loop is bounded by reviewRunCount (no runaway when a gate never passes / verdict never concludes)", async () => {
+  // Specialist gates always FAIL, the cycle-closing auditor PASSes fresh → reviewCycles
+  // is pinned at 1, yet the loop MUST stop at maxReviewCycles via reviewRunCount.
+  const { guard, prompts } = makeReviewingGuard((a) => (a === "goal-final-auditor" ? "PASS" : "FAIL"), { maxReviewCycles: 3, maxAutoContinue: 50 });
+  await startGoalWithWork(guard.hooks);
+  for (let i = 0; i < 30; i++) await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+  const state = guard.store.stateFor("g");
+  assert.ok((state.reviewRunCount || 0) <= 3, `review runs capped at maxReviewCycles (got ${state.reviewRunCount})`);
+  const launches = prompts.filter((p) => p.agent && p.agent.startsWith("goal-")).length;
+  assert.ok(launches < 30, `reviewer launches bounded, not one+ per idle forever (got ${launches})`);
+});
+
 test("the model is captured from chat.params so the reviewers can be launched", async () => {
   // Without a captured model the guard can't launch reviewers — prove capture works.
   const { guard, prompts } = makeReviewingGuard("PASS");

@@ -47,10 +47,22 @@ export function textOf(output) {
  */
 export function parseVerdict(text) {
   if (typeof text !== "string" || !text) return null;
-  const loose = [...text.matchAll(LOOSE_RE)];
+  // A verdict ENCLOSED in quotes/backticks on its line is the marker being QUOTED
+  // (an example/citation like `(a clean run ends with "Verdict: PASS")`), NOT the
+  // reviewer's own conclusion — counting it let a FAIL review with a trailing quoted
+  // example PASS read as PASS. Excluded only when a quote sits on BOTH sides of the
+  // verdict within its line, so a real conclusion that merely mentions a quote stays.
+  const hasQuote = (s) => /["'`]/.test(s);
+  const quoted = (idx) => {
+    const lineStart = text.lastIndexOf("\n", idx) + 1;
+    let lineEnd = text.indexOf("\n", idx);
+    if (lineEnd < 0) lineEnd = text.length;
+    return hasQuote(text.slice(lineStart, idx)) && hasQuote(text.slice(idx, lineEnd));
+  };
+  const loose = [...text.matchAll(LOOSE_RE)].filter((m) => !quoted(m.index));
   if (!loose.length) return null;
   const lastLoose = loose[loose.length - 1];
-  const anchored = [...text.matchAll(ANCHORED_RE)];
+  const anchored = [...text.matchAll(ANCHORED_RE)].filter((m) => !quoted(m.index));
   const lastAnchored = anchored.length ? anchored[anchored.length - 1] : null;
   // Prefer whichever genuinely occurs last in the text; on a tie, the anchored
   // (conclusion-formatted) one wins.
