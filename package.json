@@ -1,6 +1,6 @@
 {
   "name": "opencode-goal-mode",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Strict Goal Mode agents, commands, and guard plugin for OpenCode.",
   "type": "module",
   "main": "plugins/goal-sidebar.tsx",
@@ -41,6 +41,7 @@
     "test:install": "node --test tests/install.test.mjs",
     "test:visual": "bun tools/visual-test/sidebar-visual.jsx",
     "test:e2e": "node tools/e2e/goal-e2e.mjs",
+    "test:fresh-install": "node tools/e2e/fresh-install.mjs",
     "bench": "node benchmarks/run.mjs",
     "bench:external": "node benchmarks/external.mjs",
     "bench:corpus": "node benchmarks/build-external-corpus.mjs",

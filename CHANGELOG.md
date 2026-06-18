@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.5.1
+
+### Verification / maintenance — fresh-install confirmed working for new users
+
+**No runtime change to the plugin** since v0.5.0 — this release adds a repeatable
+fresh-install verification and confirms the published package works end-to-end for a
+brand-new user on a clean system.
+
+A new harness (`npm run test:fresh-install`, `tools/e2e/fresh-install.mjs`) packs the
+exact npm tarball, installs it with the shipped installer into an **isolated home**,
+and asserts:
+
+- every shipped component lands — the `goal` primary agent, all `goal-*` reviewers
+  (≥20), the commands, the multi-file guard plugin, the version-matched manifest, and
+  the `tui.json` sidebar registration;
+- the installed guard plugin module imports cleanly;
+- a real `opencode serve` rooted at that isolated home **registers the `goal` agent and
+  the `goal-*` reviewers** (the exact path `/goal` exercises — guarding against an
+  "agent goal not found" regression), and the installed files survive server startup.
+
+Verified live against a clean install + a free OpenCode Zen model: the guard engages,
+records the Goal Contract (with acceptance criteria), fires contextual review gates,
+captures review verdicts, and observes verification — exactly as a new user expects.
+The full unit/integration suite (312 tests) and `npm run ci` remain green.
+
 ## v0.5.0
 
 ### Weak-model robustness + a goal-mode observatory
