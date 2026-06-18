@@ -20,6 +20,43 @@ import { isPrimaryAgent } from "./agents.js";
 
 const s = tool.schema;
 
+// Stopwords + short tokens carry no goal identity; dropping them keeps the
+// similarity score focused on the content words that actually distinguish one
+// goal from another.
+const GOAL_STOPWORDS = new Set([
+  "the", "and", "for", "with", "this", "that", "you", "your", "our", "its", "use", "add", "make",
+  "into", "from", "then", "than", "but", "not", "are", "was", "were", "will", "can", "get", "set",
+  "via", "per", "all", "any", "new", "should", "must", "need", "want", "please", "also", "using",
+]);
+
+function goalContentTokens(v) {
+  const set = new Set();
+  for (const w of String(v || "").toLowerCase().split(/[^a-z0-9]+/)) {
+    if (w.length > 2 && !GOAL_STOPWORDS.has(w)) set.add(w);
+  }
+  return set;
+}
+
+/**
+ * Jaccard overlap of two goal descriptions' content tokens. Returns -1 when the
+ * score is undefined (either side has no content tokens) so callers can fall back
+ * to a strict rule. A reworded statement of the SAME goal scores high; a different
+ * goal scores near zero.
+ */
+export function goalSimilarity(a, b) {
+  const ta = goalContentTokens(a);
+  const tb = goalContentTokens(b);
+  if (!ta.size || !tb.size) return -1;
+  let inter = 0;
+  for (const x of ta) if (tb.has(x)) inter += 1;
+  return inter / (ta.size + tb.size - inter);
+}
+
+// Below this content-token overlap, a re-recorded contract is treated as a
+// genuinely NEW goal (reset progress). Above it, a reworded restatement of the
+// same goal that PRESERVES accrued review progress.
+export const SAME_GOAL_THRESHOLD = 0.4;
+
 /**
  * @param {object} deps
  * @param {ReturnType<import("./state.js").createStore>} deps.store
@@ -134,14 +171,25 @@ export function createGoalTools({ store, config, persist }) {
         // goal (same `original`) preserves progress.
         const norm = (v) => String(v || "").replace(/\s+/g, " ").trim().toLowerCase();
         const newOriginal = norm(args.original);
-        // A genuinely DIFFERENT request (vs the recorded contract's original) is a new
-        // goal and must NOT inherit the previous goal's gates/verdicts/review-cycle —
-        // this holds for auto-seeded placeholders too (a new goal authored over an
-        // auto contract previously leaked the old goal's passes → instant un-reviewed
-        // completion). Re-recording the SAME original (norm-equal) preserves progress.
+        // Decide whether this contract describes a genuinely NEW goal (reset accrued
+        // progress) or restates the SAME one (preserve it). Exact string equality is
+        // too brittle in BOTH directions:
+        //   - It WIPED progress when the agent merely FORMALIZED an auto-seeded goal —
+        //     re-wording "Add a rate limiter to login" as "Add a configurable
+        //     token-bucket rate limiter to the login endpoint" reset reviewCycles to 0
+        //     and (lastEditSeq=0) silently disabled the next programmatic review.
+        //   - Preserving on equality alone let a DIFFERENT goal authored over the old
+        //     contract inherit its passes → instant un-reviewed completion.
+        // Use content-token similarity: a faithful restatement scores high (same goal),
+        // a different request scores near zero. Fall back to strict inequality when the
+        // score is undefined (a content-less original), which keeps the leak closed.
         if (state.contract && newOriginal && newOriginal !== norm(state.contract.original)) {
-          resetGoalProgress(state, store.nowIso());
-          state.active = true;
+          const sim = goalSimilarity(args.original, state.contract.original);
+          const isNewGoal = sim < 0 ? true : sim < SAME_GOAL_THRESHOLD;
+          if (isNewGoal) {
+            resetGoalProgress(state, store.nowIso());
+            state.active = true;
+          }
         }
         state.contract = {
           title: String(args.title || "").replace(/\s+/g, " ").trim(),

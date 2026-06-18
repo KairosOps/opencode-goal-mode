@@ -1,10 +1,11 @@
 # OpenCode plugin platform — verified reference
 
-Facts verified against `@opencode-ai/plugin@1.15.13` (the installed type
-definitions) and the `sst/opencode` source at tag `v1.15.13`. This is the
-pinned runtime reference the `goal-guard` plugin is engineered against; the npm
-latest was `1.16.2` when this document was refreshed, so claims below are
-version-scoped unless explicitly called out as current-docs behavior.
+Facts verified against `@opencode-ai/plugin@1.15.13` (the type definitions
+current when this document was written) and the `sst/opencode` source at tag
+`v1.15.13`. The `goal-guard` plugin's installed devDependency has since moved to
+`@opencode-ai/plugin` 1.17.6, with peer compatibility declared as `>=1.15.0`, so
+claims below are version-scoped unless explicitly called out as current-docs
+behavior.
 
 Primary sources: OpenCode schema (`https://opencode.ai/config.json`), OpenCode
 config/agents/plugins docs (`https://opencode.ai/docs/config/`,

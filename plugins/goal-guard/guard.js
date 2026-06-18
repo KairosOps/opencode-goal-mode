@@ -75,6 +75,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   // these out of the store means a crash/restart can never wedge auto-continue, and
   // they are pruned with the session via the store's onEvict so they never leak.
   const decidingIdle = new Set(); // sessionIDs currently inside an idle decision
+  const reviewingSessions = new Set(); // sessionIDs currently inside a programmatic review run
   const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
   const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
   const sessionModel = new Map(); // sessionID -> { providerID, modelID } of the goal's model, so the
@@ -98,6 +99,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
       onEvict: (key) => {
         userTurnSeq.delete(key);
         decidingIdle.delete(key);
+        reviewingSessions.delete(key);
         sessionModel.delete(key);
         if (lastActiveGoalSession === key) lastActiveGoalSession = null;
       },
@@ -409,7 +411,14 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           // contextual gates are refreshed solely from a session's OWN edits, via
           // tool.execute.after — never from another session's file.
           const target = lastActiveGoalSession && store.sessions.get(lastActiveGoalSession);
-          if (target && target.active) {
+          // While a goal is mid-review the agent is IDLE — it does no work during the
+          // programmatic review run. Any project-scoped file.edited that lands in that
+          // window is background noise (a watcher, a reviewer touching the tree, a build
+          // artifact), NOT the agent's goal edit. Dirtying the goal here bumps lastEditSeq
+          // into the MIDDLE of the verdict sequence and stales the fresh PASSes the review
+          // just recorded — a wasted cycle plus a contradictory "fix nonexistent issues"
+          // directive. Suppress attribution while that session is reviewing.
+          if (target && target.active && !reviewingSessions.has(lastActiveGoalSession)) {
             markFileChanged(store, target, file);
             persist();
           }
@@ -485,6 +494,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
                   await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
                   const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
                   let res = null;
+                  reviewingSessions.add(sessionID);
                   try {
                     res = await runReviewCycle(input.client, store, state, config, {
                       model,
@@ -494,18 +504,27 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
                     });
                   } catch (err) {
                     await logger.warn("Programmatic review run failed; falling back to a nudge", { error: String(err?.message || err) });
+                  } finally {
+                    reviewingSessions.delete(sessionID);
                   }
                   persistence.flush(snapshotFn);
                   if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {
                     // A new user turn arrived during the (long) review — it owns the session now; do not override it.
+                  } else if (state.abortedAt) {
+                    // The user pressed stop DURING the review run (session.error set abortedAt).
+                    // Honor the cancel — never fight the stop button by injecting a continuation.
+                    await logger.info("Goal auto-continue suppressed: user cancelled during the review run", { sessionID });
                   } else if (res && res.completionAllowed) {
                     await logger.toast(`All required reviews PASSED — ${res.reviewCycles} review cycle${res.reviewCycles === 1 ? "" : "s"}`, "success");
                     await logger.continueSession(sessionID, `All required reviews PASSED (run programmatically by Goal Guard). Review cycles: ${res.reviewCycles}. The goal is complete — reply with \`Goal Completed\` and an accurate \`Review cycles: ${res.reviewCycles}\` line.`);
-                  } else if (res) {
+                  } else if (res && res.failed.length) {
                     const findings = res.findings.length ? ` Blocking findings: ${res.findings.join(" | ")}.` : "";
                     await logger.toast(`Review cycle ${res.reviewCycles}: ${res.failed.map(prettyAgentName).join(", ") || "issues found"} → fix & re-review`, "warning");
                     await logger.continueSession(sessionID, `A Goal Guard review cycle (#${res.reviewCycles}) found blocking issues you MUST fix now — do NOT claim completion.${findings} Failing reviewers: ${res.failed.join(", ")}. Fix the issues and stop; you will be re-reviewed automatically.`);
                   } else {
+                    // Either the review threw (res null) or completion is still not allowed
+                    // with NO failing reviewer (a freshness/stale-state edge). Do NOT fabricate
+                    // an empty "Failing reviewers:" directive — send the neutral continue nudge.
                     await logger.continueSession(sessionID, decision.message);
                   }
                 }

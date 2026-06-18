@@ -1,11 +1,80 @@
 # Changelog
 
+## v0.6.2
+
+### Deep cross-cutting bug hunt — 8 confirmed defects fixed
+
+A deeper adversarial sweep across the whole completion path (review-loop lifecycle,
+completion-marker parsing, shell classification, and contract recording) found and this
+release fixes **eight** real defects. Every one was independently reproduced against the
+real modules before fixing and now has a regression test (**343 tests pass**).
+
+Review-loop lifecycle (the v0.6.0 code-driven reviews):
+
+- **Mid-review edit staled fresh passes (medium).** A project-scoped `file.edited` that
+  landed *during* a programmatic review run was attributed to the (idle) goal and bumped
+  `lastEditSeq` into the middle of the verdict sequence, staling PASSes the review had
+  just recorded — so completion was blocked despite every reviewer passing, and the agent
+  was handed a self-contradictory "you MUST fix blocking issues / Failing reviewers:
+  (empty)" directive. The agent does no work while it is being reviewed, so such edits are
+  now suppressed for the duration of the run; the empty-failing-reviewers directive is
+  also no longer emitted.
+- **User cancel during a review run ignored (high).** Pressing stop mid-review set
+  `abortedAt`, but the post-review continuation checked only the user-turn counter and
+  re-prompted the goal anyway — fighting the stop button. The continuation is now
+  suppressed when a cancel arrives during the review.
+- **Review-cycle double-count (high).** When the cycle-closing `goal-final-auditor` was
+  recorded twice for one round with no edit in between (e.g. the agent ran it via `task`
+  *and* the guard ran it programmatically), `reviewCycles` inflated. A closing verdict now
+  counts a new cycle only when the agent edited since the previous one.
+
+Completion-marker parsing:
+
+- **Invisible-character marker bypass (medium).** A premature `Goal Completed` prefixed
+  with a zero-width / bidi / word-joiner code point (U+200B–U+200F, U+2060, U+FEFF,
+  U+00AD) slipped past the marker unrewritten — `\s` does not cover those. They are now
+  folded into the leading-prefix class.
+- **Earlier "Review cycles" mention false-rejected a valid completion (low).** The
+  claimed-cycles parser took the *first* `Review cycles: N` it found, so an earlier
+  mention (a recap, a quoted example) was read as the claim and rejected a legitimate
+  completion. It now reads the *last* (conclusion) line.
+
+Shell classification:
+
+- **Applet multiplexers hid destructive commands (high).** `busybox rm -rf …` /
+  `toybox find . -delete` were invisible to the guard because the multiplexer was not a
+  recognized wrapper. `busybox`/`toybox` are now unwrapped and the real applet classified.
+- **`rsync --delete` mirror-wipe under-classified (medium).** A destination-mirroring
+  `rsync -a --delete empty/ target/` irreversibly wipes `target` but was only flagged
+  *mutating*. `rsync` with `--delete` / `--delete-*` / `--del` is now destructive; plain
+  `rsync` stays mutating.
+
+Contract recording:
+
+- **Re-recording the SAME goal wiped review progress (high).** Formalizing an auto-seeded
+  goal by re-wording its `original` (e.g. "Add a rate limiter to login" → "Add a
+  configurable token-bucket rate limiter to the login endpoint") was treated as a brand-new
+  goal under strict string-equality, resetting `reviewCycles` to 0 and silently disabling
+  the next programmatic review. Reset now uses content-token similarity: a faithful
+  restatement of the same goal preserves progress, while a genuinely different request
+  still resets (keeping the un-reviewed-completion leak closed).
+
+Docs:
+
+- **All Markdown brought in sync with the code** (audited file-by-file against the source,
+  then adversarially re-verified). Notable fixes: the README config table now lists all 24
+  keys with correct defaults and documents the code-driven review model + `programmaticReview`;
+  ARCHITECTURE's module/hook inventory matches `plugins/goal-guard/` (added `guard.js`,
+  `autocontinue.js`, `review-runner.js`; corrected the entry-file description and the
+  `@opencode-ai/plugin` version to 1.17.6); `agents/goal.md` and the reviewer agent docs now
+  describe reviews as guard-launched rather than agent-invoked.
+
 ## v0.6.1
 
 ### Hardening of the v0.6.0 code-driven review loop (adversarial hunt + live lab)
 
 A deep adversarial hunt on the new review loop — plus a live lab run that reproduced it
-— found and this release fixes five real defects in v0.6.0. Each has a regression test
+— found and this release fixes four real defects in v0.6.0. Each has a regression test
 (**335 tests pass**). The hunt also confirmed the loop is otherwise sound (idle
 re-entrancy serialized, reviewer sessions never self-trigger a review, concurrent goals
 isolated, single-cycle launches exact, normal FAIL→fix→PASS cycle counting correct).

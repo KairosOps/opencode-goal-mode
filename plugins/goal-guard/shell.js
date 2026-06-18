@@ -45,6 +45,11 @@ const SIMPLE_WRAPPERS = new Set([
   "caffeinate",
   "proxychains",
   "proxychains4",
+  // Applet multiplexers: `busybox rm -rf /`, `toybox find . -delete`. The first
+  // non-flag token is the real applet/command — skip the multiplexer and classify
+  // the remainder, or a destructive applet hides behind an unrecognized wrapper.
+  "busybox",
+  "toybox",
 ]);
 
 /** Interpreters that execute a command string passed via `-c`/`/c`. */
@@ -456,7 +461,7 @@ const DIRECT_TEST_BINS = new Set(["jest", "mocha", "vitest", "ava", "tap", "tape
 
 const FORMATTERS = new Set(["prettier", "eslint", "black", "ruff", "gofmt", "goimports", "rustfmt", "clang-format", "autopep8", "isort", "standard", "biome", "dprint", "yapf", "stylelint"]);
 
-const MUTATING_BINS = new Set(["mkdir", "rmdir", "touch", "ln", "mv", "cp", "tee", "install", "patch", "rsync", "rename", "chmod", "chown", "chgrp", "git-apply"]);
+const MUTATING_BINS = new Set(["mkdir", "rmdir", "touch", "ln", "mv", "cp", "tee", "install", "patch", "rename", "chmod", "chown", "chgrp", "git-apply"]);
 const DESTRUCTIVE_BINS = new Set(["shred", "srm", "mkfs", "mkswap", "fdisk", "parted", "wipefs", "sgdisk", "blkdiscard", "unlink"]);
 
 /**
@@ -715,6 +720,21 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
 
   // node --test
   // handled in classifyInterpreterScript
+
+  // rsync mirrors a source tree onto a destination. With --delete (or its
+  // --delete-* / --del aliases) extraneous files in the destination are removed —
+  // a `rsync -a --delete empty/ target/` irreversibly wipes `target`. Plain rsync
+  // only writes (mutating); the delete variants are destructive.
+  if (bin === "rsync") {
+    if (args.some((a) => a === "--delete" || a === "--del" || a.startsWith("--delete-"))) {
+      acc.destructive = true;
+      acc.reasons.push("rsync --delete");
+    } else {
+      acc.mutating = true;
+      acc.reasons.push("rsync");
+    }
+    return;
+  }
 
   // Known mutating file utilities.
   if (MUTATING_BINS.has(bin)) {

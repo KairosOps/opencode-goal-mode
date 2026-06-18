@@ -43,6 +43,8 @@ a problem. The UI's **Data ↧** button on each run links straight to it.
 
 ```
 GET  /api/health
+GET  /api/tasks                hard-task corpus + configured models
+GET  /api/models               configured model list
 GET  /api/runs                 list (running first, newest)
 POST /api/runs                 { plan:[{taskId,model}] } | { taskId, model, count }
 POST /api/batch                { count }  → balanced task×model fan-out

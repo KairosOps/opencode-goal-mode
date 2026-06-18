@@ -36,7 +36,7 @@ Review rules:
 - Check for versioning drift, breaking changes, and missing deprecations.
 - Validate parameter validation, pagination, rate limiting, and retries.
 - Compare OpenAPI/Swagger/GraphQL schema changes against actual code.
-- Review naming, naming collisions, and idempotency.
+- Review naming, collisions, and idempotency.
 - Return findings with file paths, endpoints, and severity.
 
 Output format:

@@ -32,15 +32,17 @@ its way around.
 
 ## Module layout
 
-The entry file `plugins/goal-guard.js` is deliberately thin — it wires hooks to
-modules and contains no business logic. OpenCode's plugin discovery glob is
-`{plugin,plugins}/*.{ts,js}` (a single level), so the helper modules under
-`plugins/goal-guard/` are imported relatively but are **not** themselves loaded
-as plugins. Each module is independently unit-tested.
+The entry file `plugins/goal-guard.js` is deliberately thin — it exports exactly
+one plugin factory, re-exporting `GoalGuardPlugin` from `goal-guard/guard.js`,
+which is where the hook wiring and orchestration live. OpenCode's plugin
+discovery glob is `{plugin,plugins}/*.{ts,js}` (a single level), so the helper
+modules under `plugins/goal-guard/` are imported relatively but are **not**
+themselves loaded as plugins. Each module is independently unit-tested.
 
 | Module | Responsibility |
 | --- | --- |
-| `goal-guard.js` | Hook wiring, state-mutation orchestration, tool registration. |
+| `goal-guard.js` | Plugin entry point — re-exports the single default factory from `guard.js`. |
+| `goal-guard/guard.js` | Hook wiring, state-mutation orchestration, tool registration. |
 | `goal-guard/shell.js` | Quote-aware shell tokenizer + command classifier. |
 | `goal-guard/agents.js` | Canonical agent sets, base gates, contextual-gate keyword map. |
 | `goal-guard/config.js` | Config resolution (defaults < env vars < plugin options). |
@@ -50,16 +52,18 @@ as plugins. Each module is independently unit-tested.
 | `goal-guard/gates.js` | Required-gate computation and freshness. |
 | `goal-guard/completion.js` | `Goal Completed` claim evaluation. |
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
-| `goal-guard/summary.js` | State summaries, status reports, and evidence-map projections. |
+| `goal-guard/autocontinue.js` | Auto-continue decision: keep an incomplete goal working on idle, with cap + no-progress backstops. |
+| `goal-guard/review-runner.js` | Code-driven review enforcement — the guard launches the required reviewer subagents itself. |
+| `goal-guard/summary.js` | State summaries, status reports, evidence-map projections, and the short goal label. |
 | `goal-guard/system.js` | Live state block injected into the system prompt. |
-| `goal-guard/summary.js` | Status/evidence projections, the short goal label, and the sidebar view. |
 | `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
 | `goal-guard/sidebar-data.js` | Pure reader that projects the persisted snapshot into the sidebar todo model. |
 | `goal-guard/logger.js` | Best-effort logging/toasts over the OpenCode client. |
 
 ## Hooks used
 
-Verified against `@opencode-ai/plugin@1.15.13` source.
+Verified against the `@opencode-ai/plugin` source (peer dependency `>=1.15.0`,
+pinned to `1.17.6` in devDependencies).
 
 | Hook | Purpose in the guard |
 | --- | --- |
@@ -70,14 +74,14 @@ Verified against `@opencode-ai/plugin@1.15.13` source.
 | `tool.execute.after` | Record edits, verification, mutations, and review verdicts. |
 | `experimental.text.complete` | Rewrite premature `Goal Completed` claims. |
 | `experimental.session.compacting` | Preserve guard state across compaction. |
-| `event` | Track `file.edited` (subagent edits); on `session.idle`, flush state and auto-continue an incomplete goal (via `client.session.promptAsync`) so it never stops early. |
+| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); and on `session.idle`, flush state and — for an incomplete goal with work done — run the required reviewer subagents itself (code-driven, `programmaticReview`) one full cycle, then either feed back blocking findings or auto-continue (via `client.session.promptAsync`) so it never stops early. |
 | `tool` | Register the custom `goal_*` tools. |
 | `dispose` | Flush persisted state. |
 
-`permission.ask` is intentionally **not** used: in 1.15.13 it is declared in the
-type but never triggered by the runtime, so destructive blocking is done by
-throwing in `tool.execute.before` (the throw surfaces to the model as the tool's
-error result).
+`permission.ask` is intentionally **not** used: it is declared in the type but
+never triggered by the runtime, so destructive blocking is done by throwing in
+`tool.execute.before` (the throw surfaces to the model as the tool's error
+result).
 
 ## State model
 
@@ -116,7 +120,8 @@ filesystem degrades to pure in-memory operation rather than failing a tool call.
 `shell.js` replaces boundary-anchored regexes (which were trivially bypassed)
 with a real lexer. It respects single/double quotes and backslash escapes,
 recurses into `$( … )` / backtick substitutions, `eval`, and `-c` strings,
-unwraps `sudo`/`env`/`xargs`/`timeout`/`nice`, resolves `/bin/rm` to `rm`, and
+unwraps `sudo`/`command`/`env`/`xargs`/`timeout`/`nice`/`nohup` and the
+`busybox`/`toybox` applet multiplexers, resolves `/bin/rm` to `rm`, and
 classifies each *simple* command by its resolved binary into four independent
 signals:
 

@@ -123,6 +123,9 @@ function updateReviewerMemory(state, agent, verdict, at, seq, text) {
 export function recordVerdict(store, state, agent, verdict, text = "") {
   const at = store.nowIso();
   const seq = store.nextSeq();
+  // Captured BEFORE the overwrite below: the prior cycle-closing verdict, used to
+  // decide whether this one opens a genuinely new review cycle.
+  const prevClosing = agent === CYCLE_CLOSING_AGENT ? state.latestVerdict[CYCLE_CLOSING_AGENT] : null;
   const entry = { agent, verdict, at, seq };
   state.verdicts.push(entry);
   if (state.verdicts.length > 200) state.verdicts.splice(0, state.verdicts.length - 200);
@@ -131,6 +134,15 @@ export function recordVerdict(store, state, agent, verdict, text = "") {
   state.lastReviewAt = at;
   state.lastReviewSeq = seq;
   state.updatedAt = at;
-  if (agent === CYCLE_CLOSING_AGENT) state.reviewCycles += 1;
+  if (agent === CYCLE_CLOSING_AGENT) {
+    // A review cycle ends when the cycle-closing auditor renders a verdict over
+    // FRESH work. Count it only if this is the first closing verdict OR the agent
+    // edited since the previous one. A second closing verdict with NO intervening
+    // edit is the same round recorded twice — e.g. the agent ran the auditor via
+    // `task` AND the guard ran it programmatically — and must not inflate the count.
+    const prevSeq = prevClosing ? prevClosing.seq : -1;
+    const workedSince = (state.lastEditSeq || 0) > prevSeq;
+    if (!prevClosing || workedSince) state.reviewCycles += 1;
+  }
   return entry;
 }

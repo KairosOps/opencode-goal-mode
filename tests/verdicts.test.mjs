@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { textOf, parseVerdict, hasVerdict, recordVerdict, latestVerdictFor } from "../plugins/goal-guard/verdicts.js";
 import { createStore, createState } from "../plugins/goal-guard/state.js";
+import { markEdit } from "../plugins/goal-guard/events.js";
 
 test("parseVerdict reads a simple verdict", () => {
   assert.equal(parseVerdict("Verdict: PASS"), "PASS");
@@ -71,15 +72,22 @@ test("recordVerdict stamps seq and updates latestVerdict", () => {
   assert.equal(st.verdicts.length, 2);
 });
 
-test("recordVerdict increments review cycles only for the final auditor", () => {
+test("recordVerdict increments review cycles only for the final auditor, once per round of work", () => {
   const store = createStore();
   const st = createState();
   recordVerdict(store, st, "goal-reviewer", "PASS");
-  assert.equal(st.reviewCycles, 0);
+  assert.equal(st.reviewCycles, 0, "a non-cycle-closing reviewer never counts a cycle");
   recordVerdict(store, st, "goal-final-auditor", "PASS");
-  assert.equal(st.reviewCycles, 1);
+  assert.equal(st.reviewCycles, 1, "the first cycle-closing verdict counts");
+  // [bughunt dl3] A SECOND cycle-closing verdict with NO intervening edit is the SAME
+  // round recorded twice (e.g. the agent ran the auditor via `task` AND the guard ran
+  // it programmatically) — it must NOT inflate the count.
   recordVerdict(store, st, "goal-final-auditor", "FAIL");
-  assert.equal(st.reviewCycles, 2);
+  assert.equal(st.reviewCycles, 1, "a re-record with no new work does not double-count");
+  // A genuine next cycle: the agent edits (new work), then the auditor renders again.
+  markEdit(store, st, "fix after review");
+  recordVerdict(store, st, "goal-final-auditor", "PASS");
+  assert.equal(st.reviewCycles, 2, "a closing verdict after fresh work counts a new cycle");
 });
 
 test("recordVerdict stores and resolves reviewer memory", () => {

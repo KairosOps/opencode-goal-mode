@@ -190,12 +190,13 @@ second) — negligible for a per-tool-call guard:
 ## What it adds
 
 - A primary `goal` agent that owns implementation but delegates research,
-  discovery, verification planning, and reviews to subagents. **`goal` is the only
+  discovery, and verification planning to subagents. **`goal` is the only
   user-selectable agent** — every specialist (security, diff, verifier, …) is a
-  `mode: subagent` that the Goal agent invokes via the task tool; the user never
-  picks one directly, and the guard blocks any other agent from invoking them (see
-  **Goal-only subagents** below). They surface with friendly names (e.g. "Security Reviewer",
-  "API Reviewer") rather than raw ids.
+  `mode: subagent`; the user never picks one directly, and the guard blocks any
+  other agent from invoking them (see **Goal-only subagents** below). The required
+  review subagents are launched by the guard itself, not left to the model to call
+  via the task tool (see **Code-driven review** below). They surface with friendly
+  names (e.g. "Security Reviewer", "API Reviewer") rather than raw ids.
 - Strict review gates for prompt compliance, diff review, verification, security,
   UX, operations, data, API, performance, tests, docs, quality, and final audit.
 - Slash commands: `/goal`, `/goal-contract`, `/goal-review`,
@@ -207,6 +208,12 @@ second) — negligible for a per-tool-call guard:
     false-positiving harmless commands like `git checkout -b`.
   - **Completion enforcement**: a premature `Goal Completed` is rewritten to
     `Goal Not Completed` with the exact missing review gates.
+  - **Code-driven review**: when an active goal goes idle with work done and
+    review gates still outstanding, the guard *itself* launches the required
+    reviewer subagents, records each `Verdict:`, and either reports completion (all
+    PASS) or feeds the blocking findings back for another fix → review cycle (any
+    FAIL) — bounded by `maxReviewCycles`. The model is never relied on to call the
+    task tool for reviews. Toggle with `programmaticReview`.
   - **Never stops early**: if a goal session goes idle while the goal is still
     incomplete, the guard automatically continues the agent (telling it exactly
     what's left) so it keeps working until the goal is actually done — never sitting
@@ -342,6 +349,10 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `enforceCompletion` / `GOAL_GUARD_ENFORCE_COMPLETION` | `true` | Rewrite premature `Goal Completed`. |
 | `autoContinue` / `GOAL_GUARD_AUTO_CONTINUE` | `true` | Auto-continue an idle goal that isn't complete yet, so it never stops early. |
 | `maxAutoContinue` / `GOAL_GUARD_MAX_AUTO_CONTINUE` | `50` | Hard cap on automatic continuations per goal session. |
+| `programmaticReview` / `GOAL_GUARD_PROGRAMMATIC_REVIEW` | `true` | Have the guard launch the required reviewer subagents itself on idle, instead of relying on the model to call the task tool. |
+| `reviewTimeoutMs` / `GOAL_GUARD_REVIEW_TIMEOUT_MS` | `360000` | Per-reviewer wall-clock cap (ms) for a programmatic review run. |
+| `reviewPollMs` / `GOAL_GUARD_REVIEW_POLL_MS` | `2500` | Poll cadence (ms) while waiting for a launched reviewer to render its verdict. |
+| `maxReviewCycles` / `GOAL_GUARD_MAX_REVIEW_CYCLES` | `12` | Hard cap on programmatic review cycles per goal; on reaching it, the guard pauses for you. |
 | `abortGraceMs` / `GOAL_GUARD_ABORT_GRACE_MS` | `1200` | Grace (ms) before an idle goal auto-continues, so a user cancel is honored regardless of event order. Lowering it only cuts latency; `0` removes the grace and weakens cancel detection. |
 | `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live state into the prompt. |
 | `persist` / `GOAL_GUARD_PERSIST` | `true` | Persist state under the XDG state dir. |
@@ -355,6 +366,8 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Colour of the GOAL label for a **running** goal. |
 | `sidebarDoneColor` / `GOAL_GUARD_SIDEBAR_DONE_COLOR` | `#FF5555` | Colour of a **done** goal in the sidebar (red). |
 | `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Reserved muted colour for no-goal projections. |
+| `completionMarker` / `GOAL_GUARD_COMPLETION_MARKER` | `Goal Completed` | Phrase that, at the start of an assistant message, claims completion. |
+| `blockedMarker` / `GOAL_GUARD_BLOCKED_MARKER` | `Goal Not Completed` | Replacement marker written when a completion claim is blocked. |
 
 ## Custom tools
 

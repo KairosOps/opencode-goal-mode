@@ -16,7 +16,7 @@
 import { missingGates, completionAllowed } from "./gates.js";
 import { summarizeState } from "./summary.js";
 
-const CYCLES_RE = /Review cycles:\s*(\d+)/i;
+const CYCLES_RE = /Review cycles:\s*(\d+)/gi;
 
 /**
  * @returns {{ blocked: boolean, reason?: string, replacement?: string, claimedCycles?: number }}
@@ -39,14 +39,22 @@ export function evaluateCompletionClaim(state, config, text) {
   // through unrewritten. Still start-of-line anchored (a wrapper char must be
   // IMMEDIATELY followed by the marker), so a mid-sentence mention or a prose line
   // that merely opens with a quote is never policed.
-  const PREFIX = "(?:<[^>]{0,24}>|\\[[ xX]?\\]|[\\s>*_#\\-`~\"'()\\[\\]]|\\p{Extended_Pictographic}|\\uFE0F|\\d+[.)])*";
+  // \s does NOT cover zero-width / bidi / word-joiner code points (U+200B–U+200F,
+  // U+2060, U+00AD soft hyphen, U+FEFF), so a premature claim prefixed with one of
+  // them slipped past the marker unrewritten. Fold them into the leading class.
+  const PREFIX = "(?:<[^>]{0,24}>|\\[[ xX]?\\]|[\\s>*_#\\-`~\"'()\\[\\]\\u00AD\\u200B-\\u200F\\u2060\\uFEFF]|\\p{Extended_Pictographic}|\\uFE0F|\\d+[.)])*";
   const markerRe = new RegExp(`^${PREFIX}${escaped}`, "imu");
 
   if (!text || !markerRe.test(text)) return { blocked: false };
   // Only police active goal sessions.
   if (!state.active) return { blocked: false };
 
-  const match = text.match(CYCLES_RE);
+  // Take the LAST "Review cycles: N" — the conclusion line. An earlier mention
+  // (a quoted example, a recap of a prior turn) must not be read as the claim and
+  // wrongly reject a valid completion whose real count appears later. matchAll is
+  // required here: `String.match` with a /g/ regex drops capture groups.
+  const cyclesMatches = [...text.matchAll(CYCLES_RE)];
+  const match = cyclesMatches.length ? cyclesMatches[cyclesMatches.length - 1] : null;
   const claimedCycles = match ? Number.parseInt(match[1], 10) : -1;
   const summary = summarizeState(state, config);
 
