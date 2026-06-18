@@ -442,3 +442,56 @@ test("safe commands stay completely clean after the hardening", () => {
   assert.equal(b.destructive, false);
   assert.equal(b.networkExec, false);
 });
+
+// ---------------------------------------------------------------------------
+// v0.5.2 adversarial hardening — gaps surfaced by the deep adversarial battery.
+// ---------------------------------------------------------------------------
+
+test("[7] Perl/Ruby bare system()/exec() shelling out to rm is destructive", () => {
+  for (const cmd of [
+    `perl -e 'system("rm -rf /")'`,
+    `perl -e 'exec("rm -rf /tmp/x")'`,
+    `ruby -e 'system("rm -rf foo")'`,
+    `ruby -e 'exec("rm -rf bar")'`,
+    `perl -e 'popen("rm -rf /","r")'`,
+  ]) {
+    assert.equal(looksLikeDestructiveBash(cmd), true, `${cmd} must be destructive`);
+  }
+});
+
+test("[7] a method-call .system()/.exec() is NOT over-blocked", () => {
+  // platform.system() / process.platform are benign diagnostics, not a shell-out.
+  for (const cmd of [
+    `python3 -c 'print(platform.system())'`,
+    `python3 -c 'import platform; platform.system()'`,
+    `node -e 'console.log(process.platform)'`,
+    `ruby -e 'puts "operating system name"'`,
+  ]) {
+    const a = analyzeCommand(cmd);
+    assert.equal(a.destructive, false, `${cmd} must not be destructive`);
+    assert.equal(a.networkExec, false, `${cmd} must not be networkExec`);
+  }
+});
+
+test("[8] a truncating redirect onto a raw device or system path is destructive", () => {
+  for (const cmd of ["cat junk > /dev/sda", "echo x > /dev/nvme0n1", "echo x > /etc/passwd", ": > /boot/grub.cfg"]) {
+    assert.equal(looksLikeDestructiveBash(cmd), true, `${cmd} must be destructive`);
+  }
+  // ordinary file redirects (incl. append, /tmp, home) stay mutating-not-destructive
+  for (const cmd of ["echo x > out.txt", "echo x >> /etc/hosts", "echo x > /tmp/n.txt", "echo x > ~/notes.txt"]) {
+    assert.equal(analyzeCommand(cmd).destructive, false, `${cmd} must not be destructive`);
+  }
+});
+
+test("[9] git stash clear/drop is destructive; pop/apply/list is not", () => {
+  assert.equal(looksLikeDestructiveBash("git stash clear"), true);
+  assert.equal(looksLikeDestructiveBash("git stash drop"), true);
+  assert.equal(analyzeCommand("git stash pop").destructive, false);
+  assert.equal(analyzeCommand("git stash apply").destructive, false);
+  assert.equal(analyzeCommand("git stash list").destructive, false);
+});
+
+test("[10] crontab -r is destructive; crontab -l is not", () => {
+  assert.equal(looksLikeDestructiveBash("crontab -r"), true);
+  assert.equal(analyzeCommand("crontab -l").destructive, false);
+});

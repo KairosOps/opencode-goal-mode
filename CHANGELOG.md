@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.5.2
+
+### Shell-guard adversarial hardening — real bypasses closed
+
+A deep adversarial battery (try-hard-to-slip-a-destructive-command-past-the-guard,
+plus an over-block guard corpus, plus a live end-to-end block confirmed against a
+fresh install) surfaced four **real** gaps in the destructive-command analyzer. All
+are now blocked, with **zero new false-positives** (every fix has a regression test;
+**317 tests pass**):
+
+- **Perl/Ruby `system()` / `exec()` / `popen()` shell-outs were not detected.** Only
+  Python's `os.system(...)` was caught; bare-call forms (`perl -e 'system("rm -rf /")'`,
+  `ruby -e 'exec("rm -rf x")'`) slipped through. They are now classified destructive.
+  A method call like `platform.system()` / `obj.exec()` is deliberately NOT over-blocked
+  (matched only when the call is not preceded by a `.` or word char).
+- **A truncating redirect onto a raw block device or a system path is now destructive**
+  (`cat x > /dev/sda`, `echo x > /etc/passwd`). Ordinary file redirects — including
+  append, `/tmp`, and home paths — remain mutating-not-destructive.
+- **`git stash clear` / `git stash drop`** (irreversible stash loss) are now destructive;
+  `pop` / `apply` / `list` are unaffected.
+- **`crontab -r`** (removes the user's entire crontab) is now destructive; `crontab -l`
+  is unaffected.
+
+Known, deliberately-unchanged fail-open cases (undecidable by static analysis; the host's
+own permission rules still apply): variable-indirected (`X=rm; $X -rf /`) and `$IFS`-split
+command names, and truncating a home dotfile via `>` (indistinguishable from a normal
+output redirect). These mirror the existing documented `git checkout <file>` heuristic gap.
+
 ## v0.5.1
 
 ### Verification / maintenance — fresh-install confirmed working for new users

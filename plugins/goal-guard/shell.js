@@ -631,6 +631,15 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
     return;
   }
 
+  // crontab -r removes the user's entire crontab (irreversible).
+  if (bin === "crontab") {
+    if (hasFlag(args, ["-r"])) {
+      acc.destructive = true;
+      acc.reasons.push("crontab -r");
+    }
+    return;
+  }
+
   // sed -i / perl -pi handled in MUTATING via flags
   if (bin === "sed" || bin === "gsed") {
     if (hasFlag(args, ["-i", "--in-place"]) || args.some((a) => a.startsWith("-i"))) {
@@ -894,7 +903,13 @@ const SCRIPT_WRITE_RE = /(writeFile|appendFile|copyFile|mkdir|createWriteStream|
 // such as "system"/"popen" or a reference like `child_process.exec` without a
 // call is not treated as a shell-out. This prevents over-blocking benign
 // diagnostics like `python -c 'print(platform.system())'`.
-const EXEC_SINK_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|\.execSync|\.execFileSync|\.exec|\.execFile|\.spawnSync|\.spawn|\bexecSync|\bexecFileSync|\bspawnSync|\bexecvp?\b)\s*\(/g;
+//
+// The bare `system(`/`exec(`/`popen(` forms (Perl/Ruby's standard shell-out,
+// e.g. `perl -e 'system("rm -rf /")'`) are matched ONLY when not preceded by a
+// `.` or word char — so a method call like `platform.system(` or `obj.exec(` is
+// NOT caught by this arm (those are handled by the `os.system`/`.exec` arms when
+// they are genuine sinks), keeping benign diagnostics from over-blocking.
+const EXEC_SINK_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|\.execSync|\.execFileSync|\.exec|\.execFile|\.spawnSync|\.spawn|\bexecSync|\bexecFileSync|\bspawnSync|\bexecvp?\b|(?<![.\w])system|(?<![.\w])exec|(?<![.\w])popen)\s*\(/g;
 
 /** Extract the shell command an exec sink runs (handles a string or an argv list). */
 function extractExecCommand(code) {
@@ -1126,7 +1141,11 @@ function classifyGit(args, depth, acc) {
       acc.reasons.push("git rm");
       return;
     case "stash":
-      if (rest[0] === "drop" || rest[0] === "clear" || rest[0] === "pop") {
+      if (rest[0] === "drop" || rest[0] === "clear") {
+        // Irreversibly discards saved stashes.
+        acc.destructive = true;
+        acc.reasons.push(`git stash ${rest[0]}`);
+      } else if (rest[0] === "pop" || rest[0] === "apply") {
         acc.mutating = true;
         acc.reasons.push(`git stash ${rest[0]}`);
       }
@@ -1151,10 +1170,23 @@ function classifyGit(args, depth, acc) {
   }
 }
 
-/** Redirections to anything other than /dev/null write to the filesystem. */
+/** A raw block/disk device — truncating/overwriting it destroys a filesystem. */
+const DEVICE_TARGET_RE = /^\/dev\/(sd|nvme|hd|vd|disk|mapper|loop|sr|md|xvd)/;
+/** A system path whose truncation is irreversible damage (not user project files). */
+const SYSTEM_TARGET_RE = /^\/(etc|usr|bin|sbin|boot|lib|lib64|sys|root|proc)\b/;
+
+/** Redirections to anything other than /dev/null write to the filesystem. A
+ * TRUNCATING redirect (`>`/`&>`) onto a raw device or a system path is
+ * irreversible, so it is destructive rather than merely mutating. */
 function applyRedirects(redirects, acc) {
   for (const r of redirects) {
-    if ((r.op === ">" || r.op === ">>" || r.op === "&>" || r.op === "2>") && r.target && !/^\/dev\/(null|stdout|stderr|tty|fd)/.test(r.target) && r.target !== "&1" && r.target !== "&2") {
+    if (!((r.op === ">" || r.op === ">>" || r.op === "&>" || r.op === "2>") && r.target)) continue;
+    if (/^\/dev\/(null|stdout|stderr|tty|fd)/.test(r.target) || r.target === "&1" || r.target === "&2") continue;
+    const truncating = r.op === ">" || r.op === "&>";
+    if (truncating && (DEVICE_TARGET_RE.test(r.target) || SYSTEM_TARGET_RE.test(r.target))) {
+      acc.destructive = true;
+      acc.reasons.push(`truncating redirect ${r.op} ${r.target}`);
+    } else {
       acc.mutating = true;
       acc.reasons.push(`redirect ${r.op} ${r.target}`);
     }
