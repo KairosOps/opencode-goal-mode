@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.4
+
+### README rewritten as a confident product page
+
+- The README now reads as a marketing-grade landing page: a centered hero with a sharp
+  tagline and one-line install, the two signature demos (the `Goal Completed` →
+  `Goal Not Completed` rewrite and a blocked `rm -rf`), benefit-led feature highlights, a
+  bold stats row (93.3% / 0.2% / ~1µs), and a head-to-head comparison table vs Claude
+  Code and Codex. Every claim remains verified against the code and the
+  [comparison research](research/goal-mode-comparison.md) (the Codex row credits its
+  sandbox-based command protection). Trimmed to ~265 lines. No behavior changes.
+
 ## v0.6.3
 
 ### README redesigned for first-time visitors + a code-driven-review polish
