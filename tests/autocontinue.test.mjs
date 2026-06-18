@@ -15,26 +15,31 @@ function allBaseGatesPassing(seq = 10) {
   return v;
 }
 
-test("an active incomplete goal that goes idle → continue with a FORCING review directive", () => {
+test("an active incomplete goal that goes idle → continue, telling the agent the guard reviews automatically", () => {
   const st = goalState({ goalText: "ship the feature" });
   const d = evaluateAutoContinue(st, DEFAULT_CONFIG);
   assert.equal(d.continue, true);
   assert.match(d.message, /not complete/i);
   assert.match(d.message, /goal_status/);
-  // Reviews are programmatically forced: the message names the outstanding reviewers,
-  // commands invoking them via the task tool, and states they cannot be skipped.
-  assert.match(d.message, /task tool/i);
-  assert.match(d.message, /cannot be skipped/i);
+  // programmaticReview is ON by default → the guard runs the reviews itself, so the agent
+  // is told NOT to call reviewers. The message names the outstanding gates but issues no
+  // task-tool directive (that was the bug: the agent was being told to run them).
+  assert.match(d.message, /do NOT call any reviewer|runs the required reviews itself/i);
   assert.match(d.message, /goal-reviewer/);
+  assert.doesNotMatch(d.message, /task tool|task\(subagent_type/i);
   assert.equal(st.autoContinueCount, 1);
 });
 
-test("continuation message gives the exact task invocation for the first missing gate", () => {
+test("continuation message: programmatic-on tells the agent NOT to call reviewers; off gives the task invocation", () => {
   const st = goalState({ goalText: "ship the feature", contract: { acceptanceCriteria: ["x"], original: "ship the feature" } });
-  const msg = continuationMessage(st, DEFAULT_CONFIG);
-  // A copyable, concrete next action — not just "reviews are required".
-  assert.match(msg, /task\(subagent_type:\s*"goal-prompt-auditor"/);
-  assert.match(msg, /Verdict: PASS/);
+  // programmaticReview ON (default): the guard reviews itself — no task-tool directive.
+  const on = continuationMessage(st, { ...DEFAULT_CONFIG, programmaticReview: true });
+  assert.doesNotMatch(on, /task\(subagent_type/);
+  assert.match(on, /do NOT call any reviewer/i);
+  // programmaticReview OFF: fall back to a copyable, concrete task invocation.
+  const off = continuationMessage(st, { ...DEFAULT_CONFIG, programmaticReview: false });
+  assert.match(off, /task\(subagent_type:\s*"goal-prompt-auditor"/);
+  assert.match(off, /Verdict: PASS/);
 });
 
 test("continuation message tells the model to record a Goal Contract when none exists", () => {

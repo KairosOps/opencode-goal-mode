@@ -84,6 +84,24 @@ test("[bughunt rl1/rl2] the review loop is bounded by reviewRunCount (no runaway
   assert.ok(launches < 30, `reviewer launches bounded, not one+ per idle forever (got ${launches})`);
 });
 
+test("[live-parity] the guard runs the reviewers ITSELF even when NO model was captured (model is optional)", async () => {
+  // Mirrors the live TUI bug: chat.params didn't surface a model in the expected shape, so
+  // sessionModel stays empty. The guard must STILL launch the reviewers programmatically —
+  // not fall back to nagging the agent to call them via the task tool.
+  const { guard, prompts } = makeReviewingGuard("PASS");
+  // Start a goal WITH work but never deliver a parseable model.
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal" }, {}); // no model field
+  await guard.hooks["chat.message"]({ sessionID: "g", agent: "goal" }, { parts: [{ type: "text", text: "implement and verify the feature" }] });
+  await guard.hooks["tool.execute.after"]({ tool: "edit", sessionID: "g", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+
+  const reviewerLaunches = prompts.filter((p) => p.agent && p.agent.startsWith("goal-"));
+  assert.ok(reviewerLaunches.length >= 5, `guard launched the reviewers itself without a captured model (got ${reviewerLaunches.length})`);
+  // and it did NOT fall back to telling the agent to run reviews via the task tool
+  assert.ok(!prompts.some((p) => !p.agent && /task tool|task\(subagent_type/i.test(p.text)), "no task-tool nudge sent to the agent");
+  assert.equal(completionAllowed(guard.store.stateFor("g"), guard.config), true);
+});
+
 test("the model is captured from chat.params so the reviewers can be launched", async () => {
   // Without a captured model the guard can't launch reviewers — prove capture works.
   const { guard, prompts } = makeReviewingGuard("PASS");

@@ -481,9 +481,14 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
               // launch each outstanding reviewer, record verdicts (one full pass = one
               // review cycle), then either tell the agent it is complete (all PASS) or
               // hand it the blocking findings to fix (any FAIL) so the next idle re-reviews.
+              // The model is captured opportunistically and passed through when known, but it
+              // is NOT required: a launched reviewer session inherits the session default model
+              // when none is given (review-runner only sets `model` if truthy). Requiring it
+              // here wrongly fell back to nagging the agent to run reviews via the task tool
+              // whenever chat.params didn't surface a model in the expected shape.
               const model = sessionModel.get(sessionID);
               const hasWork = state.dirty || (state.lastEditSeq || 0) > 0;
-              if (config.programmaticReview && hasWork && model && clientCanReview(input.client)) {
+              if (config.programmaticReview && hasWork && clientCanReview(input.client)) {
                 // Bound the loop by review-cycle RUNS (not reviewCycles, which only counts
                 // concluded final-auditor verdicts) — otherwise a reviewer that never renders
                 // a verdict pins reviewCycles at 0 and the loop runs away.

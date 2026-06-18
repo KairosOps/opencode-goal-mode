@@ -41,9 +41,12 @@ export function progressSignature(state) {
 }
 
 /** Build the "keep going" message the agent receives, naming what is still owed.
- * When review gates are outstanding it is an explicit, non-optional directive to
- * run those exact reviews via the task tool before anything else — the reviews are
- * forced, not suggested. */
+ *
+ * When `programmaticReview` is on (the default) the reviews are run BY THE GUARD ITSELF
+ * the moment the agent stops — so the message explicitly tells the agent NOT to call any
+ * reviewer; its job is only to implement and verify. Only when programmatic review is
+ * disabled (or unavailable) does the message fall back to directing the agent to run the
+ * exact reviewer gates via the task tool. */
 export function continuationMessage(state, config) {
   const missing = missingGates(state, config);
   const lines = ["The goal is NOT complete — do not stop. Continue working now."];
@@ -54,15 +57,26 @@ export function continuationMessage(state, config) {
     lines.push("There are changes that are not yet reviewed/verified after your latest edits — actually run the code/tests and record it with `goal_evidence`.");
   }
   if (missing.length) {
-    const next = missing[0];
-    lines.push(
-      `REQUIRED REVIEWS ARE NOT DONE and cannot be skipped. For EACH of these, make one ` +
-        `task tool call whose subagent_type is that exact reviewer id, fix every blocking finding, and ` +
-        `re-run until it returns "Verdict: PASS": ${missing.join(", ")}. ` +
-        `Start now with: task(subagent_type: "${next}", description: "${next} review", ` +
-        `prompt: "Review the latest changes against the goal and end with a \\"Verdict: PASS\\" or \\"Verdict: FAIL\\" line."). ` +
-        `Do not write a summary, ask the user anything, or claim completion until they all pass.`,
-    );
+    if (config?.programmaticReview) {
+      lines.push(
+        `The Goal Guard runs the required reviews itself, automatically, the moment you stop — ` +
+          `do NOT call any reviewer yourself (no \`task\` calls to goal-* reviewers). ` +
+          `Keep implementing and verifying; when you believe the goal is done, just stop. ` +
+          `The guard will then run the outstanding gates (${missing.join(", ")}) in one pass, ` +
+          `and either re-prompt you with the exact blocking findings to fix or open completion. ` +
+          `Never claim completion yourself until the guard confirms every review passed.`,
+      );
+    } else {
+      const next = missing[0];
+      lines.push(
+        `REQUIRED REVIEWS ARE NOT DONE and cannot be skipped. For EACH of these, make one ` +
+          `task tool call whose subagent_type is that exact reviewer id, fix every blocking finding, and ` +
+          `re-run until it returns "Verdict: PASS": ${missing.join(", ")}. ` +
+          `Start now with: task(subagent_type: "${next}", description: "${next} review", ` +
+          `prompt: "Review the latest changes against the goal and end with a \\"Verdict: PASS\\" or \\"Verdict: FAIL\\" line."). ` +
+          `Do not write a summary, ask the user anything, or claim completion until they all pass.`,
+      );
+    }
   }
   lines.push(
     "Call goal_status if unsure what is required. Only finish with `Goal Completed` (and an accurate `Review cycles: N`) once goal_status reports completion is allowed.",

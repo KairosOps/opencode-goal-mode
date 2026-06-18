@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.6.5
+
+### Fix: reviews now actually run programmatically (the agent is never told to run them)
+
+The headline behavior — the guard launching the review subagents *itself* — was silently
+falling back to nagging the **agent** to run the reviews via the task tool whenever a
+model hadn't been captured from `chat.params`. In a live OpenCode TUI that's exactly what
+happened: users saw a "make one task tool call whose subagent_type is …" directive instead
+of the guard reviewing on its own.
+
+- **Root cause.** The idle handler required a captured model before taking the programmatic
+  path (`… && model && clientCanReview(…)`). But a launched reviewer session doesn't need
+  one — it inherits the session's default model (`review-runner` only sets `model` when
+  it's known). The model requirement is dropped; it's now passed through opportunistically
+  when available and ignored when not, so the guard runs the reviewers itself whenever the
+  host can drive sessions.
+- **The agent is never told to call reviewers when `programmaticReview` is on.** The
+  auto-continue "keep going" message is now mode-aware: with programmatic review on
+  (default) it tells the agent the guard reviews automatically when it stops and to **not**
+  call any reviewer itself; only with programmatic review disabled does it fall back to the
+  explicit task-tool directive. (The system-prompt block already behaved this way.)
+- The result is the intended single flow: the agent implements and verifies, stops, the
+  guard runs one full review cycle on its own, and either re-prompts with blocking findings
+  to fix or opens completion — repeating until done, with no manual reviewer calls.
+
+Covered by a new integration test that drives an idle goal with **no captured model** and
+asserts the guard still launches all required reviewers (345 tests).
+
 ## v0.6.4
 
 ### README rewritten as a confident product page
