@@ -1,0 +1,10 @@
+{
+  "name": "goal-lab",
+  "private": true,
+  "type": "module",
+  "description": "Goal Lab — a browser observatory that drives many concurrent Goal Mode agents on free OpenCode Zen models, captures every event + guard signal, auto-investigates failures, and mines the data into concrete plugin improvements.",
+  "scripts": {
+    "start": "node server/index.mjs",
+    "lab": "node server/index.mjs"
+  }
+}

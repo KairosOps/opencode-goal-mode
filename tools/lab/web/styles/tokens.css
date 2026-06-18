@@ -1,0 +1,110 @@
+/*
+ * Goal Lab — design tokens, Cloudflare / Kumo design language (light only).
+ *
+ * Built from Kumo's real token system: the OKLCH neutral ramp, the Cloudflare
+ * brand orange (#f6821f), and Kumo's semantic roles (link/info=blue,
+ * success=emerald, danger=red, warning=yellow). Color is used ONLY to carry
+ * meaning — status, problems, verdicts — never for decoration. The surface is a
+ * Cloudflare-dashboard light theme: white cards on a faint gray canvas, hairline
+ * borders, a whisper of shadow, restrained rounding. A real diagnostic dev tool.
+ */
+
+:root {
+  /* neutral ramp (Kumo OKLCH grays) */
+  --n-0: #ffffff;
+  --n-25: oklch(99% 0 0);
+  --n-50: oklch(98.4% 0 0);
+  --n-75: oklch(97.6% 0 0);
+  --n-100: oklch(96.5% 0 0);
+  --n-150: oklch(94.5% 0 0);
+  --n-200: oklch(92.2% 0 0);
+  --n-300: oklch(87% 0 0);
+  --n-400: oklch(74% 0 0);
+  --n-500: oklch(60% 0 0);
+  --n-600: oklch(50% 0 0);
+  --n-700: oklch(41% 0 0);
+  --n-800: oklch(31% 0 0);
+  --n-900: oklch(24% 0 0);
+  --n-950: oklch(17% 0 0);
+
+  /* surfaces */
+  --canvas: oklch(97.4% 0 0);
+  --card: #ffffff;
+  --elevated: #ffffff;
+  --recessed: oklch(98% 0 0);
+  --tint: oklch(96% 0 0);
+  --hover: oklch(96.5% 0 0);
+  --sel: oklch(95% 0.02 250);
+
+  /* text */
+  --text: oklch(28% 0 0);
+  --text-strong: oklch(18% 0 0);
+  --text-subtle: oklch(48% 0 0);
+  --text-faint: oklch(60% 0 0);
+  --text-inverse: #ffffff;
+
+  /* borders */
+  --border: oklch(89% 0 0);
+  --border-strong: oklch(82% 0 0);
+  --border-faint: oklch(93.5% 0 0);
+  --grid-line: oklch(91% 0 0);
+
+  /* Cloudflare brand — used sparingly: primary action, active accent */
+  --brand: #f6821f;
+  --brand-hover: #e0700f;
+  --brand-weak: oklch(95% 0.05 65);
+
+  /* semantic — strong (ink) + weak (surface) + border */
+  --ok: oklch(52% 0.12 160);
+  --ok-weak: oklch(95.5% 0.04 165);
+  --ok-border: oklch(83% 0.07 165);
+
+  --danger: oklch(54% 0.21 27);
+  --danger-weak: oklch(95.5% 0.04 27);
+  --danger-border: oklch(85% 0.09 27);
+
+  --warn: oklch(64% 0.14 70);
+  --warn-weak: oklch(96% 0.05 80);
+  --warn-border: oklch(85% 0.09 75);
+
+  --info: oklch(54% 0.15 250);
+  --info-weak: oklch(96% 0.03 250);
+  --info-border: oklch(85% 0.07 250);
+
+  --neutral: oklch(55% 0 0);
+  --neutral-weak: oklch(95% 0 0);
+
+  /* chart series (neutral by default; semantic only when it means something) */
+  --series: oklch(45% 0 0);
+  --series-soft: oklch(78% 0 0);
+  --fill-strong: oklch(42% 0 0);
+  --fill-mid: oklch(70% 0 0);
+  --fill-soft: oklch(91% 0 0);
+
+  /* shape */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.06);
+  --shadow: 0 1px 2px oklch(0% 0 0 / 0.06), 0 2px 6px oklch(0% 0 0 / 0.05);
+
+  /* type */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --fs-micro: 10px;
+  --fs-tiny: 11px;
+  --fs-small: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-data: 28px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 30px;
+}
