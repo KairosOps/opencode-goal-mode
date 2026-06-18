@@ -6,7 +6,8 @@
  * persistence, completion enforcement) lives in those modules and is unit
  * tested in isolation; the entry is just orchestration.
  *
- * Design notes (verified against @opencode-ai/plugin@1.15.13 source):
+ * Design notes (verified against the @opencode-ai/plugin hook surface, peer range
+ * >=1.15.0, pinned in devDependencies to 1.17.6):
  *  - State is created PER PLUGIN INSTANCE (no module globals), so concurrent
  *    projects cannot cross-contaminate, and is persisted to the XDG state dir
  *    so it survives OpenCode restarts.

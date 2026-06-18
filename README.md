@@ -1,9 +1,81 @@
 # OpenCode Goal Mode
 
-Strict Goal Mode for OpenCode: a primary `goal` agent, specialized review
-subagents, slash commands, a `goal-guard` plugin that enforces review discipline
-and blocks destructive shell commands, and a structured Goal-owned todo section
-in the TUI sidebar.
+**Your OpenCode agent can't claim it's done until the reviews actually pass — and it can't run a destructive shell command by accident.**
+
+Goal Mode is a strict primary `goal` agent plus a `goal-guard` plugin that enforces
+delivery discipline at the **harness layer**, not with prompt wishes. The model is
+mechanically blocked from answering `Goal Completed` until every required review gate
+has a *fresh* PASS, and irreversible shell commands (`rm -rf`, `git reset --hard`,
+`curl | sh`, …) are blocked before they execute.
+
+[![npm version](https://img.shields.io/npm/v/opencode-goal-mode?color=2da44e&label=npm)](https://www.npmjs.com/package/opencode-goal-mode)
+[![npm downloads](https://img.shields.io/npm/dm/opencode-goal-mode?color=2da44e)](https://www.npmjs.com/package/opencode-goal-mode)
+[![CI](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml)
+[![Release](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml)
+[![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
+[![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
+
+**The problem.** Coding agents declare success prematurely — and occasionally run a
+command that eats your work. "Please review yourself and don't stop until it's done" is
+just a prompt; a confident-enough model talks right past it. Goal Mode makes both
+guarantees *mechanical* instead of hoping the model complies.
+
+**[See it in action](#see-it-in-action) · [What you get](#what-you-get) · [Install](#install) · [Quick start](#quick-start) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting) · [Architecture](ARCHITECTURE.md)**
+
+## See it in action
+
+When the agent claims completion before the gates pass, the guard intercepts the
+finished message and rewrites it:
+
+```diff
+- Goal Completed
++ Goal Not Completed
++
++ Goal Guard blocked completion: required review gates are missing or stale
++ (goal-security-reviewer, goal-final-auditor). State: active=true; dirty=true;
++ reviewCycles=1; missingGates=goal-security-reviewer goal-final-auditor
+```
+
+When the agent reaches for an irreversible command, the guard throws *before* it runs:
+
+```text
+$ rm -rf build
+✕ Goal Guard blocked a destructive or high-risk bash command
+  (rm with recursive force deletion). Use a safer, reversible command
+  or ask the user to confirm.
+```
+
+![OpenCode Goal Mode sidebar preview](docs/sidebar-preview.png)
+
+<sub>↑ In a goal session, the Goal plugin takes over the sidebar todo section with a
+structured, evidence-aware Goal todo list — a bold `GOAL` label, then the goal title,
+gate progress, and per-acceptance/gate todo rows, each on its own line in its own
+colour. Build and every other mode keep OpenCode's native todo section — see
+[TUI integration](#tui-integration).</sub>
+
+## What you get
+
+- **Completion you can trust.** The model cannot answer `Goal Completed` until every
+  required reviewer has a fresh `Verdict: PASS` and the claimed `Review cycles: N`
+  matches the recorded counter. A premature claim is rewritten to `Goal Not Completed`
+  with the exact missing gates.
+- **Reviews that always run.** When a goal goes idle with work done and gates
+  outstanding, the guard *itself* launches the required reviewer subagents, records each
+  verdict, and loops *fix → review* until they pass — it never depends on the model
+  remembering to review (toggle: `programmaticReview`).
+- **Edits invalidate stale approvals.** A gate counts only when its PASS is newer (by a
+  monotonic integer sequence) than the last edit, so any change forces the relevant
+  reviews to re-run before completion can reopen.
+- **Destructive commands blocked by a real shell tokenizer**, not a regex — it catches
+  `$(rm …)`, `bash -c "…"`, `/bin/rm`, `busybox rm -rf`, `git -C … reset --hard`, and
+  `curl | sh` without false-positiving `git checkout -b`.
+- **Specialist reviews auto-selected.** Security, API, data, performance, tests, UX,
+  ops, docs, and quality gates become required automatically from the goal text,
+  contract, and changed files — not left to the model's discretion.
+- **Never stops early.** An idle-but-incomplete goal is automatically continued (told
+  exactly what's left), with a hard cap and a no-progress circuit-breaker as backstops.
+- **A live Goal todo in the TUI sidebar** (experimental) — gate progress and
+  per-criterion todos, derived from real guard state.
 
 ## Install
 
@@ -14,27 +86,23 @@ in the TUI sidebar.
 npm install -g opencode-goal-mode && opencode-goal-mode --global
 ```
 
-Then **restart OpenCode**. That's the whole install — it copies the Goal agent,
-review subagents, slash commands, and guard plugin into `~/.config/opencode`, and
-merge-safely registers the Goal todo sidebar in `~/.config/opencode/tui.json`.
-In the agent picker you'll see only the **`goal`** agent; reviewers are subagents
-it drives automatically. The install is **idempotent** (re-run it to upgrade in
-place), never touches files you've edited, and `--uninstall` removes exactly what
-it added. Goal Mode inherits your existing OpenCode model/provider.
+Then **restart OpenCode**. That's the whole install — it copies the Goal agent, review
+subagents, slash commands, and guard plugin into `~/.config/opencode`, and merge-safely
+registers the Goal todo sidebar in `~/.config/opencode/tui.json`. In the agent picker
+you'll see only the **`goal`** agent; reviewers are subagents it drives automatically.
+The install is **idempotent** (re-run it to upgrade in place), never touches files
+you've edited, and `--uninstall` removes exactly what it added. Goal Mode inherits your
+existing OpenCode model/provider.
 
 <details>
 <summary>Other ways to install</summary>
 
 ```bash
-# Global npm install, then run the installer separately
-npm install -g opencode-goal-mode
-opencode-goal-mode --global          # alias of opencode-goal-mode-install
-
 # Preview first, then install (no writes on --dry-run)
 opencode-goal-mode --global --dry-run
 
-# One-off install with npx (no global package needed; OpenCode still loads the TUI
-# sidebar — it resolves that from its own plugin cache, not the global install)
+# One-off with npx (no global package needed; OpenCode still loads the TUI sidebar —
+# it resolves that from its own plugin cache, not the global install)
 npx opencode-goal-mode --global
 
 # Into a single project (writes ./.opencode, including ./.opencode/tui.json)
@@ -48,96 +116,72 @@ git clone https://github.com/devinoldenburg/opencode-goal-mode
 cd opencode-goal-mode && npm ci && npm run install:global
 ```
 
-Use global install for normal daily use. Use project install only when you want
-Goal Mode scoped to one repo and your OpenCode build reads project `.opencode`
-config, including `.opencode/tui.json`. See [Installer options](#installer-options).
+`--global` writes to `~/.config/opencode`; no flag writes to `./.opencode`; `--target`
+writes to exactly the directory you pass. Use a project install only when you want Goal
+Mode scoped to one repo and your OpenCode build reads project `.opencode` config
+(including `.opencode/tui.json`). See [Installer options](#installer-options).
 </details>
-
-[![npm version](https://img.shields.io/npm/v/opencode-goal-mode?color=2da44e&label=npm)](https://www.npmjs.com/package/opencode-goal-mode)
-[![npm downloads](https://img.shields.io/npm/dm/opencode-goal-mode?color=2da44e)](https://www.npmjs.com/package/opencode-goal-mode)
-[![CI](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/ci.yml)
-[![Release](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml/badge.svg)](https://github.com/devinoldenburg/opencode-goal-mode/actions/workflows/publish.yml)
-[![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
-[![node](https://img.shields.io/node/v/opencode-goal-mode?color=2da44e)](package.json)
-
-![OpenCode Goal Mode sidebar preview](docs/sidebar-preview.png)
-
-<sub>↑ In goal mode, the Goal plugin takes over the sidebar todo section with a
-structured, evidence-aware Goal todo list — a bold `GOAL` label, then the goal
-title, gate progress, and per-acceptance/gate todo rows, each on its own line in
-its own colour. Build and every other mode keep
-OpenCode's native todo section — see [TUI integration](#tui-integration).</sub>
-
-**[Quick start](#quick-start) · [Why it's different](#why-its-different) · [Benchmarks](#benchmarks-honest-edition) · [TUI integration](#tui-integration) · [Configuration](#configuration) · [Releasing](#releasing) · [Architecture](ARCHITECTURE.md)**
 
 ## Quick start
 
 ```bash
-# 1. Install (needs Node 20.11+ and OpenCode)
-npm install -g opencode-goal-mode
-opencode-goal-mode-install --global
-
-# 2. Restart OpenCode, then verify it loaded — you should see ONLY `goal (primary)`,
-#    with every specialist as a (subagent):
+# 1. Install (see above), then restart OpenCode and verify it loaded — you should see
+#    ONLY `goal (primary)`, with every specialist as a (subagent):
 opencode agent list | grep goal
 ```
 
-3. In OpenCode, start a goal:
+2. In OpenCode, start a goal:
 
    ```
    /goal add rate limiting to the login endpoint and prove it works
    ```
 
-   The `goal` agent writes a contract, delegates research/review to subagents, and
-   **cannot** answer `Goal Completed` until every required review gate passes — the
-   guard rewrites a premature claim to `Goal Not Completed`. Try a destructive
-   command mid-session (e.g. `rm -rf build`) and watch it get blocked. If your
-   OpenCode build supports TUI plugins, Goal sessions also get the Goal-owned
-   sidebar todo section (experimental — see [TUI integration](#tui-integration)).
+   The `goal` agent writes a contract, delegates research to subagents, implements,
+   and verifies — then stops. The guard runs the required reviews itself and **cannot**
+   let it answer `Goal Completed` until they pass. Try a destructive command mid-session
+   (e.g. `rm -rf build`) and watch it get blocked.
 
-That's it. Everything below is detail.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and [research/](research/)
-for the platform reference, comparison, and threat model.
+That's it. Everything below is detail. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
+design and [research/](research/) for the platform reference, comparison, and threat
+model.
 
 ## Why it's different
 
-Most "goal mode" / agentic setups are **prompt-only**: the model is *asked* to
-review its work and to keep going until done. Goal Mode adds a guard plugin that
-makes that discipline **mechanical at the harness layer** — the model cannot
-declare `Goal Completed` until the required reviews actually passed, and it
-is blocked from the benchmarked destructive-command bypasses that a regex guard
-would miss.
+Most "goal mode" / agentic setups are **prompt-only**: the model is *asked* to review
+its work and to keep going until done. Goal Mode adds a guard plugin that makes that
+discipline **mechanical at the harness layer** — the model cannot declare
+`Goal Completed` until the required reviews actually passed, and it is blocked from the
+benchmarked destructive-command bypasses a regex guard would miss.
 
 ![Mechanically-enforced goal discipline vs. Claude Code and Codex](docs/benchmarks/capability-matrix.svg)
 
-Compared to Claude Code and OpenAI Codex (full analysis, with citations and
-honest caveats, in [research/goal-mode-comparison.md](research/goal-mode-comparison.md)):
+Compared to Claude Code and OpenAI Codex (full analysis, with citations and honest
+caveats, in [research/goal-mode-comparison.md](research/goal-mode-comparison.md)) —
+claims below are scoped to the public docs reviewed there:
 
-- **It is the only one of the three that mechanically blocks a premature
-  completion claim by default.** Goal Mode intercepts the finished message and
-  rewrites `Goal Completed` → `Goal Not Completed` unless every required reviewer
-  gate has a *fresh* PASS and the claimed `Review cycles: N` matches the recorded
-  counter. Claude Code can do this only via a user-authored Stop hook; Codex's
-  code review is advisory.
-- **An edit automatically invalidates prior approvals.** A reviewer gate counts
-  only when its PASS is newer (by a monotonic integer sequence) than the last
-  edit — so any change forces the relevant reviews to re-run. The public Claude
-  Code and Codex docs reviewed do not describe this stale-review invariant.
-- **Required specialist reviews are auto-selected and enforced** (security, api,
-  data, performance …) from the goal text, contract, and changed files — not left
-  to the model's discretion.
-- **Destructive commands are blocked by a real shell tokenizer**, not a regex.
-  Claude Code's own docs call Bash argument-matching *"fragile"*.
+- **It mechanically blocks a premature completion claim by default.** Goal Mode
+  intercepts the finished message and rewrites `Goal Completed` → `Goal Not Completed`
+  unless every required reviewer gate has a *fresh* PASS and the claimed
+  `Review cycles: N` matches the recorded counter. Of the three, it is the only one that
+  does this out of the box — Claude Code can do it only via a user-authored Stop hook;
+  Codex's code review is advisory.
+- **An edit automatically invalidates prior approvals.** A reviewer gate counts only
+  when its PASS is newer (by a monotonic integer sequence) than the last edit. The
+  public Claude Code and Codex docs reviewed do not describe this stale-review invariant.
+- **Required specialist reviews are auto-selected and enforced** (security, api, data,
+  performance …) from the goal text, contract, and changed files — not left to the
+  model's discretion.
+- **Destructive commands are blocked by a real shell tokenizer**, not a regex. Claude
+  Code's own docs call Bash argument-matching *"fragile"*.
 
 ### Benchmarks (honest edition)
 
-The headline number is measured on commands **the analyzer was never fitted to**:
-704 real example commands from [tldr-pages](https://github.com/tldr-pages/tldr)
-(common/linux/osx), authored by hundreds of contributors who have never seen
-this guard. Ground-truth labels come from a deliberately simple, analyzer-*independent*
-rule (see [build-external-corpus.mjs](benchmarks/build-external-corpus.mjs)).
-Reproduce with `npm run bench` or `node benchmarks/external.mjs`.
+The headline number is measured on commands **the analyzer was never fitted to**: 704
+real example commands from [tldr-pages](https://github.com/tldr-pages/tldr)
+(common/linux/osx), authored by hundreds of contributors who have never seen this guard.
+Ground-truth labels come from a deliberately simple, analyzer-*independent* rule (see
+[build-external-corpus.mjs](benchmarks/build-external-corpus.mjs)). Reproduce with
+`npm run bench` or `node benchmarks/external.mjs`.
 
 ![Guard accuracy on real third-party commands](docs/benchmarks/external-scorecard.svg)
 
@@ -148,189 +192,118 @@ Reproduce with `npm run bench` or `node benchmarks/external.mjs`.
 
 Honest caveats, because the point of this rewrite was to stop overclaiming:
 
-- The 7 remaining "misses" are all plain `rm` invocations without `-r`/`-f`
-  (single- or multi-target, a few with `-i`/`-v`/`-d`), which the guard
-  **intentionally permits**: bare `rm` is extremely common, so the guard marks it
-  dirty but lets the host's own `rm *` permission decide, while still blocking the
-  irreversible forms (`rm -r`/`rm -f`, wildcard/root, `$(rm …)`, `bash -c`,
-  `/bin/rm`, interpreters, etc.). Under a strict every-`rm`-is-destructive
-  labeling those count against it.
+- The 7 remaining "misses" are all plain `rm` invocations without `-r`/`-f` (single- or
+  multi-target, a few with `-i`/`-v`/`-d`), which the guard **intentionally permits**:
+  bare `rm` is extremely common, so the guard marks it dirty but lets the host's own
+  `rm *` permission decide, while still blocking the irreversible forms (`rm -r`/`rm -f`,
+  wildcard/root, `$(rm …)`, `bash -c`, `/bin/rm`, interpreters, etc.). Under a strict
+  every-`rm`-is-destructive labeling those count against it.
 - The single counted false positive (`git filter-repo …`) actually *is* a
-  history-rewriting command, so the real-world false-positive rate is effectively
-  zero. `node benchmarks/external.mjs --json` lists every miss and false positive
-  so you can audit the disagreements yourself.
+  history-rewriting command, so the real-world false-positive rate is effectively zero.
+  `node benchmarks/external.mjs --json` lists every miss and false positive so you can
+  audit the disagreements yourself.
 
-Two **curated fixture sets** also ship — and they are explicitly *fixtures*, not
-an unbiased benchmark. They define the patterns the analyzer must catch and guard
-against regressions, so they pass by construction; do not read the 100%/0% there
-as measured accuracy:
+Two **curated fixture sets** also ship — and they are explicitly *fixtures*, not an
+unbiased benchmark. They define the patterns the analyzer must catch and guard against
+regressions, so they pass by construction; do not read the 100%/0% there as measured
+accuracy:
 
-- `benchmarks/corpus.mjs` — 71 destructive patterns (incl. `$(…)`, `bash -c`,
-  `sudo -u`, `/bin/rm`, `git -C … reset --hard`, `curl | sh`, interpreter
-  deletes) and their safe look-alikes (`git checkout -b`, `echo "rm -rf /"`).
+- `benchmarks/corpus.mjs` — 71 destructive patterns (incl. `$(…)`, `bash -c`, `sudo -u`,
+  `/bin/rm`, `git -C … reset --hard`, `curl | sh`, interpreter deletes) and their safe
+  look-alikes (`git checkout -b`, `echo "rm -rf /"`).
 - `benchmarks/completion-corpus.mjs` — 9 completion-claim policy cases (missing
-  review-cycle line, stale review after edit, missing contextual gate, inactive
-  session, custom marker). `npm run bench:truthfulness` prints them.
+  review-cycle line, stale review after edit, missing contextual gate, inactive session,
+  custom marker). `npm run bench:truthfulness` prints them.
 
 The analysis costs ~1µs per command (hundreds of thousands of classifications per
 second) — negligible for a per-tool-call guard:
 
 ![Per-command analysis latency](docs/benchmarks/latency.svg)
 
-## Requirements
+## How it works
 
-- Node.js 20.11 or newer.
-- OpenCode configured to load local agents, commands, and plugins. The package is
-  tested against `@opencode-ai/plugin` 1.17.6 and declares compatibility with the
-  1.15+ plugin hook surface used here; newer OpenCode builds that change plugin
-  or TUI slot APIs may need a package update.
-- A working OpenCode provider/model; Goal Mode does not configure API keys or
-  choose a model for you.
+Goal Mode is a **plugin pair**:
 
-## What it adds
+- **`goal-guard`** (server-side) owns all enforcement — shell analysis, completion
+  rewriting, contextual gating, the code-driven review loop, reviewer memory, and
+  persistence — and writes its state to disk.
+- **`goal-sidebar.tsx`** (experimental TUI plugin) reads that same state to render the
+  live Goal todo section.
 
-- A primary `goal` agent that owns implementation but delegates research,
-  discovery, and verification planning to subagents. **`goal` is the only
-  user-selectable agent** — every specialist (security, diff, verifier, …) is a
-  `mode: subagent`; the user never picks one directly, and the guard blocks any
-  other agent from invoking them (see **Goal-only subagents** below). The required
-  review subagents are launched by the guard itself, not left to the model to call
-  via the task tool (see **Code-driven review** below). They surface with friendly
-  names (e.g. "Security Reviewer", "API Reviewer") rather than raw ids.
-- Strict review gates for prompt compliance, diff review, verification, security,
-  UX, operations, data, API, performance, tests, docs, quality, and final audit.
-- Slash commands: `/goal`, `/goal-contract`, `/goal-review`,
-  `/goal-evidence-map`, `/goal-status`, `/goal-repair`, `/goal-final`.
-- The `goal-guard` plugin:
-  - **Quote-aware shell analysis** that blocks destructive and remote-exec
-    commands (including ones that evade naive regexes — `$(rm -rf …)`,
-    `bash -c "…"`, `/bin/rm`, `git -C … reset --hard`, `curl | sh`) without
-    false-positiving harmless commands like `git checkout -b`.
-  - **Completion enforcement**: a premature `Goal Completed` is rewritten to
-    `Goal Not Completed` with the exact missing review gates.
-  - **Code-driven review**: when an active goal goes idle with work done and
-    review gates still outstanding, the guard *itself* launches the required
-    reviewer subagents, records each `Verdict:`, and either reports completion (all
-    PASS) or feeds the blocking findings back for another fix → review cycle (any
-    FAIL) — bounded by `maxReviewCycles`. The model is never relied on to call the
-    task tool for reviews. Toggle with `programmaticReview`.
-  - **Never stops early**: if a goal session goes idle while the goal is still
-    incomplete, the guard automatically continues the agent (telling it exactly
-    what's left) so it keeps working until the goal is actually done — never sitting
-    idle on an unfinished goal. Two backstops keep it safe: a hard per-session cap
-    (`maxAutoContinue`) and a no-progress circuit-breaker that pauses for you if the
-    agent stops making progress. Toggle with `autoContinue`.
-  - **Contextual gating**: the goal text and changed files determine which
-    specialist reviewers are required.
-  - **Goal-only subagents**: the `goal-*` specialist subagents are mechanically
-    locked to Goal Mode. OpenCode resolves subagents globally, so the guard blocks
-    any Build, Plan, or custom agent that tries to invoke a `goal-*` reviewer via
-    the task tool — they run only under the Goal agent (toggle with
-    `restrictSubagents`). General-purpose subagents (`explore`/`general`/`scout`)
-    are never restricted.
-  - **Reviewer Memory**: blocking reviewer findings are carried across cycles,
-    surfaced in status/system context, and marked resolved by fresh PASS verdicts.
-  - **Disk persistence**: review ledgers and Reviewer Memory survive OpenCode restarts.
-  - **Custom tools**: `goal_contract`, `goal_evidence`, `goal_evidence_map`,
-    `goal_reviewer_memory`, `goal_status`, `goal_reset`.
-  - **Live state injection** into the system prompt so the model always knows
-    what the guard requires.
-  - **TUI toasts**: a toast on each review verdict (PASS/FAIL), with the
-    reviewer's friendly name, and a single "completion unlocked" toast the moment
-    the last required gate clears.
-- An **experimental** companion TUI plugin (`plugins/goal-sidebar.tsx`) that, in
-  Goal sessions only, takes over the sidebar todo area with a structured,
-  evidence-aware Goal todo list (`GOAL` label, goal title, gate progress, and
-  todo rows — each on its own line in its own colour). See [TUI integration](#tui-integration).
-- A test suite validating the analyzer, plugin hooks, state store, install
-  safety, and config compatibility.
+The guard hooks the OpenCode plugin surface: it inspects each bash command before
+execution (`tool.execute.before`), tracks real file mutations, rewrites a premature
+completion claim (`experimental.text.complete`), injects live guard state into the
+system prompt, and — on `session.idle` — runs the required reviews and continues an
+incomplete goal. See [ARCHITECTURE.md](ARCHITECTURE.md) for the module-by-module design.
+
+> **Honest caveat (matching the benchmarks).** The auto-review and never-stop-early
+> behaviors trigger on `session.idle`. A model that stalls mid-turn without emitting an
+> idle event (some free models do) may not auto-review *live*; the unconditional
+> guarantees — completion rewriting and destructive-command blocking — do not depend on
+> idle and always apply.
+
+### What it adds
+
+- A primary `goal` agent that owns implementation but delegates research, discovery, and
+  verification planning to subagents. **`goal` is the only user-selectable agent** —
+  every specialist is a `mode: subagent` the user never picks directly, and the guard
+  blocks any other agent from invoking them. Required reviewers are launched by the
+  guard itself, and surface with friendly names (e.g. "Security Reviewer").
+- Strict review gates for prompt compliance, diff review, verification, security, UX,
+  operations, data, API, performance, tests, docs, quality, and a final audit.
+- Slash commands: `/goal`, `/goal-contract`, `/goal-review`, `/goal-evidence-map`,
+  `/goal-status`, `/goal-repair`, `/goal-final`.
+- Reviewer Memory (blocking findings carried across cycles), disk persistence, live
+  state injection, TUI toasts on each verdict, and six custom tools (see below).
+- A test suite validating the analyzer, plugin hooks, state store, install safety, and
+  config compatibility.
 
 ## TUI integration
 
-Goal Mode is a **plugin pair**: the server-side `goal-guard` plugin owns
-enforcement and writes its state to disk, and an experimental TUI plugin
-(`plugins/goal-sidebar.tsx`) reads that same state to render a live todo section.
+In a `goal` session with a goal set, the Goal plugin renders its own structured todo
+section into the sidebar's `sidebar_content` slot — each line in its own colour so it
+never reads as one run of text:
 
-- **Goal-owned todo section.** In a `goal` session with a goal set, the Goal
-  plugin renders its own structured todo section into the sidebar's `sidebar_content`
-  slot, stacked on separate lines, each in its own colour so it never reads as one
-  run of text:
-  - a bold **`GOAL`** label (yellow while running, red when done);
-  - the short goal title (white);
-  - the gate count `passing/total gates` (cyan), on its own line;
-  - the lifecycle status (orange) on its own line — `in progress`, or
-    `completed · N review cycles`. No "changes pending" noise; pending work shows
-    as a todo row instead;
-  - structured todo rows derived from real guard state: one per acceptance
-    criterion (✓ when fresh evidence covers it), a re-verify row when the tree
-    changed, and one row per still-missing review gate by friendly name
-    (e.g. "Pass Security Reviewer").
+- a bold **`GOAL`** label (yellow while running, red when done);
+- the short goal title;
+- the gate count `passing/total gates`;
+- the lifecycle status — `in progress`, or `completed · N review cycles`;
+- structured todo rows from real guard state: one per acceptance criterion (✓ when fresh
+  evidence covers it), a re-verify row when the tree changed, and one row per
+  still-missing review gate by friendly name (e.g. "Pass Security Reviewer").
 
-  Each line uses its lifecycle colour (running → yellow label; done → red).
-  Because OpenCode renders the native todo list as that slot's *fallback*,
-  on builds that render `sidebar_content` in replace/single-winner mode the Goal
-  section **replaces** the native todo list while a goal is active; in append mode
-  it sits alongside it. In every case:
-  - **no render** — Build and every non-Goal mode (and a Goal session before a
-    goal is set) render nothing here, so OpenCode's native todo section stays in
-    the same position. The section is scoped to the session that owns the goal: a
-    Build session in the same worktree never inherits another session's goal.
+Build and every non-Goal mode (and a Goal session before a goal is set) render nothing
+here, so OpenCode's native todo section stays put. The section is scoped to the session
+that owns the goal. Toggle/recolour with `sidebarBanner`, `sidebarColor`,
+`sidebarDoneColor`, `sidebarMutedColor`, or the `GOAL_GUARD_SIDEBAR_*` env vars.
 
-  Toggle/recolour with `sidebarBanner`, `sidebarColor` (running), `sidebarDoneColor`
-  (done), `sidebarMutedColor`, or the `GOAL_GUARD_SIDEBAR_*` env vars.
+<details>
+<summary>How the sidebar loads (and why an upgrade just needs a restart)</summary>
 
-  **How it loads — important.** TUI plugins are **not** loaded from the `plugins/`
-  dir; OpenCode loads them from `tui.json`. The Goal sidebar registers a
-  `sidebar_content` slot that renders content **only** for the active session when
-  that session is a Goal session; for any other session it renders nothing, so
-  non-Goal modes keep their native todo section. With `--global`, the installer
-  writes `~/.config/opencode/tui.json` for you (merge-safe):
+TUI plugins are **not** loaded from the `plugins/` dir; OpenCode loads them from
+`tui.json`. With `--global`, the installer writes `~/.config/opencode/tui.json` for you
+(merge-safe):
 
-  ```json
-  { "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
-  ```
-
-  OpenCode installs the referenced package into its own plugin cache
-  (`~/.cache/opencode/packages/`) and provides the `@opentui/solid` + `solid-js`
-  runtime to it. It does **not** re-check that cache for newer versions, so the
-  installer clears the cached copy on install/uninstall — that's why an upgrade
-  needs only a restart to load the new sidebar. Restart OpenCode after install. The
-  Goal todo section appears in a **Goal session** view (not the home screen and not
-  Build mode), and because the Goal agent does its own todo tracking (native
-  `todowrite` is disabled in Goal Mode), it replaces — rather than sits beside —
-  the native todo list while a goal is active. The visual harness renders the
-  component headlessly in [visual test](tools/visual-test/README.md)
-  (`npm run test:visual`); the enforcement core is a separate server plugin and
-  works regardless of the sidebar.
-- **Toasts.** Review verdicts and completion-unlock events surface as toasts
-  (`toastOnReview`), and blocked destructive commands / premature completions
-  toast as before (`toastOnBlock`).
-
-## Installer options
-
-```bash
-npm install -g opencode-goal-mode && opencode-goal-mode --global
-npx opencode-goal-mode --global --dry-run
-npx opencode-goal-mode --global
-opencode-goal-mode-install --global --uninstall
-node scripts/install.mjs --dry-run
-node scripts/install.mjs --target /path/to/opencode-config
-node scripts/install.mjs --global --force
-node scripts/install.mjs --global --uninstall
+```json
+{ "$schema": "https://opencode.ai/tui.json", "plugin": ["opencode-goal-mode"] }
 ```
 
-Default target rules are simple: `--global` writes to `~/.config/opencode`; no
-flag writes to `./.opencode`; `--target` writes to exactly the directory you pass.
-In every target, the installer copies only `agents/`, `commands/`, `plugins/`,
-writes `.goal-mode-manifest.json`, and merge-safely adds `opencode-goal-mode` to
-`tui.json` in that same target. On upgrade it replaces files it owns but refuses
-to clobber files you have locally modified unless `--force` is passed.
-`--uninstall` removes only owned files and removes only its own `tui.json` entry.
+OpenCode installs the referenced package into its own plugin cache
+(`~/.cache/opencode/packages/`) and provides the `@opentui/solid` + `solid-js` runtime
+to it. It does **not** re-check that cache for newer versions, so the installer clears
+the cached copy on install/uninstall — that's why an upgrade needs only a restart to
+load the new sidebar. Because the Goal agent does its own todo tracking (native
+`todowrite` is disabled in Goal Mode), the Goal section replaces — rather than sits
+beside — the native todo list while a goal is active, on builds that render
+`sidebar_content` in single-winner mode. The visual harness renders the component
+headlessly in [the visual test](https://github.com/devinoldenburg/opencode-goal-mode/blob/main/tools/visual-test/README.md)
+(`npm run test:visual`); the enforcement core is a separate server plugin and works
+regardless of the sidebar.
+</details>
 
 ## Configuration
 
-The guard works with zero configuration. To tune it, add options in
-`opencode.json`:
+The guard works with **zero configuration**. To tune it, add options in `opencode.json`:
 
 ```jsonc
 {
@@ -369,102 +342,75 @@ Or via environment variables (`GOAL_GUARD_*`):
 | `completionMarker` / `GOAL_GUARD_COMPLETION_MARKER` | `Goal Completed` | Phrase that, at the start of an assistant message, claims completion. |
 | `blockedMarker` / `GOAL_GUARD_BLOCKED_MARKER` | `Goal Not Completed` | Replacement marker written when a completion claim is blocked. |
 
-## Custom tools
+### Custom tools
 
 The plugin registers six tools the model can call directly:
 
-- `goal_contract` — record the Goal Contract (requirements, non-goals,
-  acceptance criteria). Activates enforcement and fixes the required gates.
+- `goal_contract` — record the Goal Contract (requirements, non-goals, acceptance
+  criteria). Activates enforcement and fixes the required gates.
 - `goal_evidence` — record a verification command and result.
-- `goal_evidence_map` — return the acceptance-criteria evidence map with
-  reviewer status, gaps, and next actions.
+- `goal_evidence_map` — return the acceptance-criteria evidence map with reviewer
+  status, gaps, and next actions (backed by persisted state, not transcript memory; also
+  available as `/goal-evidence-map`).
 - `goal_reviewer_memory` — return unresolved and recently resolved reviewer findings.
 - `goal_status` — return the authoritative gate/dirty/completion status.
 - `goal_reset` — clear the session's goal state (requires `confirm: true`).
 
-Use `/goal-evidence-map` when you need a read-only matrix of each acceptance
-criterion against recorded evidence, reviewer status, gaps, and the next
-required action. The command is backed by the `goal_evidence_map` tool, so it
-uses persisted Goal Guard state rather than relying on transcript memory.
-
-## Contributor validation
+### Installer options
 
 ```bash
-npm test
-npm run validate
-npm run audit
-npm run publish:check
+npm install -g opencode-goal-mode && opencode-goal-mode --global
+npx opencode-goal-mode --global --dry-run
+opencode-goal-mode-install --global --uninstall
+node scripts/install.mjs --target /path/to/opencode-config
+node scripts/install.mjs --global --force
 ```
 
-`npm run validate` runs the test suite, the structural config validator, the
-publish readiness check, and an `npm pack --dry-run`.
+In every target the installer copies only `agents/`, `commands/`, and `plugins/`, writes
+`.goal-mode-manifest.json`, and merge-safely adds `opencode-goal-mode` to `tui.json`. On
+upgrade it replaces files it owns but refuses to clobber files you've modified unless
+`--force` is passed. `--uninstall` removes only owned files and its own `tui.json` entry.
 
-### Live end-to-end suite (optional, long-running)
+## Troubleshooting
 
-```bash
-npm run test:e2e        # needs a working OpenCode + a free OpenCode Zen model
-```
+- **`opencode agent list` doesn't show `goal`.** The agents didn't install to a config
+  dir OpenCode reads. Re-run `opencode-goal-mode --global` and restart OpenCode; confirm
+  the files landed in `~/.config/opencode/agents/`.
+- **The sidebar Goal todo section doesn't appear.** TUI plugins load from `tui.json`,
+  not `plugins/`. Confirm `~/.config/opencode/tui.json` lists `opencode-goal-mode`, then
+  **fully restart** OpenCode (the plugin cache is only re-read on restart). The sidebar
+  is experimental and only renders inside a Goal session that has a goal set — never on
+  the home screen or in Build mode. Enforcement works regardless of the sidebar.
+- **Reviews didn't run automatically.** The code-driven review fires on `session.idle`.
+  Some free models stall mid-turn without emitting idle, so the auto-review may not run
+  live on them; `/goal-review` and `/goal-final` run a cycle on demand, and the
+  completion guard still blocks an un-earned `Goal Completed` either way.
+- **A safe command was blocked.** Run `node benchmarks/external.mjs --json` to see how
+  the analyzer classifies commands, or set `blockDestructive: false` for that project.
+  Please also [open an issue](https://github.com/devinoldenburg/opencode-goal-mode/issues)
+  with the command.
 
-`test:e2e` boots a dedicated `opencode serve` rooted at a throwaway git project for
-each scenario, then drives a **real** goal session over the OpenCode HTTP API
-(`session.promptAsync` + the `/event` stream — the same flow the live TUI uses)
-against a free OpenCode Zen model (default `opencode/deepseek-v4-flash-free`;
-override with `GOAL_E2E_MODEL`). It asserts the guard's live behaviour — a Goal
-Contract is recorded, the required reviews are actually forced to run, no un-earned
-`Goal Completed` is let through, destructive `rm -rf` is blocked mid-run, a Build
-session never becomes a goal (and invokes no `goal-*` subagents), and a **user cancel
-is honored** (cancelling a turn auto-continues nothing — verified over repeated live
-trials, `GOAL_E2E_CANCEL_TRIALS`). Each scenario is
-fully isolated (its own server + project, so nothing touches your repo) and exits
-early the moment its assertions are observable. It is intentionally long-running
-(minutes of real model work, including the five review subagents) and not part of
-CI; it SKIPs cleanly if `opencode` or the SDK is unavailable.
+## Requirements
 
-## Models
-
-Agents do not pin a provider-specific model, so they inherit the model OpenCode
-is configured to use. To give a particular agent a specific model, add a
-`model:` (and optional `variant:`) line to that agent's frontmatter in your
-installed copy.
+- Node.js 20.11 or newer.
+- OpenCode configured to load local agents, commands, and plugins. The package is tested
+  against `@opencode-ai/plugin` 1.17.6 and declares compatibility with the 1.15+ plugin
+  hook surface used here; newer OpenCode builds that change plugin or TUI slot APIs may
+  need a package update.
+- A working OpenCode provider/model — Goal Mode does not configure API keys or choose a
+  model for you. Agents don't pin a model, so they inherit your OpenCode default; add a
+  `model:` line to an agent's frontmatter in your installed copy to override one.
 
 ## Safety
 
-The installer copies only `agents/*.md`, `commands/*.md`, and the `plugins/`
-tree — never auth files, session files, tokens, or personal provider config.
+The installer copies only `agents/*.md`, `commands/*.md`, and the `plugins/` tree —
+never auth files, session files, tokens, or personal provider config.
 
-The guard blocks destructive shell commands, marks real file mutations dirty,
-keeps read-only inspection from dirtying the session, preserves goal state during
-compaction and across restarts, and blocks premature `Goal Completed` responses
-when review gates are missing or stale.
-
-## Releasing
-
-Releases are fully automated and **version-synced**: one pushed tag publishes to
-npm *and* creates the matching GitHub Release. The pipeline lives in
-[`.github/workflows/publish.yml`](.github/workflows/publish.yml) (Node 24).
-
-```bash
-npm version patch        # bumps package.json + package-lock.json and creates the vX.Y.Z tag
-git push --follow-tags   # pushes main + the tag → the Release workflow runs
-```
-
-On a `vX.Y.Z` tag push the workflow:
-
-1. installs and runs the full CI gate (`npm run ci` — tests, audit, structural
-   validation, `npm pack --dry-run`);
-2. runs `npm run publish:check`, which **fails if the tag does not match
-   `package.json`** or if that version already exists on npm;
-3. publishes with `npm publish --access public` using the `NPM_TOKEN` repository
-   secret;
-4. creates the GitHub Release for the tag with auto-generated notes.
-
-So the git tag, the `package.json` version, the npm version, and the GitHub
-Release version are always identical. A manual `workflow_dispatch` is available
-and defaults to a safe `npm publish --dry-run`.
-
-**One-time setup:** add a publish-scoped npm token as the `NPM_TOKEN` repository
-secret (`gh secret set NPM_TOKEN`). Treat that token as sensitive — never commit
-it.
+The guard blocks destructive shell commands, marks real file mutations dirty, keeps
+read-only inspection from dirtying the session, preserves goal state during compaction
+and across restarts, and blocks premature `Goal Completed` responses when review gates
+are missing or stale. It is **not** a sandbox and fails open on un-analyzable input —
+see [SECURITY.md](SECURITY.md) for the threat model and reporting channel.
 
 ## Goal Completion Contract
 
@@ -475,3 +421,20 @@ it.
 - No edit is newer than the latest required review cycle.
 - Required reviewers return `Verdict: PASS`.
 - The final answer includes an accurate `Review cycles: N`.
+
+## Contributing & security
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the dev loop, the
+"keep benchmarks honest" ground rules, and the maintainer release process. Found a
+vulnerability? Please use the private channel in [SECURITY.md](SECURITY.md) rather than a
+public issue. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+Full version history is in [CHANGELOG.md](CHANGELOG.md).
+
+Releases are fully automated and **version-synced**: one pushed `vX.Y.Z` tag runs the CI
+gate, then publishes to npm *and* creates the matching GitHub Release (notes from the
+CHANGELOG). The pipeline is in
+[`.github/workflows/publish.yml`](https://github.com/devinoldenburg/opencode-goal-mode/blob/main/.github/workflows/publish.yml).
+
+## License
+
+[MIT](LICENSE)

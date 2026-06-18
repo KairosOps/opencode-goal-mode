@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.3
+
+### README redesigned for first-time visitors + a code-driven-review polish
+
+Docs:
+
+- **README leads with value, then proof.** It now opens with a benefit-first hook and a
+  plain-language "the problem" framing, followed by a **"see it in action"** section that
+  shows the guard's two signature behaviors verbatim — the `Goal Completed` →
+  `Goal Not Completed` rewrite and a blocked `rm -rf` — and a scannable "what you get"
+  overview, before Install. Added a **Troubleshooting** section and an honest caveat that
+  the idle-triggered auto-review may not fire live on models that stall mid-turn (the
+  unconditional guarantees — completion rewriting, destructive-command blocking — always
+  apply). Maintainer-only detail (dev loop, releasing, live E2E) now links to
+  CONTRIBUTING.md, and the two README links that pointed at non-published paths
+  (`tools/`, `.github/`) are absolute GitHub URLs so the npm page has no broken links.
+
+Fix:
+
+- **A clean programmatic review cycle now clears the dirty flag**, matching the
+  agent-driven path (`maybeClearDirtyOnFinalPass`). Previously, after the guard reviewed
+  its own work and every gate passed, completion opened but the sidebar/status could
+  still read "re-verify / changes pending". A failing cycle still leaves the goal dirty.
+
 ## v0.6.2
 
 ### Deep cross-cutting bug hunt — 8 confirmed defects fixed

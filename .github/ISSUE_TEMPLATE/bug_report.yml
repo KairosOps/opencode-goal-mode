@@ -24,7 +24,7 @@ body:
     attributes:
       label: Goal Mode version
       description: Output of `npm ls -g opencode-goal-mode` (or the installed version).
-      placeholder: "0.3.x"
+      placeholder: "0.6.x"
     validations:
       required: true
   - type: input

@@ -23,6 +23,7 @@
 
 import { requiredGates, completionAllowed, gatePassedFresh } from "./gates.js";
 import { recordVerdict, parseVerdict } from "./verdicts.js";
+import { maybeClearDirtyOnFinalPass } from "./events.js";
 import { CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
 import { shortGoalLabel } from "./summary.js";
 
@@ -145,6 +146,13 @@ export async function runReviewCycle(client, store, state, config, opts = {}) {
       failed.push(agent);
     }
   }
+
+  // A clean programmatic cycle must clear the dirty flag exactly as the agent-driven
+  // path does (guard.js tool.execute.after) — otherwise the guard reviews its own work,
+  // every gate passes, completion opens, yet the sidebar/status still reads "re-verify /
+  // changes pending". maybeClearDirtyOnFinalPass is self-guarding: it clears only when the
+  // cycle-closing auditor has a FRESH pass and completion is allowed, so a FAIL is a no-op.
+  maybeClearDirtyOnFinalPass(state, config);
 
   const findings = (state.reviewerMemory || [])
     .filter((m) => (m.status || "open") === "open")

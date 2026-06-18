@@ -68,6 +68,21 @@ test("runReviewCycle programmatically launches ALL required reviewers and record
   assert.ok(client.aborted.length >= 5);
 });
 
+test("a clean programmatic cycle clears the dirty flag (parity with the agent-driven path); a FAIL leaves it dirty", async () => {
+  // All PASS → completion opens AND dirty is cleared, so the sidebar/status doesn't keep
+  // reading "re-verify / changes pending" after the guard reviewed its own work.
+  const clean = createStore();
+  const sClean = goalState(clean, "dc-pass");
+  assert.equal(sClean.dirty, true, "work made the goal dirty");
+  await runReviewCycle(mockReviewClient("PASS"), clean, sClean, DEFAULT_CONFIG, fastOpts);
+  assert.equal(sClean.dirty, false, "a clean final pass clears dirty");
+  // Any FAIL → completion blocked AND dirty stays set (nothing to clear).
+  const dirty = createStore();
+  const sDirty = goalState(dirty, "dc-fail");
+  await runReviewCycle(mockReviewClient((a) => (a === "goal-verifier" ? "FAIL" : "PASS")), dirty, sDirty, DEFAULT_CONFIG, fastOpts);
+  assert.equal(sDirty.dirty, true, "a failing cycle leaves the goal dirty");
+});
+
 test("a FAILING reviewer keeps completion BLOCKED and is reported (the cycle's Not-Done)", async () => {
   const store = createStore();
   const state = goalState(store, "g2");
