@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "../plugins/goal-guard/state.js";
 import { DEFAULT_CONFIG } from "../plugins/goal-guard/config.js";
-import { evaluateAutoContinue, NO_PROGRESS_LIMIT, ABORT_SUPPRESS_MS } from "../plugins/goal-guard/autocontinue.js";
+import { evaluateAutoContinue, continuationMessage, NO_PROGRESS_LIMIT, ABORT_SUPPRESS_MS } from "../plugins/goal-guard/autocontinue.js";
 
 const BASE = ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"];
 
@@ -27,6 +27,20 @@ test("an active incomplete goal that goes idle → continue with a FORCING revie
   assert.match(d.message, /cannot be skipped/i);
   assert.match(d.message, /goal-reviewer/);
   assert.equal(st.autoContinueCount, 1);
+});
+
+test("continuation message gives the exact task invocation for the first missing gate", () => {
+  const st = goalState({ goalText: "ship the feature", contract: { acceptanceCriteria: ["x"], original: "ship the feature" } });
+  const msg = continuationMessage(st, DEFAULT_CONFIG);
+  // A copyable, concrete next action — not just "reviews are required".
+  assert.match(msg, /task\(subagent_type:\s*"goal-prompt-auditor"/);
+  assert.match(msg, /Verdict: PASS/);
+});
+
+test("continuation message tells the model to record a Goal Contract when none exists", () => {
+  const st = goalState({ goalText: "ship the feature", contract: null });
+  const msg = continuationMessage(st, DEFAULT_CONFIG);
+  assert.match(msg, /goal_contract/);
 });
 
 test("a COMPLETE goal does not auto-continue and resets the counters", () => {

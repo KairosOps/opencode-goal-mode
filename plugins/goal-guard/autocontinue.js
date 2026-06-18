@@ -47,14 +47,20 @@ export function progressSignature(state) {
 export function continuationMessage(state, config) {
   const missing = missingGates(state, config);
   const lines = ["The goal is NOT complete — do not stop. Continue working now."];
+  if (!state?.contract) {
+    lines.push("First, record the Goal Contract with the `goal_contract` tool (title, the original request, and concrete acceptance criteria) so the objective is anchored.");
+  }
   if (state?.dirty) {
-    lines.push("There are changes that are not yet reviewed/verified after your latest edits — re-run verification.");
+    lines.push("There are changes that are not yet reviewed/verified after your latest edits — actually run the code/tests and record it with `goal_evidence`.");
   }
   if (missing.length) {
+    const next = missing[0];
     lines.push(
-      `REQUIRED REVIEWS ARE NOT DONE and cannot be skipped. Invoke each of these review ` +
-        `subagents with the task tool RIGHT NOW — one task call per reviewer — and fix every ` +
-        `blocking finding, re-running until each returns "Verdict: PASS": ${missing.join(", ")}. ` +
+      `REQUIRED REVIEWS ARE NOT DONE and cannot be skipped. For EACH of these, make one ` +
+        `task tool call whose subagent_type is that exact reviewer id, fix every blocking finding, and ` +
+        `re-run until it returns "Verdict: PASS": ${missing.join(", ")}. ` +
+        `Start now with: task(subagent_type: "${next}", description: "${next} review", ` +
+        `prompt: "Review the latest changes against the goal and end with a \\"Verdict: PASS\\" or \\"Verdict: FAIL\\" line."). ` +
         `Do not write a summary, ask the user anything, or claim completion until they all pass.`,
     );
   }

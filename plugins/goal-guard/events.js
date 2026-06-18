@@ -6,10 +6,47 @@
  */
 
 import { CYCLE_CLOSING_AGENT } from "./agents.js";
-import { gatePassedFresh, completionAllowed } from "./gates.js";
+import { gatePassedFresh, completionAllowed, refreshStickyGates } from "./gates.js";
 
 function trim(arr, max) {
   if (arr.length > max) arr.splice(0, arr.length - max);
+}
+
+/**
+ * Anchor a minimal Goal Contract for an ACTIVE goal session that has captured a
+ * goal but whose model never called `goal_contract` (common with weak models).
+ *
+ * Without this, a low-capability model that skips the tool leaves the session
+ * with no contract: the TUI sidebar shows nothing and the model has no recorded
+ * objective to steer by. Enforcement (base + contextual gates) already engages
+ * from `active`, so this is purely additive — it gives the goal a baseline
+ * contract derived from the user's own request. `acceptanceCriteria` is left
+ * empty on purpose so the system-prompt keeps nudging the model to enrich it via
+ * `goal_contract` (which UPGRADES the auto contract in place, see tools.js).
+ *
+ * It is a strict no-op unless the session is an active goal with goal text and no
+ * existing contract, so it can never seed a Build/Plan/non-goal session.
+ *
+ * @returns {boolean} true if a contract was seeded.
+ */
+export function maybeAutoSeedContract(store, state) {
+  if (!state || !state.active || state.contract) return false;
+  const goal = String(state.goalText || "").replace(/\s+/g, " ").trim();
+  if (!goal) return false;
+  const title = goal.split(" ").slice(0, 8).join(" ").replace(/[.?!,;:]+$/, "");
+  state.contract = {
+    title,
+    original: goal.slice(0, 4000),
+    requirements: [],
+    inferred: [],
+    nonGoals: [],
+    acceptanceCriteria: [],
+    auto: true,
+    at: store.nowIso(),
+  };
+  refreshStickyGates(state);
+  state.updatedAt = store.nowIso();
+  return true;
 }
 
 export function markEdit(store, state, reason) {

@@ -134,7 +134,11 @@ export function createGoalTools({ store, config, persist }) {
         // goal (same `original`) preserves progress.
         const norm = (v) => String(v || "").replace(/\s+/g, " ").trim().toLowerCase();
         const newOriginal = norm(args.original);
-        if (state.contract && newOriginal && newOriginal !== norm(state.contract.original)) {
+        // An AUTO-seeded contract is just a placeholder anchored from the captured
+        // goal text — the model now authoring the real contract is an UPGRADE, never
+        // a new goal, so do not wipe accumulated progress (gates/verdicts/evidence).
+        // Only a genuinely different request replacing a MODEL-authored contract resets.
+        if (state.contract && !state.contract.auto && newOriginal && newOriginal !== norm(state.contract.original)) {
           resetGoalProgress(state, store.nowIso());
           state.active = true;
         }

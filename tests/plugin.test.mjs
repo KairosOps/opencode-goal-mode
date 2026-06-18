@@ -600,6 +600,53 @@ test("re-recording the SAME goal's contract preserves progress (no spurious rese
   assert.equal(after.contract.acceptanceCriteria.length, 2);
 });
 
+test("an active goal auto-anchors a Goal Contract when the model skips goal_contract", async () => {
+  const { hooks, store } = makeGuard();
+  await hooks["chat.message"]({ sessionID: "seed", agent: "goal" }, { parts: [{ type: "text", text: "Add a token-bucket rate limiter to limiter.js with tests" }] });
+  const st = store.stateFor("seed");
+  assert.ok(st.contract, "a baseline contract is auto-anchored for an active goal");
+  assert.equal(st.contract.auto, true);
+  assert.equal(st.contract.acceptanceCriteria.length, 0, "left empty so the model still enriches it via goal_contract");
+  assert.ok(st.contract.title.length > 0);
+  assert.match(st.contract.original, /rate limiter|token/i);
+});
+
+test("a Build session never auto-anchors a contract", async () => {
+  const { hooks, store } = makeGuard();
+  await hooks["chat.message"]({ sessionID: "nb", agent: "build" }, { parts: [{ type: "text", text: "just chatting about a rate limiter" }] });
+  assert.equal(store.stateFor("nb").contract, null);
+  assert.equal(store.stateFor("nb").active, false);
+});
+
+test("goal_contract upgrades an auto-anchored contract in place without wiping progress", async () => {
+  const guard = makeGuard();
+  const tools = await loadTools(guard);
+  // The model skips goal_contract: the first user turn auto-anchors a baseline, then work + reviews happen.
+  await guard.hooks["chat.message"]({ sessionID: "up", agent: "goal" }, { parts: [{ type: "text", text: "build the feature and verify it" }] });
+  assert.equal(guard.store.stateFor("up").contract.auto, true);
+  await passAllBaseGates(guard.hooks, guard.store, "up");
+  const before = guard.store.stateFor("up");
+  assert.ok(before.reviewCycles >= 1 && before.verdicts.length >= 5);
+  // The model finally authors the real contract (different wording) — an UPGRADE, not a new goal.
+  await tools.goal_contract.execute(
+    { title: "Build the feature", original: "Implement the feature end to end with explicit acceptance criteria", acceptanceCriteria: ["works", "verified"] },
+    { sessionID: "up" },
+  );
+  const after = guard.store.stateFor("up");
+  assert.equal(after.reviewCycles, before.reviewCycles, "review progress preserved when upgrading the auto contract");
+  assert.equal(after.verdicts.length, before.verdicts.length);
+  assert.equal(after.contract.acceptanceCriteria.length, 2);
+  assert.ok(!after.contract.auto, "upgraded contract is no longer marked auto");
+});
+
+test("system injection nudges for acceptance criteria on an auto-anchored contract", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.message"]({ sessionID: "inj", agent: "goal" }, { parts: [{ type: "text", text: "do the important thing" }] });
+  const out = { system: [] };
+  await hooks["experimental.chat.system.transform"]({ sessionID: "inj", model: {} }, out);
+  assert.match(out.system[0], /auto-derived/i);
+});
+
 test("mutating goal tools do not activate Build or non-Goal sessions", async () => {
   const guard = makeGuard();
   const tools = await loadTools(guard);

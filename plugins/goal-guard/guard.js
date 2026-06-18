@@ -30,7 +30,7 @@ import { evaluateCompletionClaim } from "./completion.js";
 import { evaluateAutoContinue } from "./autocontinue.js";
 import { summarizeState } from "./summary.js";
 import { buildSystemInjection } from "./system.js";
-import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass } from "./events.js";
+import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass, maybeAutoSeedContract } from "./events.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -156,6 +156,10 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           // Resolve contextual gates eagerly into the sticky set so truncating
           // the rolling buffer later cannot drop an already-required gate.
           refreshStickyGates(state);
+          // Anchor a baseline Goal Contract if the model hasn't recorded one. Weak
+          // models often skip goal_contract; this keeps the sidebar/objective live and
+          // gives the model something to steer by. No-op once a contract exists.
+          maybeAutoSeedContract(store, state);
           persist();
         }
       } catch {

@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.5.0
+
+### Weak-model robustness + a goal-mode observatory
+
+This release is driven by a new internal stress-testing tool (**Goal Lab**) that runs
+many Goal Mode agents at once against real `opencode serve` instances and real free
+OpenCode Zen models, captures every event and the guard's on-disk ledger, and
+auto-investigates failures. **Honest finding first:** the lab surfaced **no new
+correctness defects** — destructive-command blocking, premature-completion rewriting,
+and review forcing all held. What it did show is where *low-capability / rate-limited*
+models under-perform: they often skip `goal_contract` and stop without spawning the
+required reviewers. The changes below harden the plugin against exactly that, without
+weakening any enforcement guarantee. **312 tests pass (6 new regression tests).**
+
+**Determinism / robustness (the shipped plugin changes):**
+- **Auto-anchored Goal Contract.** An active goal whose model never calls
+  `goal_contract` now gets a baseline contract auto-derived from the user's own
+  request, so the TUI sidebar and the injected objective are live from turn one and
+  contextual review gates engage regardless of model capability. It is strictly
+  additive (enforcement already engaged from the active goal agent) and never fires
+  for Build/Plan/non-goal sessions. `acceptanceCriteria` is intentionally left empty so
+  the system prompt keeps nudging the model to enrich it.
+- **`goal_contract` upgrades an auto-anchored contract in place.** Authoring the real
+  contract over an auto-derived one is treated as an upgrade, not a new goal, so it no
+  longer wipes accumulated review progress (gates/verdicts/evidence).
+- **Prescriptive in-prompt steering.** The injected enforcement block and the
+  auto-continue message now spell out the *exact* next action — a copyable `task` tool
+  invocation naming the first outstanding reviewer (`subagent_type: "…"`), plus a
+  contract-first directive when none is recorded — instead of only stating that reviews
+  are required. This measurably helps weak models drive a goal to completion in fewer
+  turns.
+
+**Tooling (not published to npm — `tools/lab/`, git only):**
+- **Goal Lab** — a dependency-light browser observatory (Node `http` + SSE + vanilla
+  ESM, Cloudflare/Kumo-styled): a live list of agent runs, per-task Temporal-style
+  event history, run tree, completion-gate stepper, orchestration graph, guard ledger,
+  and auto-classified incidents with suggested plugin fixes. `node tools/lab/server/index.mjs`.
+  Full per-task data is available on disk (JSONL) and via `GET /api/runs/:id/data` for
+  debugging; see `tools/lab/README.md`.
+
 ## v0.4.13
 
 ### Verification / maintenance release
