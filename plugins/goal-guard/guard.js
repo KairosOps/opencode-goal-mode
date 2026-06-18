@@ -31,6 +31,7 @@ import { evaluateAutoContinue } from "./autocontinue.js";
 import { summarizeState } from "./summary.js";
 import { buildSystemInjection } from "./system.js";
 import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass, maybeAutoSeedContract } from "./events.js";
+import { runReviewCycle, clientCanReview } from "./review-runner.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -76,7 +77,17 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   const decidingIdle = new Set(); // sessionIDs currently inside an idle decision
   const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
   const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
+  const sessionModel = new Map(); // sessionID -> { providerID, modelID } of the goal's model, so the
+  // guard can launch the review subagents on the SAME model the agent is using.
   let lastActiveGoalSession = null; // sessionID of the most-recent active goal turn
+
+  /** Capture the goal session's model so programmatic reviews use the same one. */
+  const captureModel = (sid, model) => {
+    if (!sid || !model) return;
+    const providerID = model.providerID || model.provider?.id || model.provider;
+    const modelID = model.modelID || model.id || model.model;
+    if (providerID && modelID) sessionModel.set(String(sid).trim(), { providerID, modelID });
+  };
 
   const store =
     overrides.store ||
@@ -87,6 +98,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
       onEvict: (key) => {
         userTurnSeq.delete(key);
         decidingIdle.delete(key);
+        sessionModel.delete(key);
         if (lastActiveGoalSession === key) lastActiveGoalSession = null;
       },
     });
@@ -132,6 +144,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // durable (the SET is persisted, so the CLEAR must be too — otherwise a
         // restart within the suppression window would wrongly keep suppressing).
         bumpUserTurn(inp.sessionID);
+        captureModel(inp.sessionID, inp.model);
         if (state.abortedAt) {
           state.abortedAt = 0;
           // Durable clear — matches the flushed SET, so a restart can't wedge suppression.
@@ -174,6 +187,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (!normalized) return;
         const state = store.stateFor(normalized);
         state.currentAgent = inp.agent;
+        captureModel(normalized, inp.model);
         // NOTE: do NOT clear abortedAt here. chat.params fires on every LLM call
         // (including intra-turn/aux requests), not only on a genuine new user turn,
         // so clearing here could drop a legitimate pending cancel. The cancel is
@@ -331,6 +345,12 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // single celebratory toast the moment the last required gate clears.
         if (recordedAgent && recordedVerdict && config.toastOnReview) {
           logger.toast(`${prettyAgentName(recordedAgent)} → ${recordedVerdict}`, recordedVerdict === "PASS" ? "success" : "warning");
+          // A review CYCLE closes when the cycle-closing auditor renders a verdict.
+          // Surface the running cycle count in the TUI so it is always visible — not
+          // just at completion (it is also in the sidebar, goal_status, and prompt).
+          if (recordedAgent === CYCLE_CLOSING_AGENT) {
+            logger.toast(`Goal: review cycle ${state.reviewCycles} ${recordedVerdict === "PASS" ? "complete" : "failed — fixing & re-reviewing"}`, recordedVerdict === "PASS" ? "info" : "warning");
+          }
           if (!wasAllowed && completionAllowed(state, config)) {
             logger.toast("All required gates passed — completion unlocked", "success");
           }
@@ -446,8 +466,49 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
             const decision = evaluateAutoContinue(state, config);
             persistence.flush(snapshotFn);
             if (decision.continue) {
-              await logger.toast("Goal not complete — continuing automatically", "info");
-              await logger.continueSession(sessionID, decision.message);
+              // The goal is incomplete. Prefer to RUN the required reviews ourselves
+              // (code-driven, 100% — never dependent on the model calling the task tool):
+              // launch each outstanding reviewer, record verdicts (one full pass = one
+              // review cycle), then either tell the agent it is complete (all PASS) or
+              // hand it the blocking findings to fix (any FAIL) so the next idle re-reviews.
+              const model = sessionModel.get(sessionID);
+              const hasWork = state.dirty || (state.lastEditSeq || 0) > 0;
+              if (config.programmaticReview && hasWork && model && clientCanReview(input.client)) {
+                if ((state.reviewCycles || 0) >= config.maxReviewCycles) {
+                  await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles}`, { state: summarizeState(state, config) });
+                  await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
+                } else {
+                  await logger.toast(`Goal: running required reviews (cycle ${(state.reviewCycles || 0) + 1})…`, "info");
+                  const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
+                  let res = null;
+                  try {
+                    res = await runReviewCycle(input.client, store, state, config, {
+                      model,
+                      log: (m) => logger.info(m, { sessionID }),
+                      timeoutMs: config.reviewTimeoutMs,
+                      pollMs: config.reviewPollMs,
+                    });
+                  } catch (err) {
+                    await logger.warn("Programmatic review run failed; falling back to a nudge", { error: String(err?.message || err) });
+                  }
+                  persistence.flush(snapshotFn);
+                  if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {
+                    // A new user turn arrived during the (long) review — it owns the session now; do not override it.
+                  } else if (res && res.completionAllowed) {
+                    await logger.toast(`All required reviews PASSED — ${res.reviewCycles} review cycle${res.reviewCycles === 1 ? "" : "s"}`, "success");
+                    await logger.continueSession(sessionID, `All required reviews PASSED (run programmatically by Goal Guard). Review cycles: ${res.reviewCycles}. The goal is complete — reply with \`Goal Completed\` and an accurate \`Review cycles: ${res.reviewCycles}\` line.`);
+                  } else if (res) {
+                    const findings = res.findings.length ? ` Blocking findings: ${res.findings.join(" | ")}.` : "";
+                    await logger.toast(`Review cycle ${res.reviewCycles}: ${res.failed.map(prettyAgentName).join(", ") || "issues found"} → fix & re-review`, "warning");
+                    await logger.continueSession(sessionID, `A Goal Guard review cycle (#${res.reviewCycles}) found blocking issues you MUST fix now — do NOT claim completion.${findings} Failing reviewers: ${res.failed.join(", ")}. Fix the issues and stop; you will be re-reviewed automatically.`);
+                  } else {
+                    await logger.continueSession(sessionID, decision.message);
+                  }
+                }
+              } else {
+                await logger.toast("Goal not complete — continuing automatically", "info");
+                await logger.continueSession(sessionID, decision.message);
+              }
             } else if (decision.cancelled) {
               // User cancelled this turn — honor it. Send NO prompt; just record it.
               await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });

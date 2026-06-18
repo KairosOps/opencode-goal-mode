@@ -483,10 +483,24 @@ test("system transform injects live state only for active goal sessions", async 
   await hooks["experimental.chat.system.transform"]({ sessionID: "y", model: {} }, active);
   assert.equal(active.system.length, 1);
   assert.match(active.system[0], /Goal Guard — live enforcement state/);
-  // With gates still missing, the injection forces the reviews each turn.
-  assert.match(active.system[0], /MANDATORY NEXT ACTION/);
-  assert.match(active.system[0], /task tool/);
-  assert.match(active.system[0], /cannot be skipped/i);
+  // Default (programmaticReview on): the injection tells the agent the GUARD runs the
+  // required reviews automatically — the agent just implements + verifies, then stops.
+  assert.match(active.system[0], /runs the required reviews AUTOMATICALLY/i);
+  assert.match(active.system[0], /goal-reviewer/);
+});
+
+test("system injection (programmaticReview OFF) tells the agent to run reviews via the task tool", async () => {
+  const guard = __test.createGuard(
+    { client: { app: { log: async () => {} }, tui: { showToast: async () => {} } } },
+    { programmaticReview: false },
+    { persistence: noopPersistence, clock: () => 1 },
+  );
+  await guard.hooks["chat.params"]({ sessionID: "z", agent: "goal" }, {});
+  const out = { system: [] };
+  await guard.hooks["experimental.chat.system.transform"]({ sessionID: "z", model: {} }, out);
+  assert.match(out.system[0], /MANDATORY NEXT ACTION/);
+  assert.match(out.system[0], /task tool/);
+  assert.match(out.system[0], /cannot be skipped/i);
 });
 
 // ---------------------------------------------------------------------------
@@ -618,25 +632,70 @@ test("a Build session never auto-anchors a contract", async () => {
   assert.equal(store.stateFor("nb").active, false);
 });
 
-test("goal_contract upgrades an auto-anchored contract in place without wiping progress", async () => {
-  const guard = makeGuard();
-  const tools = await loadTools(guard);
-  // The model skips goal_contract: the first user turn auto-anchors a baseline, then work + reviews happen.
-  await guard.hooks["chat.message"]({ sessionID: "up", agent: "goal" }, { parts: [{ type: "text", text: "build the feature and verify it" }] });
-  assert.equal(guard.store.stateFor("up").contract.auto, true);
-  await passAllBaseGates(guard.hooks, guard.store, "up");
-  const before = guard.store.stateFor("up");
+test("goal_contract over an auto-anchored contract: SAME goal preserves progress, DIFFERENT goal resets (no inherit)", async () => {
+  // Formalizing the SAME goal (norm-equal original) keeps the auto contract's progress.
+  const a = makeGuard();
+  const aTools = await loadTools(a);
+  await a.hooks["chat.message"]({ sessionID: "up", agent: "goal" }, { parts: [{ type: "text", text: "build the feature and verify it" }] });
+  assert.equal(a.store.stateFor("up").contract.auto, true);
+  await passAllBaseGates(a.hooks, a.store, "up");
+  const before = a.store.stateFor("up");
   assert.ok(before.reviewCycles >= 1 && before.verdicts.length >= 5);
-  // The model finally authors the real contract (different wording) — an UPGRADE, not a new goal.
-  await tools.goal_contract.execute(
-    { title: "Build the feature", original: "Implement the feature end to end with explicit acceptance criteria", acceptanceCriteria: ["works", "verified"] },
+  await aTools.goal_contract.execute(
+    { title: "Build the feature", original: "build the feature and verify it", acceptanceCriteria: ["works", "verified"] },
     { sessionID: "up" },
   );
-  const after = guard.store.stateFor("up");
-  assert.equal(after.reviewCycles, before.reviewCycles, "review progress preserved when upgrading the auto contract");
-  assert.equal(after.verdicts.length, before.verdicts.length);
-  assert.equal(after.contract.acceptanceCriteria.length, 2);
-  assert.ok(!after.contract.auto, "upgraded contract is no longer marked auto");
+  const after = a.store.stateFor("up");
+  assert.equal(after.reviewCycles, before.reviewCycles, "same goal preserves progress");
+  assert.ok(!after.contract.auto, "formalized contract is no longer auto");
+
+  // A DIFFERENT goal authored over an auto contract must NOT inherit the old passes
+  // (regression: this previously leaked → instant un-reviewed completion of the new goal).
+  const b = makeGuard();
+  const bTools = await loadTools(b);
+  await b.hooks["chat.message"]({ sessionID: "rg", agent: "goal" }, { parts: [{ type: "text", text: "make the greeting friendlier" }] });
+  await passAllBaseGates(b.hooks, b.store, "rg");
+  assert.equal(completionAllowedFor(b, "rg"), true, "goal A is complete");
+  await bTools.goal_contract.execute(
+    { title: "Rename counter", original: "rename the counter variable everywhere", acceptanceCriteria: ["renamed"] },
+    { sessionID: "rg" },
+  );
+  const rg = b.store.stateFor("rg");
+  assert.equal(rg.reviewCycles, 0, "new goal does not inherit the old review cycle");
+  assert.equal(rg.verdicts.length, 0, "new goal does not inherit the old passes");
+  assert.equal(completionAllowedFor(b, "rg"), false, "new goal cannot complete un-reviewed");
+});
+
+function completionAllowedFor(guard, sid) {
+  return __test.completionAllowed(guard.store.stateFor(sid), guard.config);
+}
+
+test("premature completion LEAK forms are blocked: checkbox / quotes / parens / brackets / HTML", async () => {
+  for (const text of [
+    "- [x] Goal Completed\n\nReview cycles: 1",
+    "- [ ] Goal Completed\n\nReview cycles: 1",
+    '"Goal Completed"\n\nReview cycles: 1',
+    "(Goal Completed)\n\nReview cycles: 1",
+    "[Goal Completed]\n\nReview cycles: 1",
+    "<b>Goal Completed</b>\n\nReview cycles: 1",
+    "<h2>Goal Completed</h2>\n\nReview cycles: 1",
+  ]) {
+    const { hooks, store } = makeGuard();
+    const sid = `leak-${text.length}-${text.charCodeAt(0)}`;
+    await hooks["chat.params"]({ sessionID: sid, agent: "goal" }, {});
+    const out = { text };
+    await hooks["experimental.text.complete"]({ sessionID: sid, messageID: "m", partID: "p" }, out);
+    assert.match(out.text, /Goal Not Completed/, `${JSON.stringify(text)} must be rewritten`);
+    assert.ok(store.stateFor(sid).completedBlocked >= 1, `${JSON.stringify(text)} must count as blocked`);
+  }
+});
+
+test("a line that merely opens with a quote then PROSE is not policed (no over-block)", async () => {
+  const { hooks } = makeGuard();
+  await hooks["chat.params"]({ sessionID: "pq", agent: "goal" }, {});
+  const out = { text: '"This is still in progress" — more work remains.\n\nNext steps follow.' };
+  await hooks["experimental.text.complete"]({ sessionID: "pq", messageID: "m", partID: "p" }, out);
+  assert.doesNotMatch(out.text, /Goal Not Completed/);
 });
 
 test("system injection nudges for acceptance criteria on an auto-anchored contract", async () => {

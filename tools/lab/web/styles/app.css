@@ -194,7 +194,7 @@ table.tbl .truncate { max-width: 320px; overflow: hidden; text-overflow: ellipsi
 .evh .filter-bar { display: flex; gap: 6px; align-items: center; padding: 8px var(--sp-3); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 
 /* stat tiles inside detail header (useful diagnostics, semantic when flagged) */
-.stats { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.stats { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .stat { background: var(--card); padding: 10px var(--sp-3); display: flex; flex-direction: column; gap: 2px; }
 .stat .s-label { font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }
 .stat .s-val { font-family: var(--font-mono); font-size: var(--fs-lg); color: var(--text-strong); }

@@ -50,7 +50,16 @@ export function buildSystemInjection(state, config) {
   lines.push(`- Required review gates: ${bullet(r.requiredGates)}.`);
   lines.push(`- Gates still missing or stale: ${bullet(r.missingGates)}.`);
 
-  if (r.missingGates.length) {
+  if (r.missingGates.length && config.programmaticReview) {
+    // Reviews are run BY THE GUARD CODE (not the agent). Tell the agent to do the
+    // work and stop — it will be reviewed automatically and told what to fix.
+    lines.push(
+      `- The Goal Guard runs the required reviews AUTOMATICALLY (programmatically) when you stop — you do NOT ` +
+        `invoke any reviewer yourself. Implement the goal and VERIFY it (run the code / run the tests, record ` +
+        `evidence with goal_evidence), then stop. The guard will run these reviewers — ${bullet(r.missingGates)} — ` +
+        `and, if anything is blocking, re-prompt you with exactly what to fix. Each full review pass is one review cycle.`,
+    );
+  } else if (r.missingGates.length) {
     const next = r.missingGates[0];
     lines.push(
       `- MANDATORY NEXT ACTION — run the outstanding reviews now using the task tool. For EACH missing gate ` +

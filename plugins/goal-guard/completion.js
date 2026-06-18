@@ -32,8 +32,14 @@ export function evaluateCompletionClaim(state, config, text) {
   // marker, and emoji. Still start-of-line anchored, so a mid-sentence mention is
   // never policed.
   // Any mix of leading whitespace, markdown punctuation, code-span backticks/tildes,
-  // emoji (+ variation selectors), and an ordered-list marker, in ANY order.
-  const PREFIX = "(?:[\\s>*_#\\-`~]|\\p{Extended_Pictographic}|\\uFE0F|\\d+[.)])*";
+  // emoji (+ variation selectors), an ordered-list marker, a task-list checkbox
+  // (`- [x]`), wrapping quotes/brackets/parens, and HTML tags (`<b>`, `<h2>`), in
+  // ANY order. These are all natural ways a model ANNOUNCES completion, and each
+  // must be policed — a premature claim wrapped in any of them previously leaked
+  // through unrewritten. Still start-of-line anchored (a wrapper char must be
+  // IMMEDIATELY followed by the marker), so a mid-sentence mention or a prose line
+  // that merely opens with a quote is never policed.
+  const PREFIX = "(?:<[^>]{0,24}>|\\[[ xX]?\\]|[\\s>*_#\\-`~\"'()\\[\\]]|\\p{Extended_Pictographic}|\\uFE0F|\\d+[.)])*";
   const markerRe = new RegExp(`^${PREFIX}${escaped}`, "imu");
 
   if (!text || !markerRe.test(text)) return { blocked: false };

@@ -118,8 +118,10 @@ export function sidebarView(state, config) {
     state: "running",
     label: GOAL_LABEL,
     goal,
+    // Surface the review-cycle count WHILE running (not only when done), so the
+    // sidebar always shows how many full review rounds have closed so far.
+    status: `in progress · ${cycles} review cycle${cycles === 1 ? "" : "s"}`,
     gates,
-    status: "in progress",
     todoTitle: GOAL_LABEL,
     todos,
     passing,

@@ -870,9 +870,13 @@ function classifyPython(args, depth, acc) {
 }
 
 function classifyPerlRuby(bin, args, depth, acc) {
-  if (bin === "perl" && args.some((a) => /^-.*i/.test(a) && /^-.*p/.test(a))) {
+  // Any in-place flag rewrites files: -i, -i.bak, bundled -pi/-ni/-pie, -pi.bak, …
+  // The lowercase-letters-before-i shape (/^-[a-z]*i/) matches every in-place form
+  // for both perl AND ruby while NOT matching the uppercase include flag -I<dir>
+  // (an uppercase I blocks the [a-z]* run, so -Idir / -MIO are not flagged).
+  if (args.some((a) => /^-[a-z]*i/.test(a))) {
     acc.mutating = true;
-    acc.reasons.push("perl -pi in-place");
+    acc.reasons.push(`${bin} -i in-place edit`);
   }
   const ei = args.findIndex((a) => a === "-e" || a === "-E");
   if (ei >= 0 && args[ei + 1] !== undefined) inspectScriptString(args[ei + 1], depth, acc);

@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.6.0
+
+### Code-driven review enforcement — the guard launches the reviewers itself
+
+Until now the review gates depended on the *model* spawning the review subagents via
+the task tool (nudged by the system prompt). Weak models skip it, so reviews never
+run. **This release makes the guard CODE launch the required reviewers itself — 100%,
+never dependent on the agent.**
+
+When an active goal idles with work done and gates outstanding, the guard:
+1. **programmatically launches** each required reviewer subagent (`client.session` →
+   the `goal-*` reviewer agent), reads its `Verdict:` line, and records it — one full
+   pass over the required reviewers (ending with the cycle-closing auditor) is **one
+   review cycle**;
+2. on any **FAIL**, feeds the blocking findings back to the agent to fix (the fix is an
+   edit, which staleness-invalidates the prior passes), so the next idle re-reviews —
+   exactly the loop *agent done → review → FAIL → fix → review → … → PASS*;
+3. on **all PASS**, opens completion and tells the agent to finish with an accurate
+   `Review cycles: N`.
+
+The agent now just **implements and verifies**, then stops — the guard reviews. New
+config: `programmaticReview` (default **on**; set false to fall back to nudging the
+agent), `reviewTimeoutMs`, `reviewPollMs`, `maxReviewCycles` (backstop). If the host
+client can't drive sessions, it degrades gracefully to the previous nudge behaviour.
+
+**Review cycles are now recorded AND surfaced everywhere, always** — the TUI sidebar
+shows the count *while running* (not only when done), a toast fires as each cycle
+closes, and `goal_status` + the system-prompt block already carry it.
+
+**Completion-integrity leaks closed (found by an adversarial completion-flow hunt and
+each re-verified + regression-tested):**
+- A premature `Goal Completed` wrapped as a markdown checkbox (`- [x] Goal Completed`),
+  in quotes/parens/brackets, or HTML tags (`<b>…</b>`, `<h2>…</h2>`) **leaked past the
+  rewrite** — the marker detector now tolerates all of these (still start-anchored, so
+  a mid-sentence mention is not policed).
+- `perl -i` / `ruby -i` in-place edits (incl. `-i.bak`, bundled `-pi`) were not marked
+  mutating, so they didn't invalidate prior reviews — now they do (uppercase `-I`
+  include paths are not over-flagged).
+- A new goal authored over an **auto-seeded** contract inherited the previous goal's
+  passed gates → instant un-reviewed completion. `goal_contract` now resets per-goal
+  progress whenever the request differs from the recorded contract (auto-seeded too).
+
+**331 tests pass** (new: programmatic review-runner unit + hook-level integration
+proving the guard launches the reviewers and runs the FAIL→fix→PASS cycle).
+
 ## v0.5.2
 
 ### Shell-guard adversarial hardening — real bypasses closed

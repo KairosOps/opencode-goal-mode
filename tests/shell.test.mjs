@@ -495,3 +495,12 @@ test("[10] crontab -r is destructive; crontab -l is not", () => {
   assert.equal(looksLikeDestructiveBash("crontab -r"), true);
   assert.equal(analyzeCommand("crontab -l").destructive, false);
 });
+
+test("[11] perl/ruby in-place edits (-i forms) are mutating; include/module/eval flags are not", () => {
+  for (const cmd of ["perl -i -pe 's/a/b/' f", "perl -pi -e 's/a/b/' f", "perl -i.bak -pe 's/a/b/' f", "ruby -i -pe 'x' f", "ruby -i.orig -pe 'x' f"]) {
+    assert.equal(looksLikeMutatingBash(cmd), true, `${cmd} edits files in place`);
+  }
+  for (const cmd of ["perl -Ilib script.pl", "perl -MIO::Handle -e 'print 1'", "perl -e 'print 1'", "ruby -e 'puts 1'"]) {
+    assert.equal(analyzeCommand(cmd).mutating, false, `${cmd} is not an in-place edit`);
+  }
+});

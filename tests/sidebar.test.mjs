@@ -67,12 +67,20 @@ test("sidebarView state 'running' with a stacked GOAL label, gates + status line
   assert.equal(v.required, 5); // BASE_GATES
   assert.equal(v.passing, 0);
   assert.equal(v.gates, "0/5 gates");
-  // Status is just the lifecycle word — the noisy "· changes pending" suffix is gone;
-  // pending work surfaces as a structured todo row instead. GOAL label on its own line.
-  assert.equal(v.status, "in progress");
+  // Status shows the lifecycle word AND the review-cycle count while running, so the
+  // sidebar always surfaces how many full review rounds have closed (not only at done).
+  assert.equal(v.status, "in progress · 0 review cycles");
   assert.equal(v.label, "GOAL");
   assert.equal(v.todoTitle, "GOAL");
   assert.ok(v.todos.some((item) => item.text.includes("Re-verify")));
+});
+
+test("running sidebar status surfaces the review-cycle count (singular/plural)", () => {
+  const one = sidebarView(activeState({ goalText: "x", reviewCycles: 1 }), DEFAULT_CONFIG);
+  assert.equal(one.status, "in progress · 1 review cycle");
+  assert.equal(one.reviewCycles, 1);
+  const three = sidebarView(activeState({ goalText: "x", reviewCycles: 3 }), DEFAULT_CONFIG);
+  assert.equal(three.status, "in progress · 3 review cycles");
 });
 
 test("a long acceptance criterion still checks off with matching fresh evidence (clip-before-match regression)", () => {

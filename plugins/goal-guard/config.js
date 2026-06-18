@@ -19,6 +19,18 @@ export const DEFAULT_CONFIG = Object.freeze({
   autoContinue: true,
   /** Hard cap on automatic continuations per goal session (backstop against runaway). */
   maxAutoContinue: 50,
+  /** Programmatically LAUNCH the required review subagents from the guard code (do not
+   * rely on the model to call the task tool). When an active goal idles with work done
+   * and gates outstanding, the guard runs each reviewer itself, records the verdicts,
+   * and feeds blocking findings back to the agent — so reviews ALWAYS run, 100%. */
+  programmaticReview: true,
+  /** Per-reviewer wall-clock cap (ms) for a programmatic review run. */
+  reviewTimeoutMs: 6 * 60 * 1000,
+  /** Poll cadence (ms) while waiting for a launched reviewer to render its verdict. */
+  reviewPollMs: 2500,
+  /** Hard cap on programmatic review CYCLES per goal (backstop against a reviewer that
+   * never passes). On reaching it, the guard pauses and asks the human to step in. */
+  maxReviewCycles: 12,
   /** Grace delay (ms) before an idle goal auto-continues, so a near-simultaneous user
    * cancel (session.error → MessageAbortedError) is observed first and the continuation
    * is suppressed — regardless of hook delivery order. It must comfortably exceed the
@@ -91,6 +103,10 @@ function fromEnv(env) {
     GOAL_GUARD_ENFORCE_COMPLETION: ["enforceCompletion", coerceBool],
     GOAL_GUARD_AUTO_CONTINUE: ["autoContinue", coerceBool],
     GOAL_GUARD_MAX_AUTO_CONTINUE: ["maxAutoContinue", coerceInt],
+    GOAL_GUARD_PROGRAMMATIC_REVIEW: ["programmaticReview", coerceBool],
+    GOAL_GUARD_REVIEW_TIMEOUT_MS: ["reviewTimeoutMs", coerceInt],
+    GOAL_GUARD_REVIEW_POLL_MS: ["reviewPollMs", coerceInt],
+    GOAL_GUARD_MAX_REVIEW_CYCLES: ["maxReviewCycles", coerceInt],
     GOAL_GUARD_ABORT_GRACE_MS: ["abortGraceMs", coerceInt],
     GOAL_GUARD_INJECT_SYSTEM_STATE: ["injectSystemState", coerceBool],
     GOAL_GUARD_PERSIST: ["persist", coerceBool],
