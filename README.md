@@ -1,5 +1,5 @@
 <div align="center">
-
+  
 # OpenCode Goal Mode
 
 ### The OpenCode agent that can't fake "done" — and can't wreck your repo doing it.
