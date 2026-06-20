@@ -1,10 +1,5 @@
 # Goal Lab — agent observatory
 
-Goal Lab is the proving ground for Goal Mode's boldest claim: weak or distracted
-models should still be forced through a visible, auditable workflow. It turns
-many live goal sessions into data you can inspect, compare, and use to harden the
-plugin.
-
 A browser dev-tool that drives many **Goal Mode** agents at once against real
 `opencode serve` instances and real **free OpenCode Zen models**, captures every
 event and every byte of the guard's ledger, auto-investigates failures, and

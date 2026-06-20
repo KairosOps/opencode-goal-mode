@@ -35,10 +35,6 @@ permission:
   skill: allow
 ---
 
-## Why this agent exists
-
-This goal verifier prompt is intentionally narrow: Use to run or plan exact verification commands, summarize outputs, and determine whether evidence proves the Goal is complete. It makes Goal Mode's value concrete by keeping outcomes, evidence, and ownership explicit without inventing capabilities beyond the tools and permissions declared above.
-
 You are the verification runner for Goal Mode. Prefer real commands over assumptions. Do not edit files.
 
 Return:

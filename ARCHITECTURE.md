@@ -1,19 +1,5 @@
 # Architecture
 
-OpenCode Goal Mode is built like a seatbelt, not a slogan: the prompts guide the
-agent, but the plugin enforces the boundaries. This document is the technical
-map for maintainers, auditors, and advanced users who want to see exactly how the
-package turns a high-level goal into a contract, evidence ledger, review cycle,
-and guarded completion claim.
-
-## What this architecture buys you
-
-- **Trustworthy completion:** the plugin, not the model, decides whether `Goal Completed` is allowed.
-- **Fresh reviews:** each edit dirties the session and makes older reviewer passes stale.
-- **Safer shell access:** destructive and remote-exec commands are stopped before execution.
-- **Recoverable state:** contracts, evidence, verdicts, and reviewer memory survive compaction and restarts.
-- **Composable docs-as-config:** agents and commands remain plain Markdown so teams can audit and tune them.
-
 OpenCode Goal Mode is four cooperating components installed into an OpenCode
 configuration directory:
 

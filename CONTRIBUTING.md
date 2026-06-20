@@ -2,17 +2,6 @@
 
 Thanks for helping improve OpenCode Goal Mode!
 
-This project is trying to make agentic coding more honest: clear contracts,
-verifiable evidence, strict review gates, and safe command handling. The best
-contributions keep that promise obvious to users and measurable in tests.
-
-## High-impact contribution areas
-
-- Harden the shell analyzer without raising false positives that would make users disable it.
-- Improve review-gate orchestration, evidence mapping, and stale-state reporting.
-- Keep docs promotional but accurate: lead with outcomes, then cite the mechanism.
-- Add tests for every behavior change so the guard's guarantees stay reproducible.
-
 ## Development
 
 ```bash

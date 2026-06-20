@@ -1,10 +1,5 @@
 # OpenCode plugin platform — verified reference
 
-Goal Mode's enforcement story depends on exact OpenCode runtime behavior. This
-reference turns that dependency into an auditable map: which hooks exist, what
-they receive, where plugin files are discovered, and which version-scoped facts
-the guard relies on.
-
 Facts verified against `@opencode-ai/plugin@1.15.13` (the type definitions
 current when this document was written) and the `sst/opencode` source at tag
 `v1.15.13`. The `goal-guard` plugin's installed devDependency has since moved to

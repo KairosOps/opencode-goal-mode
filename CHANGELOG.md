@@ -1,10 +1,5 @@
 # Changelog
 
-Every entry here is written for release readers, not just maintainers: what
-changed, why it matters, and which user-visible guarantee got stronger. Use it as
-the fastest factual tour of Goal Mode's evolution from prompt discipline into a
-guard-enforced workflow.
-
 ## v0.6.11
 
 ### Fix: programmatic reviewers run in parallel (one batch = one cycle)
