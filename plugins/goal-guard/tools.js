@@ -15,7 +15,7 @@ import { tool } from "@opencode-ai/plugin";
 import { evidenceMapReport, reviewerMemoryReport, statusReport } from "./summary.js";
 import { recordEvidence } from "./events.js";
 import { refreshStickyGates } from "./gates.js";
-import { createState, resetGoalProgress } from "./state.js";
+import { resetGoalProgress } from "./state.js";
 import { isPrimaryAgent } from "./agents.js";
 
 const s = tool.schema;
@@ -251,8 +251,14 @@ export function createGoalTools({ store, config, persist }) {
         if (!args.confirm) {
           return { title: "Reset not confirmed", output: "Pass confirm=true to reset Goal Guard state." };
         }
-        const fresh = createState(store.nowIso());
-        store.sessions.set(String(ctx.sessionID || "default"), fresh);
+        // Reset per-GOAL progress IN PLACE, preserving the session's identity
+        // (the `active` flag, `currentAgent`, `createdAt`). The previous code
+        // replaced the whole record with createState(), which set active=false and
+        // currentAgent=undefined — so immediately after a reset the session was
+        // deactivated: subsequent goal_* tools were rejected as 'not goal mode'
+        // until the next chat.params/reactivation, and an idle could not trigger a
+        // programmatic review (canProgrammaticReview requires state.active).
+        resetGoalProgress(state, store.nowIso());
         save();
         return { title: "Goal Guard state reset", output: "All goal state cleared for this session." };
       },

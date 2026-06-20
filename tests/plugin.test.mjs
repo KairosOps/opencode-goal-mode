@@ -738,6 +738,40 @@ test("goal_status returns structured status", async () => {
   assert.equal(report.reviewerMemory.open.length, 0);
 });
 
+test("REGRESSION [goal_reset]: reset preserves session identity (active, currentAgent, createdAt)", async () => {
+  // goal_reset used to replace the whole record with createState(), which set
+  // active=false and currentAgent=undefined — deactivating the session so the next
+  // idle could not run a programmatic review and goal_* tools were rejected until a
+  // chat.params reactivation. resetGoalProgress preserves identity in place.
+  const guard = makeGuard();
+  const { createGoalTools } = await import("../plugins/goal-guard/tools.js");
+  const tools = createGoalTools({ store: guard.store, config: guard.config, persist: guard.persist });
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal" }, {});
+  const before = guard.store.stateFor("g");
+  const createdAtBefore = before.createdAt;
+  await tools.goal_contract.execute({ title: "X", original: "do thing", acceptanceCriteria: ["done"] }, { sessionID: "g" });
+  await tools.goal_evidence.execute({ command: "npm test", result: "ok" }, { sessionID: "g" });
+  assert.equal(before.active, true);
+  assert.equal(before.evidence.length, 1);
+  assert.ok(before.contract);
+
+  const res = await tools.goal_reset.execute({ confirm: true }, { sessionID: "g" });
+  assert.match(res.title, /reset/);
+  const after = guard.store.stateFor("g");
+  // Per-goal progress is cleared ...
+  assert.equal(after.contract, null);
+  assert.equal(after.evidence.length, 0);
+  assert.equal(after.dirty, false);
+  assert.equal(after.reviewCycles, 0);
+  // ... but the session identity (and goal-mode activation) is preserved.
+  assert.equal(after.active, true, "active must be preserved so idle can still trigger review");
+  assert.equal(after.currentAgent, "goal", "currentAgent must be preserved");
+  assert.equal(after.createdAt, createdAtBefore, "createdAt must be preserved");
+  // A subsequent goal_* tool still works without a chat.params reactivation.
+  const status = await tools.goal_status.execute({}, { sessionID: "g" });
+  assert.doesNotMatch(status.output, /only mutate Goal Guard state/);
+});
+
 test("read-only goal tools are Goal-only and do not show another active goal", async () => {
   const guard = makeGuard();
   const tools = await loadTools(guard);
