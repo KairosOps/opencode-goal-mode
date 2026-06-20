@@ -12,18 +12,33 @@ permission:
     "*": ask
     "rg *": allow
     "grep *": allow
+    "grep -r *": allow
+    "grep -E *": allow
+    "grep -F *": allow
     "cat *": allow
     "head *": allow
     "tail *": allow
     "wc *": allow
+    "awk *": allow
+    "less *": allow
+    "file *": allow
+    "stat *": allow
+    "tree *": allow
     "find *": allow
     "ls": allow
     "ls *": allow
+    "pwd": allow
+    "sed *": allow
     "sed -n *": allow
     "git status *": allow
     "git diff *": allow
     "git log *": allow
     "git show *": allow
+    "find * -delete*": deny
+    "find * -exec*": deny
+    "sed -i*": deny
+    "sed * -i*": deny
+    "sed * -i *": deny
   task: deny
   external_directory: allow
   todowrite: deny

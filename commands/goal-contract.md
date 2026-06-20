@@ -11,4 +11,4 @@ Request:
 $ARGUMENTS
 ```
 
-Return explicit requirements, inferred requirements, non-goals, acceptance criteria, likely required subagents, and open clarifying questions if truly needed.
+Return explicit requirements, inferred requirements, non-goals, acceptance criteria, likely required subagents, and documented assumptions where the request is ambiguous. Do not use the Questions tool.

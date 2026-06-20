@@ -44,6 +44,18 @@ test("commands bind to a goal agent", () => {
   }
 });
 
+test("goal command does not instruct using the Questions tool", () => {
+  const body = readRepo("commands/goal.md");
+  assert.doesNotMatch(body, /clarifying questions/i, "goal command must not ask for clarifying questions");
+  assert.match(body, /Questions tool.*disabled/i, "goal command must note question tool is disabled");
+});
+
+test("goal-contract command does not instruct using the Questions tool", () => {
+  const body = readRepo("commands/goal-contract.md");
+  assert.doesNotMatch(body, /clarifying questions/i, "goal-contract must not ask for clarifying questions");
+  assert.match(body, /Questions tool/i, "goal-contract must note question tool is unavailable");
+});
+
 test("evidence map command stays read-only and criteria-focused", () => {
   const body = readRepo("commands/goal-evidence-map.md");
   assert.match(body, /Do not edit files/);

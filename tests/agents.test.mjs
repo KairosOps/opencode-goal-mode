@@ -116,8 +116,21 @@ test("primary goal denies the question tool (autonomous loop)", () => {
 
 test("goal-explorer allows common read-only bash", () => {
   const fm = frontmatter(readRepo("agents/goal-explorer.md"));
-  for (const pattern of ["grep *", "cat *", "rg *", "git diff *"]) {
+  for (const pattern of [
+    "grep *",
+    "grep -r *",
+    "cat *",
+    "rg *",
+    "sed *",
+    "sed -n *",
+    "awk *",
+    "find *",
+    "git diff *",
+  ]) {
     assert.ok(fm.includes(`"${pattern}": allow`), `goal-explorer.md must allow "${pattern}"`);
+  }
+  for (const pattern of ["find * -delete*", "sed -i*", "sed * -i*"]) {
+    assert.ok(fm.includes(`"${pattern}": deny`), `goal-explorer.md must deny "${pattern}"`);
   }
   assert.match(fm, /edit:\s+deny/, "goal-explorer must stay read-only");
 });
