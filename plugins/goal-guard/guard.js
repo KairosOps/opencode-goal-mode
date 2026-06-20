@@ -87,7 +87,19 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   const idleReviewRetries = new Map(); // sessionID -> retry count for SessionBusy deferrals
   const idleReviewTimers = new Map(); // sessionID -> scheduled retry timer
   const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
-  const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
+  // Canonical session key — identical to createStore.stateFor's normalization. The
+  // in-memory maps (userTurnSeq, sessionModel, decidingIdle, …) and lastActiveGoalSession
+  // MUST key on this canonical form, or a sessionID carrying incidental whitespace would
+  // land in a different bucket than the store and the idle/abort/model lookups would
+  // silently miss (chat.params trimmed its id; chat.message/event did not).
+  const norm = (sid) => {
+    const key = String(sid || "default").trim();
+    return key || "default";
+  };
+  const bumpUserTurn = (sid) => {
+    const key = norm(sid);
+    userTurnSeq.set(key, (userTurnSeq.get(key) || 0) + 1);
+  };
   const sessionModel = new Map(); // sessionID -> { providerID, modelID } of the goal's model, so the
   // guard can launch the review subagents on the SAME model the agent is using.
   let lastActiveGoalSession = null; // sessionID of the most-recent active goal turn
@@ -175,7 +187,10 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   };
 
   /** Async idle resolution — must NOT run inline inside the `event` hook (see session.idle). */
-  async function resolveIdleSession(sessionID) {
+  async function resolveIdleSession(rawSessionID) {
+    // Canonicalize once so every internal lookup (store, userTurnSeq, sessionModel,
+    // decidingIdle) keys identically regardless of which hook supplied the id.
+    const sessionID = norm(rawSessionID);
     try {
       const state = store.stateFor(sessionID);
       if (state.active && config.autoContinue && config.abortGraceMs > 0 && !state.abortedAt) {
@@ -333,7 +348,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
             }
           }
         }
-        if (state.active) lastActiveGoalSession = inp.sessionID;
+        if (state.active) lastActiveGoalSession = norm(inp.sessionID);
         const text = partsText(out?.parts);
         if (text && state.active) {
           // Accumulate goal text (bounded) so contextual gates can be derived.
@@ -602,9 +617,12 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           const err = event.properties?.error;
           const sid = event.properties?.sessionID;
           if (sid && err && /abort/i.test(String(err.name || ""))) {
-            const key = String(sid).trim();
-            const st = key && store.sessions.get(key);
+            const key = norm(sid);
+            const st = store.sessions.get(key);
             if (st && st.active) {
+              // abortedAt is compared against Date.now() in evaluateAutoContinue, so it
+              // must use the SAME wall clock (not the store's injectable clock) or the
+              // two would disagree under a fake-clock test and the cancel window breaks.
               st.abortedAt = Date.now();
               persistence.flush(snapshotFn);
               await logger.toast("Goal Mode: turn cancelled — not auto-continuing", "info");
@@ -613,7 +631,9 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           return;
         }
         if (event.type === "session.idle" && event.properties?.sessionID) {
-          const sessionID = event.properties.sessionID;
+          // Canonicalize so the decidingIdle coalesce set and resolveIdleSession's
+          // finally-delete key identically (and match the store's normalized key).
+          const sessionID = norm(event.properties.sessionID);
           const idleState = store.stateFor(sessionID);
           idleState.lastIdleEventAt = store.nowIso();
           persist();

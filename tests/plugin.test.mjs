@@ -67,6 +67,24 @@ test("blocking can be disabled via config", async () => {
   );
 });
 
+test("REGRESSION: a sessionID with incidental whitespace keys identically across hooks", async () => {
+  // chat.params trimmed its sessionID but chat.message / the session.idle event did
+  // not, so the in-memory maps (userTurnSeq, sessionModel, decidingIdle) and
+  // lastActiveGoalSession could land in a different bucket than the store. An abort
+  // or user-resume-during-review lookup could then silently miss. Every hook must
+  // canonicalize to the same key the store uses.
+  const { hooks, store } = makeGuard();
+  const padded = "  my-session  ";
+  await hooks["chat.params"]({ sessionID: padded, agent: "goal" }, {});
+  await hooks["chat.message"]({ sessionID: padded, agent: "goal" }, { parts: [{ type: "text", text: "do it" }] });
+  // The store canonicalizes (trim) — the padded id resolves to the same record.
+  assert.equal(store.stateFor(padded), store.stateFor("my-session"));
+  assert.equal(store.stateFor("my-session").active, true);
+  // A cancel via session.error on the padded id must reach the same record.
+  await hooks.event({ event: { type: "session.error", properties: { sessionID: padded, error: { name: "MessageAbortedError" } } } });
+  assert.equal(store.stateFor("my-session").abortedAt > 0, true, "abort recorded against the canonical (trimmed) key");
+});
+
 // ---------------------------------------------------------------------------
 // Dirty tracking
 // ---------------------------------------------------------------------------
