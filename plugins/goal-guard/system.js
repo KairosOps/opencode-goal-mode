@@ -6,11 +6,9 @@
  * allowed — turning the guard from a silent blocker into an active steering
  * signal. Only emitted for active goal sessions.
  *
- * The steering is deliberately PRESCRIPTIVE (an ordered required sequence + the
- * exact `task` invocation for the next outstanding review). Weak/low-capability
- * models frequently stop early or never spawn the review subagents; spelling out
- * the exact next action — not just "reviews are required" — measurably raises the
- * chance the goal is actually driven to completion in fewer turns.
+ * The steering is PRESCRIPTIVE when `programmaticReview` is off (ordered sequence +
+ * exact `task` invocation for the next outstanding review). With programmatic
+ * review on (default), it tells the agent the guard launches reviewers on stop.
  */
 
 import { statusReport } from "./summary.js";

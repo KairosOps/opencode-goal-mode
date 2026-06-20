@@ -39,7 +39,7 @@ See `docs/benchmarks/capability-matrix.svg` for the visual. Levels: **Enforced**
 | Capability | Goal Mode | Claude Code | Codex |
 | --- | --- | --- | --- |
 | Autonomous goal loop | Prompt-only | Partial | Partial |
-| Review gate before "done" | **Enforced** | Partial (Stop hook) | Prompt-only |
+| Review gate before "done" | **Enforced** (guard runs reviewers on idle; completion blocked until fresh PASS) | Partial (Stop hook) | Prompt-only |
 | Contextual specialist reviews | **Enforced** | Prompt-only | Prompt-only |
 | Stale-review invalidation on edit | **Enforced** | None | None |
 | Completion-claim enforcement | **Enforced** | Partial (Stop hook) | None |

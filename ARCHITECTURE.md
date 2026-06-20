@@ -1,6 +1,6 @@
 # Architecture
 
-OpenCode Goal Mode is three cooperating layers installed into an OpenCode
+OpenCode Goal Mode is four cooperating components installed into an OpenCode
 configuration directory:
 
 1. **Agents** (`agents/*.md`) — a primary `goal` agent plus specialist
@@ -52,10 +52,10 @@ themselves loaded as plugins. Each module is independently unit-tested.
 | `goal-guard/gates.js` | Required-gate computation and freshness. |
 | `goal-guard/completion.js` | `Goal Completed` claim evaluation. |
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
-| `goal-guard/autocontinue.js` | Auto-continue decision: keep an incomplete goal working on idle, with cap + no-progress backstops. |
+| `goal-guard/autocontinue.js` | Auto-continue decision logic and continuation copy; when idle with edits outstanding, programmatic review in `guard.js` takes precedence over these nudges. |
 | `goal-guard/review-runner.js` | Code-driven review enforcement — the guard launches the required reviewer subagents itself. |
 | `goal-guard/summary.js` | State summaries, status reports, evidence-map projections, and the short goal label. |
-| `goal-guard/system.js` | Live state block injected into the system prompt. |
+| `goal-guard/system.js` | Live state block injected into the system prompt; with `programmaticReview` on (default), tells the agent the guard runs reviews on stop — task-tool directives only when programmatic review is disabled. |
 | `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
 | `goal-guard/sidebar-data.js` | Pure reader that projects the persisted snapshot into the sidebar todo model. |
 | `goal-guard/logger.js` | Best-effort logging/toasts over the OpenCode client. |
@@ -74,7 +74,7 @@ pinned to `1.17.6` in devDependencies).
 | `tool.execute.after` | Record edits, verification, mutations, and review verdicts. |
 | `experimental.text.complete` | Rewrite premature `Goal Completed` claims. |
 | `experimental.session.compacting` | Preserve guard state across compaction. |
-| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); and on `session.idle`, flush state and — for an incomplete goal with work done — run the required reviewer subagents itself (code-driven, `programmaticReview`) one full cycle, then either feed back blocking findings or auto-continue (via `client.session.promptAsync`) so it never stops early. |
+| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); and on `session.idle`, flush state and — for an incomplete goal with work done — run the full programmatic review cycle **first** (`programmaticReview`); on all PASS call `emitGoalCompleted`; on FAIL call `guardPrompt` with blocking findings (prefixed `[Goal Guard]`, `agent: goal`); nudge implementation only when there is no work yet; skip re-review when `completionAllowed` is already true. |
 | `tool` | Register the custom `goal_*` tools. |
 | `dispose` | Flush persisted state. |
 
@@ -206,30 +206,39 @@ runs it in a separate Bun/OpenTUI job.
 `config.js` merges, in increasing precedence: built-in defaults, environment
 variables (`GOAL_GUARD_*`), and the plugin `options` object passed via the
 `["./plugins/goal-guard.js", { … }]` form in `opencode.json`. Toggles cover
-destructive blocking, network-exec blocking, completion enforcement, system-state
-injection, persistence, contextual gates, session cache size/TTL, and toasts.
+destructive blocking, network-exec blocking, completion enforcement,
+`autoContinue`, `programmaticReview`, review timeouts/polling, `maxReviewCycles`,
+system-state injection, persistence, contextual gates, subagent restriction,
+session cache size/TTL, sidebar colours, and toasts. See README.md for the full
+option table.
 
 ## Installer
 
 `scripts/install.mjs` recursively copies `agents/`, `commands/`, and `plugins/`
-(including the nested module directory) into the target config dir, and records a
-manifest of the file hashes it wrote. On upgrade it distinguishes files it owns
-(safe to replace) from files the user has customized (a conflict requiring
-`--force`), prunes files from prior versions that no longer ship, and supports
-`--uninstall` (which leaves locally-modified files in place).
+(including the nested module directory) into the target config dir, merge-registers
+the sidebar package in `tui.json`, clears stale TUI plugin cache entries, and
+records a manifest of the file hashes it wrote. Global `npm install -g` also
+triggers the same installer via `postinstall.mjs`. On upgrade it distinguishes
+files it owns (safe to replace) from files the user has customized (a conflict
+requiring `--force`), prunes files from prior versions that no longer ship, and
+supports `--uninstall` (which leaves locally-modified files in place).
 
 ## Testing
 
-`node --test` runs the suite:
+`node --test` runs the suite (349 tests across 18 files):
 
-- `tests/shell.test.mjs` — the analyzer against the bypass and false-positive corpora.
+- `tests/shell.test.mjs` / `tests/shell.property.test.mjs` — analyzer against bypass and false-positive corpora.
 - `tests/plugin.test.mjs` — hook behavior, gating, verdicts, completion, tools, isolation.
+- `tests/programmatic-review.test.mjs` / `tests/review-runner.test.mjs` — idle review-first cycle and code-driven reviewer launches.
+- `tests/integration.test.mjs` / `tests/autocontinue.test.mjs` — end-to-end idle, cancel, and auto-continue behavior.
 - `tests/truthfulness-benchmark.test.mjs` — false-completion corpus and truthfulness scoring.
-- `tests/state.test.mjs` — store, seq ordering, eviction, persistence round-trips.
-- `tests/sidebar.test.mjs` — short goal label, sidebar projection, snapshot reader, new destructive bins.
+- `tests/state.test.mjs` / `tests/persistence.test.mjs` — store, seq ordering, eviction, persistence round-trips.
+- `tests/config.test.mjs` / `tests/gates.test.mjs` / `tests/verdicts.test.mjs` — config resolution, gate selection, verdict parsing.
+- `tests/sidebar.test.mjs` — short goal label, sidebar projection, snapshot reader.
 - `tests/toast.test.mjs` — review-verdict and completion-unlock toasts.
-- `tests/agents.test.mjs` / `tests/commands.test.mjs` — frontmatter and contracts.
+- `tests/agents.test.mjs` / `tests/commands.test.mjs` — frontmatter, permissions, and command contracts.
 - `tests/install.test.mjs` — recursive copy, manifest upgrades, uninstall.
+- `tests/deep-bughunt.test.mjs` — targeted regression cases from production bug hunts.
 
 The shell guard's headline accuracy is measured on an external, third-party
 corpus (`benchmarks/external.mjs` over `external-corpus.json`), not on the curated

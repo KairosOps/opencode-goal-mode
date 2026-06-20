@@ -15,7 +15,7 @@ actually pass**. Reach for `rm -rf` mid-run and it stops the command cold.
 [![license](https://img.shields.io/npm/l/opencode-goal-mode?color=2da44e)](LICENSE)
 
 ```bash
-npm install -g opencode-goal-mode && opencode-goal-mode --global
+npm install -g opencode-goal-mode
 ```
 
 </div>
@@ -124,15 +124,18 @@ One command. Needs [Node](https://nodejs.org) 20.11+ and [OpenCode](https://open
 macOS and Linux:
 
 ```bash
-npm install -g opencode-goal-mode && opencode-goal-mode --global
+npm install -g opencode-goal-mode
 ```
 
-Then **restart OpenCode**. That's it. The installer drops the Goal agent, its reviewer
-subagents, slash commands, and the guard plugin into `~/.config/opencode`, and registers
-the live sidebar. In the agent picker you'll see just **`goal`** — the reviewers are
-subagents it drives for you. It's idempotent (re-run to upgrade), never touches files
-you've edited, and `--uninstall` removes exactly what it added. Goal Mode uses whatever
-model and provider OpenCode is already set up with.
+Then **restart OpenCode**. Global installs auto-run the installer via
+`postinstall`; re-run `opencode-goal-mode --global` if auto-setup fails or you
+need `--force`. The installer drops the Goal agent, its reviewer subagents, slash
+commands, and the guard plugin into `~/.config/opencode`, and registers the live
+sidebar in `tui.json`. In the agent picker you'll see just **`goal`** — the
+reviewers are subagents it drives for you. It's idempotent (re-run to upgrade),
+never overwrites agents/commands/plugins you've edited (but merge-adds the
+sidebar entry in `tui.json`), and `--uninstall` removes exactly what it added.
+Goal Mode uses whatever model and provider OpenCode is already set up with.
 
 <details>
 <summary>Other ways to install</summary>
@@ -205,7 +208,7 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
 | `programmaticReview` / `GOAL_GUARD_PROGRAMMATIC_REVIEW` | `true` | Have the guard launch the required reviewers itself on idle. |
 | `reviewTimeoutMs` / `GOAL_GUARD_REVIEW_TIMEOUT_MS` | `360000` | Per-reviewer wall-clock cap (ms) for a programmatic review. |
 | `reviewPollMs` / `GOAL_GUARD_REVIEW_POLL_MS` | `2500` | Poll cadence (ms) while waiting for a reviewer's verdict. |
-| `maxReviewCycles` / `GOAL_GUARD_MAX_REVIEW_CYCLES` | `12` | Hard cap on review cycles per goal; on reaching it the guard pauses for you. |
+| `maxReviewCycles` / `GOAL_GUARD_MAX_REVIEW_CYCLES` | `12` | Hard cap on programmatic review runs per goal; on reaching it the guard pauses for you. |
 | `abortGraceMs` / `GOAL_GUARD_ABORT_GRACE_MS` | `1200` | Grace (ms) before an idle goal auto-continues, so a user cancel is always honored. |
 | `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live guard state into the prompt. |
 | `persist` / `GOAL_GUARD_PERSIST` | `true` | Persist state under the XDG state dir. |
@@ -218,7 +221,7 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
 | `sidebarBanner` / `GOAL_GUARD_SIDEBAR_BANNER` | `true` | Show the live Goal todo section in the TUI sidebar. |
 | `sidebarColor` / `GOAL_GUARD_SIDEBAR_COLOR` | `#FFD700` | Colour of the GOAL label for a **running** goal. |
 | `sidebarDoneColor` / `GOAL_GUARD_SIDEBAR_DONE_COLOR` | `#FF5555` | Colour of a **done** goal in the sidebar. |
-| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Reserved muted colour for no-goal projections. |
+| `sidebarMutedColor` / `GOAL_GUARD_SIDEBAR_MUTED_COLOR` | `#808080` | Foreground colour for **pending** Goal todo rows (□ items) while a goal is running. |
 | `completionMarker` / `GOAL_GUARD_COMPLETION_MARKER` | `Goal Completed` | Phrase that, at the start of a message, claims completion. |
 | `blockedMarker` / `GOAL_GUARD_BLOCKED_MARKER` | `Goal Not Completed` | Replacement written when a completion claim is blocked. |
 
@@ -236,10 +239,15 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
   `~/.config/opencode/tui.json` lists `opencode-goal-mode`, then fully restart OpenCode.
   The sidebar is experimental and only shows inside a Goal session with a goal set;
   enforcement works regardless of the sidebar.
-- **Reviews didn't kick off on their own?** The auto-review fires on session idle. A few
-  free models stall mid-turn without ever going idle, so on those it may not run live —
-  `/goal-review` and `/goal-final` run a cycle on demand, and the completion guard still
-  blocks an unearned `Goal Completed` either way.
+- **Reviews didn't kick off on their own?** With default `programmaticReview`, the
+  guard launches reviewers on **session idle** after you stop with work done.
+  Some free models stall mid-turn without going idle, so reviews may not run live
+  on those — `/goal-review` and `/goal-final` run a cycle on demand, and the
+  completion guard still blocks an unearned `Goal Completed` either way.
+- **Explorer subagent prompting on basic shell?** Upgrade to v0.6.7+ — read-only
+  commands like `grep`, `cat`, and `sed` are pre-approved on `goal-explorer`.
+- **Goal agent stalling on Questions?** The primary `goal` agent has `question: deny`
+  (v0.6.7+); record assumptions in the Goal Contract instead.
 - **A safe command got blocked?** Run `node benchmarks/external.mjs --json` to see how the
   analyzer reads it, set `blockDestructive: false` for that project, and please
   [open an issue](https://github.com/devinoldenburg/opencode-goal-mode/issues).
@@ -249,8 +257,9 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
 - **Requirements:** Node 20.11+, OpenCode configured to load local agents/commands/
   plugins (tested against `@opencode-ai/plugin` 1.17.6, compatible with the 1.15+ hook
   surface), and a working provider/model. Agents inherit your OpenCode default model.
-- **Safety:** The installer copies only `agents/*.md`, `commands/*.md`, and `plugins/` —
-  never auth files, tokens, or provider config. The guard is a guardrail, not a sandbox,
+- **Safety:** The installer copies `agents/*.md`, `commands/*.md`, and `plugins/`,
+  merge-registers the sidebar in `tui.json`, and writes a manifest — never auth
+  files, tokens, or provider config. The guard is a guardrail, not a sandbox,
   and fails open on input it can't parse; see [SECURITY.md](SECURITY.md) for the threat
   model and a private reporting channel.
 

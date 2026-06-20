@@ -9,4 +9,5 @@ Continue the Goal repair loop from these blocking findings:
 $ARGUMENTS
 ```
 
-Fix only valid blocking findings, update verification, then run a new review cycle before claiming completion.
+Fix only valid blocking findings, update verification, then stop so the guard can
+re-run the review cycle before you claim completion.

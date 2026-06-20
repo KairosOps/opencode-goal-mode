@@ -18,8 +18,9 @@ a quote-aware tokenizer, but it is **not a sandbox**:
   deferring to OpenCode's own permission rules. Treat it as a guardrail, not a
   jail.
 - Gate freshness is only as trustworthy as the reviewer subagents' verdicts.
-- The installer copies only `agents/*.md`, `commands/*.md`, and the `plugins/`
-  tree — never auth files, tokens, sessions, or provider config.
+- The installer copies `agents/*.md`, `commands/*.md`, and the `plugins/` tree,
+  merge-registers the sidebar in `tui.json`, and writes a manifest — never auth
+  files, tokens, sessions, or provider config.
 
 Reports that meaningfully improve detection of destructive commands, or that
 demonstrate a bypass of the completion/edit-staleness invariants, are especially

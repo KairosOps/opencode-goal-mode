@@ -21,9 +21,10 @@ Run this sequence:
 2. Delegate discovery and research to subagents; implement in the main agent.
 3. Verify, and record each verification with the `goal_evidence` tool so it maps
    to your acceptance criteria.
-4. Run the required review cycles. Consult `goal_status` / `goal_evidence_map`
-   for the authoritative list of missing or stale gates rather than relying on
-   memory.
+4. **Stop when implementation and verification are done.** The guard runs required
+   review cycles programmatically on idle. Use `goal_status` / `goal_evidence_map`
+   for the authoritative list of missing or stale gates; fix any blocking findings
+   the guard returns.
 5. Only finish with `Goal Completed` (plus an accurate `Review cycles: N` line)
    once every required gate has a fresh PASS — the guard will rewrite a premature
    claim to `Goal Not Completed`.
