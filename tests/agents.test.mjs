@@ -108,3 +108,29 @@ test("reviewers require an explicit PASS/FAIL verdict in their output contract",
     assert.match(body, /FAIL/, `${file} must mention FAIL`);
   }
 });
+
+test("primary goal denies the question tool (autonomous loop)", () => {
+  const fm = frontmatter(readRepo("agents/goal.md"));
+  assert.match(fm, /question:\s+deny/, "goal.md must deny the question tool");
+});
+
+test("goal-explorer allows common read-only bash", () => {
+  const fm = frontmatter(readRepo("agents/goal-explorer.md"));
+  for (const pattern of [
+    "grep *",
+    "grep -r *",
+    "cat *",
+    "rg *",
+    "sed *",
+    "sed -n *",
+    "awk *",
+    "find *",
+    "git diff *",
+  ]) {
+    assert.ok(fm.includes(`"${pattern}": allow`), `goal-explorer.md must allow "${pattern}"`);
+  }
+  for (const pattern of ["find * -delete*", "sed -i*", "sed * -i*"]) {
+    assert.ok(fm.includes(`"${pattern}": deny`), `goal-explorer.md must deny "${pattern}"`);
+  }
+  assert.match(fm, /edit:\s+deny/, "goal-explorer must stay read-only");
+});

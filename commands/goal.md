@@ -16,7 +16,8 @@ Run this sequence:
    the objective), the original request, explicit/inferred requirements,
    non-goals, and concrete acceptance criteria. This activates enforcement, fixes
    the required specialist review gates, and shows the `title` live in the sidebar
-   goal banner. Ask only essential clarifying questions before recording it.
+   goal banner. Record assumptions in the contract when the request is ambiguous —
+   do not use the Questions tool (it is disabled on the goal agent).
 2. Delegate discovery and research to subagents; implement in the main agent.
 3. Verify, and record each verification with the `goal_evidence` tool so it maps
    to your acceptance criteria.
