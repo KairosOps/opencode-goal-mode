@@ -9,7 +9,7 @@ function makeGuard(options = {}) {
   return createGuard(
     { client: { app: { log: async () => undefined }, tui: { showToast: async () => undefined } } },
     options,
-    { persistence: noopPersistence, clock: () => (t += 1) },
+    { persistence: noopPersistence, clock: () => (t += 1), syncIdle: true },
   );
 }
 
@@ -128,7 +128,7 @@ function makeContinueGuard(opts = {}) {
       },
     },
     { abortGraceMs: 60, ...opts },
-    { persistence: noopPersistence, clock: () => (t += 1) },
+    { persistence: noopPersistence, clock: () => (t += 1), syncIdle: true },
   );
   return { ...guard, prompts };
 }

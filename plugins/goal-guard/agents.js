@@ -63,6 +63,27 @@ export function isPrimaryAgent(name) {
   return String(name || "") === PRIMARY_AGENT;
 }
 
+/**
+ * Whether a session running `agentName` should stay/be treated as an active Goal session.
+ * The primary `goal` agent always activates; Build/Plan/etc. always deactivate. Goal workers
+ * and reviewers keep a session in Goal Mode once it has anchored work — so delegating to
+ * `goal-implementer` or a programmatic reviewer subtask on the parent session does not flip
+ * `active` false and block programmatic review on the next idle.
+ */
+export function goalSessionActiveForAgent(agentName, state) {
+  const agent = String(agentName || "");
+  if (isPrimaryAgent(agent)) return true;
+  if (!isGoalAgent(agent)) return false;
+  return Boolean(
+    state?.contract ||
+    state?.active ||
+    (state?.lastEditSeq || 0) > 0 ||
+    state?.verificationSeen ||
+    (Array.isArray(state?.evidence) && state.evidence.length > 0) ||
+    (Array.isArray(state?.changedFiles) && state.changedFiles.length > 0),
+  );
+}
+
 /** Reviewers that always run for any meaningful goal. */
 export const BASE_GATES = Object.freeze([
   "goal-prompt-auditor",

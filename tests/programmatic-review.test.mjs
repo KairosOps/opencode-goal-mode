@@ -2,39 +2,61 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { __test } from "../plugins/goal-guard/guard.js";
 import { completionAllowed } from "../plugins/goal-guard/gates.js";
+import { progressSignature } from "../plugins/goal-guard/autocontinue.js";
+import { createGoalTools } from "../plugins/goal-guard/tools.js";
 
 const noopPersistence = { load: () => null, save: () => {}, flush: () => false, file: "", isDegraded: () => false };
 
-/** Build a guard whose client CAN review (session.create/promptAsync/messages),
- * with reviewer sessions returning a Verdict per agent. Captures every prompt. */
+/** Build a guard whose client CAN review via subtasks on the goal session. */
 function makeReviewingGuard(verdictFor, opts = {}) {
   let t = 1000;
-  let n = 0;
-  const agentOf = new Map();
+  const sessionID = "g";
+  const launched = [];
+  let currentAgent = null;
   const prompts = [];
   const client = {
     app: { log: async () => {} },
     tui: { showToast: async () => {} },
     session: {
-      create: async () => ({ data: { id: `rs${++n}` } }),
       promptAsync: async ({ path, body }) => {
-        if (body?.agent) agentOf.set(path.id, body.agent);
-        prompts.push({ id: path.id, agent: body?.agent, text: body?.parts?.[0]?.text || "" });
+        assert.equal(path.id, sessionID, "programmatic reviews stay on the goal session");
+        for (const part of body?.parts || []) {
+          if (part.type === "subtask") {
+            currentAgent = part.agent;
+            launched.push(part.agent);
+            prompts.push({ id: path.id, agent: part.agent, text: part.prompt || "", kind: "subtask" });
+          } else if (part.type === "text") {
+            prompts.push({ id: path.id, agent: body?.agent, text: part.text || "", kind: "text" });
+          }
+        }
+        if (body?.agent && !(body.parts || []).some((p) => p.type === "subtask")) {
+          prompts.push({ id: path.id, agent: body.agent, text: body.parts?.[0]?.text || "", kind: "guard" });
+        }
       },
-      messages: async ({ path }) => {
-        const agent = agentOf.get(path.id);
-        const v = typeof verdictFor === "function" ? verdictFor(agent) : verdictFor;
-        return { data: [{ info: { role: "assistant", agent }, parts: [{ type: "text", text: `Reviewed.\nVerdict: ${v}` }] }] };
+      messages: async () => {
+        const v = typeof verdictFor === "function" ? verdictFor(currentAgent) : verdictFor;
+        const parts = launched.map((agent) => {
+          const verdict = typeof verdictFor === "function" ? verdictFor(agent) : verdictFor;
+          return {
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "completed",
+              input: { subagent_type: agent, agent },
+              output: verdict ? `Reviewed.\nVerdict: ${verdict}` : "No conclusion.",
+            },
+          };
+        });
+        return { data: [{ info: { role: "assistant", agent: currentAgent }, parts }] };
       },
-      abort: async () => {},
     },
   };
   const guard = __test.createGuard(
     { client },
-    { abortGraceMs: 0, reviewPollMs: 2, reviewTimeoutMs: 1000, ...opts },
-    { persistence: noopPersistence, clock: () => (t += 1) },
+    { abortGraceMs: 0, reviewPollMs: 2, reviewTimeoutMs: 1000, reviewIdleDeferMs: 0, ...opts },
+    { persistence: noopPersistence, clock: () => (t += 1), syncIdle: true },
   );
-  return { guard, prompts, client };
+  return { guard, prompts, client, launched, sessionID };
 }
 
 const MODEL = { providerID: "opencode", modelID: "deepseek-v4-flash-free" };
@@ -45,28 +67,27 @@ async function startGoalWithWork(hooks) {
   await hooks["tool.execute.after"]({ tool: "edit", sessionID: "g", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
 }
 
-test("on idle, the GUARD CODE launches the required reviewers itself (not the agent) and completion opens when all PASS", async () => {
-  const { guard, prompts } = makeReviewingGuard("PASS");
+test("on idle, the GUARD CODE launches the required reviewers as subtasks (not the agent) and completion opens when all PASS", async () => {
+  const { guard, prompts, launched } = makeReviewingGuard("PASS");
   await startGoalWithWork(guard.hooks);
   await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
 
-  const reviewerLaunches = prompts.filter((p) => p.agent && /^goal-.*(reviewer|auditor|verifier|guard)/.test(p.agent));
   for (const gate of ["goal-prompt-auditor", "goal-reviewer", "goal-diff-reviewer", "goal-verifier", "goal-final-auditor"]) {
-    assert.ok(reviewerLaunches.some((p) => p.agent === gate), `guard programmatically launched ${gate}`);
+    assert.ok(launched.includes(gate), `guard programmatically launched ${gate} as a subtask`);
   }
   const state = guard.store.stateFor("g");
   assert.equal(completionAllowed(state, guard.config), true, "all gates passed → completion allowed");
   assert.ok(state.reviewCycles >= 1, "a review cycle was counted");
-  const goalPrompts = prompts.filter((p) => p.agent === "goal");
+  const goalPrompts = prompts.filter((p) => p.agent === "goal" || (p.kind === "guard" && p.agent === "goal"));
   assert.ok(goalPrompts.length >= 1, "after reviews pass the guard emits the final completion turn");
   assert.ok(
     goalPrompts.some((p) => /Goal Completed|All required reviews PASSED programmatically/i.test(p.text || "")),
     "final turn asks for Goal Completed after programmatic review",
   );
   const firstGoalIdx = prompts.findIndex((p) => p.agent === "goal");
-  const firstReviewerIdx = prompts.findIndex((p) => p.agent && p.agent.startsWith("goal-"));
+  const firstReviewerIdx = prompts.findIndex((p) => p.kind === "subtask" && p.agent?.startsWith("goal-"));
   if (firstGoalIdx >= 0 && firstReviewerIdx >= 0) {
-    assert.ok(firstReviewerIdx < firstGoalIdx, "reviewers launch before any guard continuation to the goal agent");
+    assert.ok(firstReviewerIdx < firstGoalIdx, "reviewer subtasks launch before any guard continuation to the goal agent");
   }
 });
 
@@ -77,46 +98,75 @@ test("on idle with a FAILING reviewer, the guard keeps completion blocked and fe
 
   const state = guard.store.stateFor("g");
   assert.equal(completionAllowed(state, guard.config), false, "a failing reviewer blocks completion");
-  // the agent is handed the failure to fix (not told it's complete)
   assert.ok(prompts.some((p) => /blocking issues|must fix|Failing reviewers/i.test(p.text)), "guard fed the blocking findings back to the agent");
 });
 
 test("[bughunt rl1/rl2] the review loop is bounded by reviewRunCount (no runaway when a gate never passes / verdict never concludes)", async () => {
-  // Specialist gates always FAIL, the cycle-closing auditor PASSes fresh → reviewCycles
-  // is pinned at 1, yet the loop MUST stop at maxReviewCycles via reviewRunCount.
-  const { guard, prompts } = makeReviewingGuard((a) => (a === "goal-final-auditor" ? "PASS" : "FAIL"), { maxReviewCycles: 3, maxAutoContinue: 50 });
+  const { guard, prompts, launched } = makeReviewingGuard((a) => (a === "goal-final-auditor" ? "PASS" : "FAIL"), { maxReviewCycles: 3, maxAutoContinue: 50 });
   await startGoalWithWork(guard.hooks);
   for (let i = 0; i < 30; i++) await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
   const state = guard.store.stateFor("g");
   assert.ok((state.reviewRunCount || 0) <= 3, `review runs capped at maxReviewCycles (got ${state.reviewRunCount})`);
-  const launches = prompts.filter((p) => p.agent && p.agent.startsWith("goal-")).length;
-  assert.ok(launches < 30, `reviewer launches bounded, not one+ per idle forever (got ${launches})`);
+  assert.ok(launched.length < 30, `reviewer subtask launches bounded, not one+ per idle forever (got ${launched.length})`);
+  assert.ok(!prompts.some((p) => p.kind === "text" && /task tool|task\(subagent_type/i.test(p.text)), "no task-tool nudge sent to the agent");
 });
 
 test("[live-parity] the guard runs the reviewers ITSELF even when NO model was captured (model is optional)", async () => {
-  // Mirrors the live TUI bug: chat.params didn't surface a model in the expected shape, so
-  // sessionModel stays empty. The guard must STILL launch the reviewers programmatically —
-  // not fall back to nagging the agent to call them via the task tool.
-  const { guard, prompts } = makeReviewingGuard("PASS");
-  // Start a goal WITH work but never deliver a parseable model.
-  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal" }, {}); // no model field
+  const { guard, prompts, launched } = makeReviewingGuard("PASS");
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal" }, {});
   await guard.hooks["chat.message"]({ sessionID: "g", agent: "goal" }, { parts: [{ type: "text", text: "implement and verify the feature" }] });
   await guard.hooks["tool.execute.after"]({ tool: "edit", sessionID: "g", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
   await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
 
-  const reviewerLaunches = prompts.filter((p) => p.agent && p.agent.startsWith("goal-"));
-  assert.ok(reviewerLaunches.length >= 5, `guard launched the reviewers itself without a captured model (got ${reviewerLaunches.length})`);
-  // and it did NOT fall back to telling the agent to run reviews via the task tool
-  assert.ok(!prompts.some((p) => !p.agent && /task tool|task\(subagent_type/i.test(p.text)), "no task-tool nudge sent to the agent");
+  assert.ok(launched.length >= 5, `guard launched the reviewers itself without a captured model (got ${launched.length})`);
+  assert.ok(!prompts.some((p) => p.kind === "text" && /task tool|task\(subagent_type/i.test(p.text)), "no task-tool nudge sent to the agent");
+  assert.equal(completionAllowed(guard.store.stateFor("g"), guard.config), true);
+});
+
+test("[live-parity] the guard runs programmatic reviews when only goal_evidence marks verification (no file edits)", async () => {
+  const { guard, launched } = makeReviewingGuard("PASS");
+  const tools = createGoalTools({ store: guard.store, config: guard.config, persist: () => {} });
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal", model: MODEL }, {});
+  await guard.hooks["chat.message"]({ sessionID: "g", agent: "goal", model: MODEL }, { parts: [{ type: "text", text: "verify remote server setup" }] });
+  await tools.goal_contract.execute({ title: "Remote verify", original: "verify remote server setup", acceptanceCriteria: ["server reachable"] }, { sessionID: "g" });
+  await tools.goal_evidence.execute({ command: "curl -fsS https://example.com", result: "PASS" }, { sessionID: "g" });
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+  assert.ok(launched.length >= 5, `evidence-only work still triggers programmatic review (got ${launched.length})`);
   assert.equal(completionAllowed(guard.store.stateFor("g"), guard.config), true);
 });
 
 test("the model is captured from chat.params so the reviewers can be launched", async () => {
-  // Without a captured model the guard can't launch reviewers — prove capture works.
-  const { guard, prompts } = makeReviewingGuard("PASS");
+  const { guard, launched } = makeReviewingGuard("PASS");
   await startGoalWithWork(guard.hooks);
   await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
-  const launched = prompts.filter((p) => p.agent && p.agent.startsWith("goal-"));
   assert.ok(launched.length > 0, "reviewers launched → model was captured & used");
-  assert.equal(launched[0].agent && true, true);
+});
+
+test("programmatic review runs even when auto-continue no-progress circuit breaker tripped", async () => {
+  const { guard, launched } = makeReviewingGuard("PASS", { maxAutoContinue: 50 });
+  await startGoalWithWork(guard.hooks);
+  const state = guard.store.stateFor("g");
+  state.autoContinueNoProgress = 999;
+  state.lastAutoContinueSig = progressSignature(state);
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+  assert.ok(launched.length >= 5, `reviews must run before stopReason blocks (got ${launched.length})`);
+  assert.ok(state.reviewCycles >= 1, "review cycle counted");
+});
+
+test("programmatic review runs when a goal worker subagent was the last agent on the session", async () => {
+  const { guard, launched } = makeReviewingGuard("PASS");
+  await startGoalWithWork(guard.hooks);
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal-implementer" }, {});
+  assert.equal(guard.store.stateFor("g").active, true, "goal worker keeps parent session active once work is anchored");
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+  assert.ok(launched.length >= 5, `goal worker handoff must not block programmatic review (got ${launched.length})`);
+});
+
+test("patch/str_replace edits count as work for programmatic review", async () => {
+  const { guard, launched } = makeReviewingGuard("PASS");
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal", model: MODEL }, {});
+  await guard.hooks["chat.message"]({ sessionID: "g", agent: "goal", model: MODEL }, { parts: [{ type: "text", text: "implement subtract" }] });
+  await guard.hooks["tool.execute.after"]({ tool: "patch", sessionID: "g", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+  assert.ok(launched.length >= 5, `patch tool must mark work and trigger review (got ${launched.length})`);
 });

@@ -52,8 +52,8 @@ themselves loaded as plugins. Each module is independently unit-tested.
 | `goal-guard/gates.js` | Required-gate computation and freshness. |
 | `goal-guard/completion.js` | `Goal Completed` claim evaluation. |
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
-| `goal-guard/autocontinue.js` | Auto-continue decision logic and continuation copy; when idle with edits outstanding, programmatic review in `guard.js` takes precedence over these nudges. |
-| `goal-guard/review-runner.js` | Code-driven review enforcement — the guard launches the required reviewer subagents itself. |
+| `goal-guard/autocontinue.js` | Auto-continue decision logic and continuation copy; programmatic review in `guard.js` is independent and takes precedence on idle when work is outstanding. |
+| `goal-guard/review-runner.js` | Code-driven review enforcement — launches required reviewer subagents as **subtasks on the parent goal session**; `ensureReviewClient()` HTTP fallback for headless serve. |
 | `goal-guard/summary.js` | State summaries, status reports, evidence-map projections, and the short goal label. |
 | `goal-guard/system.js` | Live state block injected into the system prompt; with `programmaticReview` on (default), tells the agent the guard runs reviews on stop — task-tool directives only when programmatic review is disabled. |
 | `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
@@ -74,7 +74,7 @@ pinned to `1.17.6` in devDependencies).
 | `tool.execute.after` | Record edits, verification, mutations, and review verdicts. |
 | `experimental.text.complete` | Rewrite premature `Goal Completed` claims. |
 | `experimental.session.compacting` | Preserve guard state across compaction. |
-| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); and on `session.idle`, flush state and — for an incomplete goal with work done — run the full programmatic review cycle **first** (`programmaticReview`); on all PASS call `emitGoalCompleted`; on FAIL call `guardPrompt` with blocking findings (prefixed `[Goal Guard]`, `agent: goal`); nudge implementation only when there is no work yet; skip re-review when `completionAllowed` is already true. |
+| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); on `session.idle`, **defer** programmatic review via `resolveIdleSession` (must not await nested prompts inside the hook) — for an incomplete goal with work done, run the full review cycle **first** (`programmaticReview`); on all PASS call `emitGoalCompleted`; on FAIL call `guardPrompt` with blocking findings (prefixed `[Goal Guard]`, `agent: goal`); nudge implementation only when there is no work yet; skip re-review when `completionAllowed` is already true. |
 | `tool` | Register the custom `goal_*` tools. |
 | `dispose` | Flush persisted state. |
 
@@ -207,7 +207,7 @@ runs it in a separate Bun/OpenTUI job.
 variables (`GOAL_GUARD_*`), and the plugin `options` object passed via the
 `["./plugins/goal-guard.js", { … }]` form in `opencode.json`. Toggles cover
 destructive blocking, network-exec blocking, completion enforcement,
-`autoContinue`, `programmaticReview`, review timeouts/polling, `maxReviewCycles`,
+`autoContinue`, `programmaticReview`, `reviewIdleDeferMs`, review timeouts/polling, `maxReviewCycles`,
 system-state injection, persistence, contextual gates, subagent restriction,
 session cache size/TTL, sidebar colours, and toasts. See README.md for the full
 option table.
@@ -225,7 +225,7 @@ supports `--uninstall` (which leaves locally-modified files in place).
 
 ## Testing
 
-`node --test` runs the suite (349 tests across 18 files):
+`node --test` runs the suite (355 tests across 18 files):
 
 - `tests/shell.test.mjs` / `tests/shell.property.test.mjs` — analyzer against bypass and false-positive corpora.
 - `tests/plugin.test.mjs` — hook behavior, gating, verdicts, completion, tools, isolation.

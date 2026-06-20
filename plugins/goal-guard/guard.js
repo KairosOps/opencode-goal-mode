@@ -24,7 +24,7 @@ import { createStore, createState } from "./state.js";
 import { createPersistence } from "./persistence.js";
 import { createLogger } from "./logger.js";
 import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./shell.js";
-import { isPrimaryAgent, isReviewAgent, isGoalAgent, CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
+import { isPrimaryAgent, isReviewAgent, isGoalAgent, goalSessionActiveForAgent, CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
 import { textOf, parseVerdict, recordVerdict } from "./verdicts.js";
 import { completionAllowed, missingGates, refreshStickyGates } from "./gates.js";
 import { evaluateCompletionClaim } from "./completion.js";
@@ -32,9 +32,15 @@ import { evaluateAutoContinue } from "./autocontinue.js";
 import { summarizeState } from "./summary.js";
 import { buildSystemInjection } from "./system.js";
 import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass, maybeAutoSeedContract } from "./events.js";
-import { runReviewCycle, clientCanReview } from "./review-runner.js";
+import { runReviewCycle, clientCanReview, ensureReviewClient } from "./review-runner.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const EDIT_TOOLS = new Set(["write", "edit", "apply_patch", "patch", "str_replace", "create_file"]);
+
+function isEditTool(tool) {
+  return EDIT_TOOLS.has(String(tool || ""));
+}
 
 function normalizedSubagent(input) {
   if (!input) return undefined;
@@ -69,6 +75,7 @@ function partsText(parts) {
  */
 export function createGuard(input = {}, options = {}, overrides = {}) {
   const config = overrides.config || resolveConfig(options, overrides.env);
+  const reviewClient = overrides.reviewClient || input.client;
 
   // In-memory only (never persisted): coalesce overlapping idle decisions, detect a
   // user turn that starts DURING the grace sleep, and attribute project-scoped
@@ -105,7 +112,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (lastActiveGoalSession === key) lastActiveGoalSession = null;
       },
     });
-  const logger = createLogger(input.client, config);
+  const logger = createLogger(reviewClient, config);
   const persistence =
     overrides.persistence ||
     createPersistence({
@@ -136,6 +143,109 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   };
   const persist = () => persistence.save(snapshotFn);
 
+  const syncIdle = overrides.syncIdle === true;
+
+  /** Async idle resolution — must NOT run inline inside the `event` hook (see session.idle). */
+  async function resolveIdleSession(sessionID) {
+    try {
+      const state = store.stateFor(sessionID);
+      if (state.active && config.autoContinue && config.abortGraceMs > 0 && !state.abortedAt) {
+        const turnAtStart = userTurnSeq.get(sessionID) || 0;
+        await sleep(config.abortGraceMs);
+        if ((userTurnSeq.get(sessionID) || 0) !== turnAtStart) return;
+      }
+      const model = sessionModel.get(sessionID);
+      const hasWork =
+        state.dirty ||
+        (state.lastEditSeq || 0) > 0 ||
+        state.verificationSeen ||
+        (Array.isArray(state.evidence) && state.evidence.length > 0) ||
+        (Array.isArray(state.changedFiles) && state.changedFiles.length > 0);
+      const goalSession =
+        state.active ||
+        Boolean(state.contract) ||
+        goalSessionActiveForAgent("goal", state);
+      const outstandingGates = missingGates(state, config).length;
+      const anchoredContract = Boolean(state.contract) && !state.contract?.auto;
+      const canProgrammaticReview =
+        config.programmaticReview &&
+        goalSession &&
+        (hasWork || (anchoredContract && outstandingGates > 0)) &&
+        clientCanReview(reviewClient) &&
+        !completionAllowed(state, config);
+
+      const decision = evaluateAutoContinue(state, config);
+      persistence.flush(snapshotFn);
+
+      if (decision.cancelled) {
+        await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
+      } else if (state.abortedAt) {
+        await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
+      } else if (canProgrammaticReview) {
+        if ((state.reviewRunCount || 0) >= config.maxReviewCycles) {
+          await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles} review runs`, { state: summarizeState(state, config) });
+          await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
+        } else {
+          state.reviewRunCount = (state.reviewRunCount || 0) + 1;
+          persistence.flush(snapshotFn);
+          await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
+          const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
+          let res = null;
+          reviewingSessions.add(sessionID);
+          try {
+            if (config.reviewIdleDeferMs > 0) await sleep(config.reviewIdleDeferMs);
+            res = await runReviewCycle(reviewClient, store, state, config, {
+              sessionID,
+              model,
+              log: (m) => logger.info(m, { sessionID }),
+              timeoutMs: config.reviewTimeoutMs,
+              pollMs: config.reviewPollMs,
+              idleDeferMs: 0,
+            });
+          } catch (err) {
+            await logger.warn("Programmatic review run failed", { error: String(err?.message || err) });
+          } finally {
+            reviewingSessions.delete(sessionID);
+          }
+          persistence.flush(snapshotFn);
+          if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {
+            /* user resumed during review — do not override */
+          } else if (state.abortedAt) {
+            await logger.info("Goal auto-continue suppressed: user cancelled during the review run", { sessionID });
+          } else if (res && res.completionAllowed) {
+            await logger.toast(`All required reviews PASSED — ${res.reviewCycles} review cycle${res.reviewCycles === 1 ? "" : "s"}`, "success");
+            await logger.emitGoalCompleted(sessionID, res.reviewCycles, model);
+          } else if (res && res.failed.length) {
+            const findings = res.findings.length ? ` Blocking findings: ${res.findings.join(" | ")}.` : "";
+            await logger.toast(`Review cycle ${res.reviewCycles}: ${res.failed.map(prettyAgentName).join(", ") || "issues found"} → fix & re-review`, "warning");
+            await logger.guardPrompt(
+              sessionID,
+              `Review cycle #${res.reviewCycles} found blocking issues — fix them now, then stop.${findings} ` +
+                `Failing reviewers: ${res.failed.join(", ")}. Do NOT claim completion; the guard will re-run every required review on the next idle.`,
+              model,
+            );
+          } else {
+            await logger.guardPrompt(
+              sessionID,
+              "Programmatic review did not finish cleanly. Fix any outstanding issues, verify your work, and stop — the guard will re-run the required reviews automatically.",
+              model,
+            );
+          }
+        }
+      } else if (decision.stopReason) {
+        await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
+        await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");
+      } else if (decision.continue) {
+        await logger.toast("Goal not complete — continuing automatically", "info");
+        await logger.guardPrompt(sessionID, decision.message, model);
+      } else if (state.dirty && state.active) {
+        await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
+      }
+    } finally {
+      decidingIdle.delete(sessionID);
+    }
+  }
+
   const hooks = {
     async "chat.message"(inp, out) {
       try {
@@ -158,7 +268,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // the sidebar/guard would keep treating an explicit Build session as a goal.
         // Persist the flip so the on-disk snapshot (the sidebar's fallback) is correct.
         if (inp.agent) {
-          const next = isPrimaryAgent(inp.agent);
+          const next = goalSessionActiveForAgent(inp.agent, state);
           if (state.active !== next) {
             state.active = next;
             persist();
@@ -200,7 +310,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         // Goal sidebar and enforcement stop treating it as a goal. Persist the flip so
         // the on-disk snapshot (the sidebar's fallback) reflects a goal→build switch.
         if (inp.agent) {
-          const next = isPrimaryAgent(inp.agent);
+          const next = goalSessionActiveForAgent(inp.agent, state);
           if (state.active !== next) {
             state.active = next;
             persist();
@@ -288,7 +398,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
 
         // Edits dirty the session (a read-only reviewer never edits, but guard
         // symmetrically with the bash path so review-time writes don't dirty it).
-        if ((tool === "write" || tool === "edit" || tool === "apply_patch") && !isReviewing) {
+        if (isEditTool(tool) && !isReviewing) {
           markEdit(store, state, `${tool} at ${store.nowIso()}`);
         }
 
@@ -445,109 +555,21 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         }
         if (event.type === "session.idle" && event.properties?.sessionID) {
           const sessionID = event.properties.sessionID;
-          // Coalesce overlapping idles for this session: a single cancel (and bursty
-          // idles generally) can emit MORE THAN ONE session.idle. Hold a per-session
-          // "deciding" flag across the ENTIRE decision (grace + evaluate + continue) so
-          // a second idle that arrives mid-decision returns immediately and can never
-          // fire a duplicate continuation or double-advance the cap / no-progress
-          // counters. The flag is in-memory only and pruned on eviction, so it cannot
-          // wedge across a restart.
+          const idleState = store.stateFor(sessionID);
+          idleState.lastIdleEventAt = store.nowIso();
+          persist();
           if (decidingIdle.has(sessionID)) return;
           decidingIdle.add(sessionID);
-          try {
-            const state = store.stateFor(sessionID);
-            // Honor a near-simultaneous user cancel regardless of hook delivery order: a
-            // cancel emits session.error(MessageAbortedError) and session.idle within
-            // milliseconds of each other, but the plugin is not guaranteed to receive
-            // the error first. An active goal therefore waits a short grace before
-            // deciding, so the abort flag (set by session.error) is visible. No abort
-            // pending and grace disabled → decide immediately.
-            if (state.active && config.autoContinue && config.abortGraceMs > 0 && !state.abortedAt) {
-              const turnAtStart = userTurnSeq.get(sessionID) || 0;
-              await sleep(config.abortGraceMs);
-              // A new user turn during the grace (resume, or a fresh prompt) owns the
-              // session now — do not inject a stale "keep going" over it.
-              if ((userTurnSeq.get(sessionID) || 0) !== turnAtStart) return;
-            }
-            // Idle lifecycle (when the agent stops — including when it thinks it is done):
-            //   1. NEVER inject a user-like continuation BEFORE programmatic reviews.
-            //   2. When there is work to verify, the GUARD runs every required reviewer
-            //      subagent itself (one full pass = one review cycle).
-            //   3. All PASS → harness emits the final Goal Completed turn.
-            //   4. Any FAIL → harness prompts a fix cycle; the next idle re-reviews.
-            //   5. Only when there is NO work yet (no edits) may we nudge implementation.
-            const model = sessionModel.get(sessionID);
-            const hasWork = state.dirty || (state.lastEditSeq || 0) > 0;
-            const canProgrammaticReview =
-              config.programmaticReview &&
-              hasWork &&
-              clientCanReview(input.client) &&
-              !completionAllowed(state, config);
-
-            const decision = evaluateAutoContinue(state, config);
-            persistence.flush(snapshotFn);
-
-            if (decision.cancelled) {
-              await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
-            } else if (decision.stopReason) {
-              await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
-              await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");
-            } else if (decision.continue && canProgrammaticReview) {
-              if ((state.reviewRunCount || 0) >= config.maxReviewCycles) {
-                await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles} review runs`, { state: summarizeState(state, config) });
-                await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
-              } else {
-                state.reviewRunCount = (state.reviewRunCount || 0) + 1;
-                await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
-                const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
-                let res = null;
-                reviewingSessions.add(sessionID);
-                try {
-                  res = await runReviewCycle(input.client, store, state, config, {
-                    model,
-                    log: (m) => logger.info(m, { sessionID }),
-                    timeoutMs: config.reviewTimeoutMs,
-                    pollMs: config.reviewPollMs,
-                  });
-                } catch (err) {
-                  await logger.warn("Programmatic review run failed", { error: String(err?.message || err) });
-                } finally {
-                  reviewingSessions.delete(sessionID);
-                }
-                persistence.flush(snapshotFn);
-                if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {
-                  /* user resumed during review — do not override */
-                } else if (state.abortedAt) {
-                  await logger.info("Goal auto-continue suppressed: user cancelled during the review run", { sessionID });
-                } else if (res && res.completionAllowed) {
-                  await logger.toast(`All required reviews PASSED — ${res.reviewCycles} review cycle${res.reviewCycles === 1 ? "" : "s"}`, "success");
-                  await logger.emitGoalCompleted(sessionID, res.reviewCycles, model);
-                } else if (res && res.failed.length) {
-                  const findings = res.findings.length ? ` Blocking findings: ${res.findings.join(" | ")}.` : "";
-                  await logger.toast(`Review cycle ${res.reviewCycles}: ${res.failed.map(prettyAgentName).join(", ") || "issues found"} → fix & re-review`, "warning");
-                  await logger.guardPrompt(
-                    sessionID,
-                    `Review cycle #${res.reviewCycles} found blocking issues — fix them now, then stop.${findings} ` +
-                      `Failing reviewers: ${res.failed.join(", ")}. Do NOT claim completion; the guard will re-run every required review on the next idle.`,
-                    model,
-                  );
-                } else {
-                  await logger.guardPrompt(
-                    sessionID,
-                    "Programmatic review did not finish cleanly. Fix any outstanding issues, verify your work, and stop — the guard will re-run the required reviews automatically.",
-                    model,
-                  );
-                }
-              }
-            } else if (decision.continue) {
-              // Early incomplete goal (no edits yet): nudge implementation only — not a review cycle.
-              await logger.toast("Goal not complete — continuing automatically", "info");
-              await logger.guardPrompt(sessionID, decision.message, model);
-            } else if (state.dirty && state.active) {
-              await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
-            }
-          } finally {
-            decidingIdle.delete(sessionID);
+          // NEVER await promptAsync / runReviewCycle inside this hook synchronously:
+          // OpenCode is still finishing the idle transition and cannot process nested
+          // session prompts until we return. Blocking here deadlocks programmatic
+          // subtask reviewers (0 cycles, no subagent activity in live usage).
+          if (syncIdle) {
+            await resolveIdleSession(sessionID);
+          } else {
+            void resolveIdleSession(sessionID).catch((err) => {
+              logger.warn("Goal idle handler failed", { sessionID, error: String(err?.message || err) });
+            });
           }
         }
       } catch {
@@ -567,9 +589,37 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   return { hooks, store, config, persistence, logger, persist };
 }
 
+/** Subscribe to the server event stream so session.idle is handled even when the
+ * plugin `event` hook is not invoked (observed in some headless serve deployments). */
+async function startSessionIdleWatcher(baseUrl, hooks) {
+  const { createOpencodeClient } = await import("@opencode-ai/sdk");
+  const client = createOpencodeClient({ baseUrl: String(baseUrl) });
+  const sub = await client.event.subscribe();
+  const stream = sub.stream || sub;
+  for await (const ev of stream) {
+    if (ev?.type === "session.idle" && ev.properties?.sessionID) {
+      await hooks.event({ event: ev });
+    }
+  }
+}
+
 /** OpenCode plugin factory (default export). */
 export async function GoalGuardPlugin(input, options) {
-  const guard = createGuard(input || {}, options || {});
+  let reviewClient = ensureReviewClient(input?.client, input?.serverUrl);
+  if (!clientCanReview(reviewClient) && input?.serverUrl) {
+    try {
+      const { createOpencodeClient } = await import("@opencode-ai/sdk");
+      const fallback = createOpencodeClient({ baseUrl: String(input.serverUrl) });
+      reviewClient = ensureReviewClient(fallback, input.serverUrl);
+    } catch {
+      /* fall back to the HTTP-wrapped plugin client */
+    }
+  }
+  const guard = createGuard(input || {}, options || {}, { reviewClient });
+
+  if (input?.serverUrl) {
+    void startSessionIdleWatcher(String(input.serverUrl), guard.hooks).catch(() => {});
+  }
   // Register custom goal_* tools, isolated so a resolution failure of
   // @opencode-ai/plugin cannot prevent the core guard hooks from loading.
   try {

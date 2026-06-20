@@ -205,9 +205,10 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
 | `enforceCompletion` / `GOAL_GUARD_ENFORCE_COMPLETION` | `true` | Rewrite premature `Goal Completed`. |
 | `autoContinue` / `GOAL_GUARD_AUTO_CONTINUE` | `true` | Auto-continue an idle goal that isn't complete yet. |
 | `maxAutoContinue` / `GOAL_GUARD_MAX_AUTO_CONTINUE` | `50` | Hard cap on automatic continuations per goal session. |
-| `programmaticReview` / `GOAL_GUARD_PROGRAMMATIC_REVIEW` | `true` | Have the guard launch the required reviewers itself on idle. |
+| `programmaticReview` / `GOAL_GUARD_PROGRAMMATIC_REVIEW` | `true` | Have the guard launch the required reviewers itself on idle (as subtasks on the goal session). |
 | `reviewTimeoutMs` / `GOAL_GUARD_REVIEW_TIMEOUT_MS` | `360000` | Per-reviewer wall-clock cap (ms) for a programmatic review. |
 | `reviewPollMs` / `GOAL_GUARD_REVIEW_POLL_MS` | `2500` | Poll cadence (ms) while waiting for a reviewer's verdict. |
+| `reviewIdleDeferMs` / `GOAL_GUARD_REVIEW_IDLE_DEFER_MS` | `500` | Delay (ms) after idle before launching reviewers; also backs off on `SessionBusy`. |
 | `maxReviewCycles` / `GOAL_GUARD_MAX_REVIEW_CYCLES` | `12` | Hard cap on programmatic review runs per goal; on reaching it the guard pauses for you. |
 | `abortGraceMs` / `GOAL_GUARD_ABORT_GRACE_MS` | `1200` | Grace (ms) before an idle goal auto-continues, so a user cancel is always honored. |
 | `injectSystemState` / `GOAL_GUARD_INJECT_SYSTEM_STATE` | `true` | Inject live guard state into the prompt. |
@@ -239,10 +240,13 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
   `~/.config/opencode/tui.json` lists `opencode-goal-mode`, then fully restart OpenCode.
   The sidebar is experimental and only shows inside a Goal session with a goal set;
   enforcement works regardless of the sidebar.
-- **Reviews didn't kick off on their own?** With default `programmaticReview`, the
-  guard launches reviewers on **session idle** after you stop with work done.
-  Some free models stall mid-turn without going idle, so reviews may not run live
-  on those — `/goal-review` and `/goal-final` run a cycle on demand, and the
+- **Reviews didn't kick off on their own?** Upgrade to **v0.6.8+**. With default
+  `programmaticReview`, the guard launches reviewer **subtasks on the goal session**
+  when you go idle after work (edits, `goal_evidence`, or changed files). You should
+  see subagent activity in the TUI and `reviewRunCount` / review cycles increment in
+  the sidebar. If you run headless `opencode serve`, the guard now falls back to HTTP
+  when the plugin client lacks `session.promptAsync`. Some free models stall mid-turn
+  without going idle — `/goal-review` and `/goal-final` run a cycle on demand, and the
   completion guard still blocks an unearned `Goal Completed` either way.
 - **Explorer subagent prompting on basic shell?** Upgrade to v0.6.7+ — read-only
   commands like `grep`, `cat`, and `sed` are pre-approved on `goal-explorer`.

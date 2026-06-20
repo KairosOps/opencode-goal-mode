@@ -20,18 +20,34 @@ import { __test } from "../plugins/goal-guard/guard.js";
 const noopPersistence = { load: () => null, save: () => {}, flush: () => false, file: "", isDegraded: () => false };
 const MODEL = { providerID: "opencode", modelID: "m" };
 
-function mockReviewClient(verdictFor) {
-  let n = 0;
-  const agentOf = new Map();
+function mockReviewClient(verdictFor, sessionID = "goal-session") {
+  let currentAgent = null;
+  const launched = [];
   return {
     session: {
-      create: async () => ({ data: { id: `rs${++n}` } }),
-      promptAsync: async ({ path, body }) => agentOf.set(path.id, body.agent),
-      messages: async ({ path }) => {
-        const v = typeof verdictFor === "function" ? verdictFor(agentOf.get(path.id)) : verdictFor;
-        return { data: [{ info: { role: "assistant", agent: agentOf.get(path.id) }, parts: [{ type: "text", text: `Verdict: ${v}` }] }] };
+      promptAsync: async ({ body }) => {
+        for (const part of body?.parts || []) {
+          if (part.type === "subtask") {
+            currentAgent = part.agent;
+            launched.push(part.agent);
+          }
+        }
       },
-      abort: async () => {},
+      messages: async () => {
+        const parts = launched.map((agent) => {
+          const v = typeof verdictFor === "function" ? verdictFor(agent) : verdictFor;
+          return {
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "completed",
+              input: { subagent_type: agent },
+              output: v ? `Verdict: ${v}` : "No verdict",
+            },
+          };
+        });
+        return { data: [{ info: { role: "assistant", agent: currentAgent }, parts }] };
+      },
     },
   };
 }
@@ -43,7 +59,7 @@ async function allowedState(id) {
   state.active = true;
   state.contract = { title: "Do x", original: "do x", acceptanceCriteria: ["x works"] };
   markEdit(store, state, "edit");
-  await runReviewCycle(mockReviewClient("PASS"), store, state, DEFAULT_CONFIG, { sleep: async () => {}, pollMs: 1, timeoutMs: 500 });
+  await runReviewCycle(mockReviewClient("PASS", id), store, state, DEFAULT_CONFIG, { sessionID: id, sleep: async () => {}, pollMs: 1, timeoutMs: 500 });
   return state;
 }
 
@@ -125,31 +141,46 @@ test("[dl8] formalizing an auto-seeded goal preserves reviewCycles; a different 
 });
 
 // ── dl1 / dl2: lifecycle during a programmatic review run ────────────────────────
-/** Build a reviewing guard whose first reviewer fires a side-effect mid-review. */
+/** Build a reviewing guard whose first reviewer subtask fires a side-effect mid-review. */
 function makeReviewingGuard(onFirstReview) {
   let t = 1000;
-  let n = 0;
-  const agentOf = new Map();
+  const sessionID = "g";
+  const launched = [];
   const prompts = [];
   let fired = false;
   const client = {
     app: { log: async () => {} },
     tui: { showToast: async () => {} },
     session: {
-      create: async () => ({ data: { id: `rs${++n}` } }),
       promptAsync: async ({ path, body }) => {
-        if (body?.agent) {
-          agentOf.set(path.id, body.agent);
-          if (!fired && onFirstReview) { fired = true; await onFirstReview(); }
+        for (const part of body?.parts || []) {
+          if (part.type === "subtask") {
+            launched.push(part.agent);
+            if (!fired && onFirstReview) {
+              fired = true;
+              await onFirstReview();
+            }
+            prompts.push({ id: path.id, agent: part.agent, kind: "subtask", text: part.prompt || "" });
+          } else if (part.type === "text") {
+            prompts.push({ id: path.id, agent: body?.agent, kind: "guard", text: part.text || "" });
+          }
         }
-        prompts.push({ id: path.id, agent: body?.agent, text: body?.parts?.[0]?.text || "" });
       },
-      messages: async ({ path }) => ({ data: [{ info: { role: "assistant", agent: agentOf.get(path.id) }, parts: [{ type: "text", text: "Verdict: PASS" }] }] }),
-      abort: async () => {},
+      messages: async () => ({
+        data: [
+          {
+            parts: launched.map((agent) => ({
+              type: "tool",
+              tool: "task",
+              state: { status: "completed", input: { subagent_type: agent }, output: "Verdict: PASS" },
+            })),
+          },
+        ],
+      }),
     },
   };
-  const guard = __test.createGuard({ client }, { abortGraceMs: 0, reviewPollMs: 2, reviewTimeoutMs: 1000 }, { persistence: noopPersistence, clock: () => (t += 1) });
-  return { guard, prompts };
+  const guard = __test.createGuard({ client }, { abortGraceMs: 0, reviewPollMs: 2, reviewTimeoutMs: 1000, reviewIdleDeferMs: 0 }, { persistence: noopPersistence, clock: () => (t += 1), syncIdle: true });
+  return { guard, prompts, sessionID };
 }
 
 async function startGoalWithWork(hooks) {
@@ -174,7 +205,7 @@ test("[dl1] a project file.edited DURING the review run does not stale the fresh
   assert.equal(completionAllowed(state, guard.config), true, "fresh passes survive a mid-review background edit");
   assert.ok(Object.values(state.latestVerdict).every((v) => v.seq > state.lastEditSeq), "all verdicts remain fresh (none staled)");
   // The agent is told it's done — never handed an empty 'Failing reviewers:' directive.
-  assert.ok(prompts.some((p) => /All required reviews PASSED/.test(p.text)), "completion opens after a clean review");
+  assert.ok(prompts.some((p) => p.kind === "guard" && /All required reviews PASSED/.test(p.text)), "completion opens after a clean review");
   assert.ok(!prompts.some((p) => /Failing reviewers:\s*\.?\s*$/m.test(p.text)), "no contradictory empty failing-reviewers directive");
 });
 
@@ -188,8 +219,8 @@ test("[dl2] a user cancel DURING the review run suppresses the continuation", as
   await startGoalWithWork(guard.hooks);
   await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
 
-  // No continuation prompt to the GOAL session after the cancel (reviewer prompts have an agent).
-  const goalContinuations = prompts.filter((p) => p.id === "g" && !p.agent);
+  // No guard continuation to the goal agent after the cancel (reviewer subtasks are separate).
+  const goalContinuations = prompts.filter((p) => p.kind === "guard" && p.agent === "goal");
   assert.equal(goalContinuations.length, 0, "no continuation is sent after a mid-review cancel");
   assert.ok(guard.store.stateFor("g").abortedAt > 0, "the cancel was recorded");
 });

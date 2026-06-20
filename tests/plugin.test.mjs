@@ -424,7 +424,7 @@ function makeGuardWithSession() {
       },
     },
     {},
-    { persistence: noopPersistence, clock: () => (t += 1) },
+    { persistence: noopPersistence, clock: () => (t += 1), syncIdle: true },
   );
   return { ...guard, sent };
 }
@@ -460,7 +460,7 @@ test("auto-continue can be disabled via config", async () => {
   const guard = __test.createGuard(
     { client: { app: { log: async () => undefined }, tui: { showToast: async () => undefined }, session: { promptAsync: async (o) => void sent.push(o) } } },
     { autoContinue: false },
-    { persistence: noopPersistence },
+    { persistence: noopPersistence, syncIdle: true },
   );
   await guard.hooks["chat.params"]({ sessionID: "off", agent: "goal" }, {});
   await guard.hooks["chat.message"]({ sessionID: "off", agent: "goal" }, { parts: [{ type: "text", text: "x" }] });

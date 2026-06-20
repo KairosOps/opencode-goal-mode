@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.6.8
+
+### Fix: programmatic review actually runs on idle (subtasks on the goal session)
+
+Live sessions showed **0 review cycles** and **no subagent activity** even after the
+agent stopped with work done — especially on evidence-only / remote-verification goals
+and in headless `opencode serve` (Docker, CI). Three stacked bugs blocked the intended
+cycle: **stop → guard reviews → fix or Goal Completed**.
+
+- **Idle-handler deadlock (critical).** The guard awaited `runReviewCycle` / `promptAsync`
+  *inside* the plugin `session.idle` hook. OpenCode cannot process nested prompts until
+  the hook returns, so reviewer subtasks never ran. **Fix:** `resolveIdleSession` runs
+  asynchronously after the hook returns (optional `syncIdle` seam for tests).
+- **Trimmed plugin client in headless serve.** Some `opencode serve` deployments give
+  plugins a client without `session.promptAsync`, so `clientCanReview()` was false and
+  reviews never started (`reviewRunCount` stayed 0). **Fix:** `ensureReviewClient()`
+  wraps HTTP `/session/{id}/prompt_async` (+ SDK fallback from `serverUrl`).
+- **Reviewers on the parent goal session.** Programmatic reviewers now launch as
+  **subtasks on the goal session** (visible as `task` tool calls in the TUI subagent
+  panel), not as separate top-level `goal-review:*` sessions.
+- **Reviews decoupled from auto-continue.** Programmatic review runs whenever gates are
+  outstanding — not only when the auto-continue nudge would fire.
+- **Broader “work done” detection.** `goal_evidence`, verification, and changed files
+  count as work (not only `edit`/`write`/`bash` mutations) so remote-only goals trigger
+  review on idle.
+- **`goalSessionActiveForAgent`.** The goal session stays active while goal-* workers
+  and reviewers run, so bookkeeping and gate state are not dropped mid-review.
+- **SessionBusy retry.** Review subtask launch retries when the host is still finishing
+  the idle transition (`reviewIdleDeferMs`, default 500ms, configurable).
+- **Expanded edit detection.** `patch` / `str_replace` tool calls mark the session dirty.
+
+Regression tests cover async idle deferral, HTTP review client fallback, evidence-only
+goals, and SessionBusy retry. Docker fresh-user Zen goal-session e2e confirms
+`reviewRunCount` increments within ~30s of first idle (355 unit tests).
+
 ## v0.6.7
 
 ### Fix: explorer bash allowlist + deny question tool on primary goal (#2)
