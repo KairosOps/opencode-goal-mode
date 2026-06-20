@@ -47,22 +47,32 @@ export function textOf(output) {
  */
 export function parseVerdict(text) {
   if (typeof text !== "string" || !text) return null;
-  // A verdict ENCLOSED in quotes/backticks on its line is the marker being QUOTED
-  // (an example/citation like `(a clean run ends with "Verdict: PASS")`), NOT the
-  // reviewer's own conclusion — counting it let a FAIL review with a trailing quoted
-  // example PASS read as PASS. Excluded only when a quote sits on BOTH sides of the
-  // verdict within its line, so a real conclusion that merely mentions a quote stays.
+  // A verdict ENCLOSED in quotes/backticks is the marker being QUOTED (an
+  // example/citation like `(a clean run ends with "Verdict: PASS")`), NOT the
+  // reviewer's own conclusion. The PREVIOUS heuristic checked for ANY quote on
+  // BOTH sides of the verdict *anywhere on its line* — that wrongly excluded a
+  // real conclusion whose line merely MENTIONED a quoted filename, ticket id, or
+  // CWE number (e.g. `Found secret in "config.js". Verdict: FAIL (CWE-"798")`),
+  // so a FAILING review's final verdict was dropped and an earlier example PASS
+  // won — recording PASS when the reviewer actually FAILED. That breaks the guard's
+  // core safety invariant (a failing review completing the goal).
+  //
+  // Fix: only treat a verdict as quoted when a quote char sits IMMEDIATELY around
+  // the verdict token (a small window), the way a real quoted/cited span wraps it.
+  // A conclusion line that just references a quoted token elsewhere stays live.
   const hasQuote = (s) => /["'`]/.test(s);
-  const quoted = (idx) => {
+  const quoted = (idx, matchLen) => {
     const lineStart = text.lastIndexOf("\n", idx) + 1;
     let lineEnd = text.indexOf("\n", idx);
     if (lineEnd < 0) lineEnd = text.length;
-    return hasQuote(text.slice(lineStart, idx)) && hasQuote(text.slice(idx, lineEnd));
+    const left = text.slice(Math.max(lineStart, idx - 4), idx);
+    const right = text.slice(idx, Math.min(lineEnd, idx + matchLen + 4));
+    return hasQuote(left) && hasQuote(right);
   };
-  const loose = [...text.matchAll(LOOSE_RE)].filter((m) => !quoted(m.index));
+  const loose = [...text.matchAll(LOOSE_RE)].filter((m) => !quoted(m.index, m[0].length));
   if (!loose.length) return null;
   const lastLoose = loose[loose.length - 1];
-  const anchored = [...text.matchAll(ANCHORED_RE)].filter((m) => !quoted(m.index));
+  const anchored = [...text.matchAll(ANCHORED_RE)].filter((m) => !quoted(m.index, m[0].length));
   const lastAnchored = anchored.length ? anchored[anchored.length - 1] : null;
   // Prefer whichever genuinely occurs last in the text; on a tie, the anchored
   // (conclusion-formatted) one wins.

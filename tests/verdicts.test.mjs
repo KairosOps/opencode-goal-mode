@@ -28,6 +28,22 @@ test("REGRESSION: an anchored PASS followed by a later inline FAIL resolves to F
   assert.equal(parseVerdict("Verdict: PASS\n1. Verdict: FAIL on edge cases"), "FAIL");
 });
 
+test("REGRESSION: a FAIL verdict line that merely mentions a quoted token stays a FAIL (not excluded as 'quoted')", () => {
+  // The old whole-line "both sides have a quote" heuristic excluded a real FAIL
+  // whose line cited a quoted filename / CWE / ticket, dropping it and letting an
+  // earlier example PASS win — recording PASS for a FAILING review (safety break).
+  assert.equal(
+    parseVerdict('Initial check looks clean. Verdict: PASS\n\nFound hardcoded secret in "config.js". Verdict: FAIL (CWE-"798")'),
+    "FAIL",
+  );
+  assert.equal(parseVerdict('Ticket "SEC-42": Verdict: FAIL on "auth.ts"'), "FAIL");
+  assert.equal(parseVerdict('Verdict: PASS\nNote: see "config.js". Verdict: FAIL'), "FAIL");
+  // A genuinely QUOTED verdict (the marker wrapped in quotes/backticks) is still excluded.
+  assert.equal(parseVerdict('Example success: "Verdict: PASS". Real verdict below.\nVerdict: FAIL'), "FAIL");
+  assert.equal(parseVerdict("(a clean run ends with \"Verdict: PASS\")"), null);
+  assert.equal(parseVerdict("`Verdict: PASS` is the success marker; this run failed, no marker."), null);
+});
+
 test("PASSED/FAILED do not register (strict PASS/FAIL only)", () => {
   assert.equal(parseVerdict("Verdict: PASSED"), null);
   assert.equal(parseVerdict("Verdict: FAILED"), null);
