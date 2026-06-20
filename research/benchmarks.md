@@ -1,5 +1,9 @@
 # Benchmarks
 
+Goal Mode makes strong claims, so this page keeps the numbers reproducible. The
+headline results come from third-party command examples, while the curated cases
+remain regression fixtures for the exact behaviors the guard promises to keep.
+
 Reproducible measurement of the destructive-command guard from a repository
 checkout. Run:
 

@@ -1,5 +1,10 @@
 # Sidebar visual test
 
+The sidebar is where Goal Mode's hidden ledger becomes visible to a human. This
+test keeps that product surface honest by rendering the real component and
+checking the exact text and terminal styling without requiring a live OpenCode
+TUI.
+
 `sidebar-visual.jsx` renders the **real** experimental TUI sidebar component
 (`plugins/goal-sidebar.tsx`) headlessly with `@opentui/solid`'s `testRender`,
 prints each frame, and asserts both the text and the exact foreground

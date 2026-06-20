@@ -1,5 +1,10 @@
 # Shell-analyzer threat model
 
+This is the uncomfortable part of the product promise: if an agent can run a
+shell, it can try to destroy work in surprisingly indirect ways. Goal Mode's
+shell analyzer exists to catch the common irreversible patterns before they run,
+while staying honest that it is a guardrail rather than a sandbox.
+
 The destructive-command guard is the plugin's most security-sensitive component.
 This document records the threat model: the bypass classes the original
 regex-based guard missed, and how the quote-aware tokenizer
