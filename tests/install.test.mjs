@@ -21,9 +21,18 @@ test("installer source only references safe component directories", () => {
   assert.doesNotMatch(text, /auth|sessions|preauth|hosts\.yml/);
 });
 
-test("gitignore excludes secrets and dependencies", () => {
+test("gitignore excludes secrets, dependencies, and local runtime data", () => {
   const text = readRepo(".gitignore");
-  for (const pattern of ["node_modules/", ".env", ".env.*"]) assert.ok(text.includes(pattern));
+  for (const pattern of [
+    "node_modules/",
+    ".env",
+    ".env.*",
+    "tools/lab/data/",
+    "RELEASE_NOTES.md",
+    "NOTES.md",
+  ]) {
+    assert.ok(text.includes(pattern), `.gitignore must include ${pattern}`);
+  }
 });
 
 test("installer copies components, including the nested plugin module directory", () => {

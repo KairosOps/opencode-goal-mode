@@ -4,8 +4,13 @@ node_modules/
 coverage/
 dist/
 .DS_Store
+Thumbs.db
 *.log
 .env
 .env.*
+RELEASE_NOTES.md
+NOTES.md
+SCRATCH.md
+tools/lab/data/
 work/
 outputs/

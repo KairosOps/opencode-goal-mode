@@ -1,8 +1,43 @@
+# Dependencies
 node_modules/
-coverage/
+
+# Build & test output
 dist/
-.DS_Store
-*.log
+coverage/
+*.tsbuildinfo
+
+# Environment & secrets
 .env
 .env.*
 !.env.example
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Release workflow artifacts (generated from CHANGELOG.md)
+RELEASE_NOTES.md
+
+# Local scratch notes — not part of the package
+NOTES.md
+SCRATCH.md
+
+# Goal Lab runtime data (see tools/lab/README.md)
+tools/lab/data/
+
+# Ad-hoc benchmark / experiment output
+work/
+outputs/
+
+# Editor & IDE (local only)
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
