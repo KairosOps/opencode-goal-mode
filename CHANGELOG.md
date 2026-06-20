@@ -1,21 +1,26 @@
 # Changelog
 
-## Unreleased
-
-> **Not yet released.** Draft changelog for the next patch (**v0.6.7**, pending merge).
+## v0.6.7
 
 ### Fix: explorer bash allowlist + deny question tool on primary goal (#2)
+
+Goal Mode subagents and the primary agent were stalling autonomous runs: `goal-explorer`
+prompted on every basic read-only shell command, and the primary `goal` agent could invoke
+the Questions tool mid-loop and wait indefinitely for user input.
 
 Addresses [issue #2](https://github.com/devinoldenburg/opencode-goal-mode/issues/2) items 1 and 2.
 
 - **`goal-explorer` bash allowlist.** Common read-only exploration commands (`grep`, `grep -r`,
   `cat`, `rg`, `head`, `tail`, `find`, `ls`, `sed`, `awk`, and read-only `git` introspection)
-  are now pre-approved instead of prompting on every invocation. In-place `sed -i` and
-  destructive `find -delete` / `find -exec` remain denied.
-- **`question: deny` on the primary `goal` agent.** The Questions tool is no longer
-  available to the Goal agent, so autonomous runs cannot stall mid-loop waiting for user
-  input. Ambiguity is handled via assumptions recorded in the Goal Contract and
-  subagent research. `/goal` and `/goal-contract` command text aligned with this policy.
+  are pre-approved instead of prompting on every invocation. In-place `sed -i` and destructive
+  `find -delete` / `find -exec` remain denied.
+- **`question: deny` on the primary `goal` agent.** The Questions tool is unavailable to the
+  Goal agent, so long-running workflows cannot stall waiting for answers. Ambiguity is handled
+  via assumptions recorded in the Goal Contract and subagent research. `/goal` and
+  `/goal-contract` command text is aligned with this policy.
+
+Regression tests lock in the explorer allowlist, the question deny on `goal`, and the updated
+command copy.
 
 ## v0.6.6
 
