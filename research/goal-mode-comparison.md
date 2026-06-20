@@ -1,5 +1,10 @@
 # Goal Mode vs. Claude Code vs. Codex
 
+This comparison is designed to be useful, not tribal. Claude Code and Codex have
+real strengths; Goal Mode's pitch is narrower and specific: OpenCode users get a
+default harness that blocks premature completion, invalidates stale reviews, and
+guards dangerous shell commands.
+
 How OpenCode Goal Mode's **mechanically-enforced** goal discipline compares to
 Anthropic's Claude Code and OpenAI's Codex. Sourced from Claude Code docs
 (`https://docs.anthropic.com/en/docs/claude-code/hooks` and `/security`) and
@@ -28,7 +33,8 @@ What separates the three is what happens at the **completion boundary** and the
   Goal Mode does not claim — but public docs do not describe a harness-level
   `Goal Completed` blocker or stale-review invalidation invariant.
 - **Goal Mode** ships a coherent **completion contract** and **command guard**
-  enforced at the harness layer by default, for the goal-completion use case.
+  enforced at the harness layer by default, while still relying on the model for
+  ordinary planning, coding, and judgment inside those boundaries.
 
 ## Capability matrix
 

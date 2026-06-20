@@ -3,6 +3,10 @@ description: Start a strict Goal Mode workflow with contract, subagent discovery
 agent: goal
 ---
 
+## What this command gives you
+
+`/goal` is the operator-facing shortcut for this workflow: start a strict goal mode workflow with contract, subagent discovery, implementation, verification, and mandatory review cycles. Use it when you want the guard's state, evidence, or review workflow in a form that is explicit enough to act on immediately.
+
 Start Goal Mode for this request:
 
 ```text

@@ -29,6 +29,23 @@ blocked before they ever execute.
 
 It's the difference between *asking* an agent to be careful and *making* it.
 
+## The pitch in one minute
+
+Goal Mode is a drop-in OpenCode package for people who want agentic coding to feel
+auditable instead of theatrical. It gives your agent a contract, a live ledger, a
+specialist review bench, and a command guard that all live outside the model's
+memory. The result is a sharper workflow for real repositories: fewer premature
+victory laps, fewer stale approvals, and a clear trail showing what changed, how
+it was checked, and which gates passed.
+
+What you get after install:
+
+- A primary `goal` agent that turns requests into acceptance criteria before it edits.
+- Programmatic review cycles that the guard launches automatically when work is ready.
+- Freshness tracking that invalidates every review pass after the next edit.
+- A quote-aware shell analyzer that blocks common destructive and remote-exec commands.
+- A TUI sidebar that turns the hidden ledger into visible progress.
+
 ## Watch it refuse to lie
 
 The agent tries to declare victory early. The guard catches it and hands back the truth:

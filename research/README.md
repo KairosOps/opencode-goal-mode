@@ -1,5 +1,9 @@
 # Research
 
+These papers are the proof behind the pitch. They keep the marketing honest by
+showing the sources, measurements, caveats, and threat models that shaped Goal
+Mode's guardrails.
+
 Background research that informs the Goal Mode design. These are working
 references, kept so the rationale behind the plugin is auditable and the
 platform facts are recoverable. They are shipped as reference docs so README

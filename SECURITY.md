@@ -1,5 +1,17 @@
 # Security Policy
 
+Goal Mode is security-conscious software for an inherently risky job: letting an
+AI coding agent run tools in a real repository. Its guardrails are designed to
+reduce common failures, not to replace sandboxing, least-privilege credentials,
+or careful review of generated code.
+
+## Security promise
+
+- Completion claims are checked against recorded gate state instead of model confidence.
+- Destructive shell patterns are analyzed with tokenization rather than raw regex matching.
+- Installer writes are limited to Goal Mode agents, commands, plugins, sidebar config, and its manifest.
+- Vulnerability reports are handled privately first so bypasses can be fixed responsibly.
+
 ## Reporting a vulnerability
 
 Please report security issues privately via GitHub Security Advisories:
