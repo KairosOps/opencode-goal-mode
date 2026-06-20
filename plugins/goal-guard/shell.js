@@ -514,8 +514,24 @@ function classifyCommand(words, redirects, depth, acc, pipelineCmds, indexInPipe
   if (bin === "xargs") {
     let j = 0;
     while (j < args.length && args[j].startsWith("-")) {
-      // -I {}, -n N, -P N, -d X take a value
-      if (["-I", "-n", "-P", "-d", "-E", "-s", "-L"].includes(args[j])) j += 1;
+      // Value-taking flags: the NEXT token is the flag's value, not the command.
+      // Only flags that ALWAYS take a value are listed here. The GNU -i[REPL] /
+      // -e[EOF] flags take an OPTIONAL value (attached: `-i{}`, or absent), so
+      // treating them as value-taking would consume the real command in the common
+      // `xargs -i rm -rf /` form (no separate value) — they're left out and their
+      // attached form is handled naturally by startsWith("-"). Missing any of the
+      // always-value flags let the flag's VALUE parse as the command, hiding a
+      // destructive trailing command entirely (e.g. `xargs -a list rm -rf /` → benign).
+      const flag = args[j];
+      if (flag.indexOf("=") >= 0) {
+        // --opt=value (value attached) — no separate token to skip.
+        j += 1;
+        continue;
+      }
+      if (
+        ["-I", "-n", "-P", "-d", "-E", "-s", "-L", "-a", "--arg-file", "--replace", "--max-args", "--max-procs", "--delimiter", "--eof", "--max-chars", "--max-lines"].includes(flag)
+      )
+        j += 1;
       j += 1;
     }
     if (j < args.length) return classifyCommand(args.slice(j), [], depth + 1, acc, pipelineCmds, indexInPipeline);
@@ -935,30 +951,46 @@ const SCRIPT_WRITE_RE = /(writeFile|appendFile|copyFile|mkdir|createWriteStream|
 // they are genuine sinks), keeping benign diagnostics from over-blocking.
 const EXEC_SINK_RE = /(?:os\.system|os\.popen|subprocess\.(?:run|call|Popen|check_output|check_call)|child_process\.\w+|\.execSync|\.execFileSync|\.exec|\.execFile|\.spawnSync|\.spawn|\bexecSync|\bexecFileSync|\bspawnSync|\bexecvp?\b|(?<![.\w])system|(?<![.\w])exec|(?<![.\w])popen)\s*\(/g;
 
-/** Extract the shell command an exec sink runs (handles a string or an argv list). */
-function extractExecCommand(code) {
-  // Perl/Ruby backticks: `cmd`.
-  const bt = code.match(/`([^`]+)`/);
-  if (bt) return bt[1];
+/** Extract shell command(s) an interpreter string shells out to. Handles Perl/Ruby
+ * backticks (`cmd`), exec sinks (system("cmd"), subprocess.run(["a","b"])), and
+ * child_process / os.popen calls. Returns ALL extracted commands so a malicious
+ * sink that follows a benign backtick is not masked (the previous "return the
+ * first backtick" logic let `x = \`whoami\`; system("rm -rf /")` read as benign). */
+function extractExecCommands(code) {
+  const cmds = [];
+  // Perl/Ruby backticks: `cmd`. Collect every backtick string.
+  for (const bt of code.matchAll(/`([^`]+)`/g)) {
+    if (bt[1] && bt[1].trim()) cmds.push(bt[1]);
+  }
+  // Exec sinks: system(...), exec(...), subprocess.run(...), etc. Collect each.
   EXEC_SINK_RE.lastIndex = 0;
-  const m = EXEC_SINK_RE.exec(code);
-  if (!m) return null;
-  const [region] = readBalanced(code, m.index + m[0].length, "(", ")");
-  const quoted = [...region.matchAll(/["']([^"']*)["']/g)].map((q) => q[1]).filter(Boolean);
-  if (!quoted.length) return null;
-  // argv list (`["rm","-rf","/"]`) → join; single string → use as-is.
-  return /^\s*\[/.test(region) ? quoted.join(" ") : quoted[0];
+  let m;
+  while ((m = EXEC_SINK_RE.exec(code))) {
+    const [region] = readBalanced(code, m.index + m[0].length, "(", ")");
+    const quoted = [...region.matchAll(/["']([^"']*)["']/g)].map((q) => q[1]).filter(Boolean);
+    if (!quoted.length) continue;
+    // argv list (`["rm","-rf","/"]`) → join; single string → use as-is.
+    cmds.push(/^\s*\[/.test(region) ? quoted.join(" ") : quoted[0]);
+  }
+  return cmds;
+}
+
+/** @deprecated use extractExecCommands (plural). Kept for the test surface. */
+function extractExecCommand(code) {
+  return extractExecCommands(code)[0] || null;
 }
 
 function inspectScriptString(code, depth, acc) {
-  // Interpreter that shells out: pull the command out of the exec sink's own
+  // Interpreter that shells out: pull the command(s) out of the exec sink's own
   // argument region (so unrelated quoted strings elsewhere are ignored). When no
   // literal command can be extracted (e.g. a dynamic variable), fail OPEN — do
   // not blanket-block. The host's own permission rules still apply, and
-  // false-blocking benign one-liners is worse than this rare miss.
-  const execCmd = extractExecCommand(code);
-  if (execCmd) {
-    analyzeInto(execCmd, (depth || 0) + 1, acc);
+  // false-blocking benign one-liners is worse than this rare miss. Analyze EVERY
+  // extracted command (backticks AND sinks) so a destructive sink after a benign
+  // backtick can no longer hide behind it.
+  const cmds = extractExecCommands(code);
+  if (cmds.length) {
+    for (const execCmd of cmds) analyzeInto(execCmd, (depth || 0) + 1, acc);
     return;
   }
   if (SCRIPT_DELETE_RE.test(code)) {

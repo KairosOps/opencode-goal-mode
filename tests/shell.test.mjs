@@ -78,6 +78,12 @@ const DESTRUCTIVE_BYPASSES = [
   "nice -n 10 rm -rf build",
   "timeout 5 rm -rf cache",
   "xargs -I{} rm -rf {} < list.txt",
+  // [H1] xargs value-taking flags whose value would otherwise be mistaken for
+  // the command, hiding the real destructive trailing command.
+  "xargs -a filelist rm -rf /",
+  "xargs --arg-file filelist rm -rf /",
+  "xargs --arg-file=filelist rm -rf /",
+  "xargs -i rm -rf /",
 ];
 
 for (const cmd of DESTRUCTIVE_BYPASSES) {
@@ -135,6 +141,20 @@ test("interpreter exec sinks are still caught when they actually call out", () =
   assert.equal(looksLikeDestructiveBash("python -c \"import os; os.system('rm -rf /')\""), true);
   assert.equal(looksLikeDestructiveBash("node -e \"require('child_process').execSync('rm -rf /')\""), true);
   assert.equal(looksLikeDestructiveBash("node -e \"require('child_process').exec('rm -rf /')\""), true);
+});
+
+test("REGRESSION [M1]: a benign backtick before a destructive exec sink does not mask it", () => {
+  // extractExecCommand used to return the FIRST backtick string and stop, so a
+  // destructive system()/exec() that followed a benign `cmd` was never analyzed.
+  for (const cmd of [
+    "ruby -e 'x = `whoami`; system(\"rm -rf /tmp/x\")'",
+    "perl -e 'my $x = `date`; system(\"rm -rf /tmp/x\")'",
+    "ruby -e 'a = `uname`; b = `uptime`; system(\"rm -rf /tmp/x\")'",
+  ]) {
+    assert.equal(looksLikeDestructiveBash(cmd), true, `${cmd} should be destructive`);
+  }
+  // Benign backticks alone must still not be over-blocked.
+  assert.equal(looksLikeDestructiveBash("ruby -e 'x = `whoami`'"), false);
 });
 
 test("read-only git config queries do not dirty the session", () => {
