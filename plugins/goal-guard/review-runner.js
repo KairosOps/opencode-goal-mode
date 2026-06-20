@@ -76,14 +76,14 @@ export function ensureReviewClient(client, serverUrl) {
   return { ...client, session: { ...(client?.session || {}), promptAsync, messages } };
 }
 
-function isSessionBusyError(err) {
+export function isSessionBusyError(err) {
   const name = String(err?.name || "");
   const msg = String(err?.message || err || "");
   return name === "SessionBusyError" || /SessionBusy|session busy|session is busy/i.test(msg);
 }
 
 /** promptAsync rejects with SessionBusy while the host is still finishing idle — retry. */
-async function promptSubtaskWithRetry(client, sessionID, body, { sleep, maxAttempts = 16, retryMs = 400 }) {
+async function promptSubtaskWithRetry(client, sessionID, body, { sleep, maxAttempts = 40, retryMs = 500 }) {
   let lastErr;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -182,7 +182,6 @@ async function runReviewer(client, sessionID, agent, state, model, { timeoutMs, 
       {
         agent: "goal",
         ...(model ? { model } : {}),
-        noReply: true,
         parts: [
           {
             type: "subtask",
@@ -219,7 +218,7 @@ async function runReviewer(client, sessionID, agent, state, model, { timeoutMs, 
   } catch (err) {
     const hooked = freshRecordedVerdict(state, agent, beforeSeq);
     if (hooked) return { verdict: hooked.verdict, text: hooked.text || "", source: "hook" };
-    return { verdict: null, text: "", error: String(err?.message || err) };
+    return { verdict: null, text: "", error: String(err?.message || err), sessionBusy: isSessionBusyError(err) };
   }
 }
 
@@ -254,12 +253,23 @@ export async function runReviewCycle(client, store, state, config, opts = {}) {
   for (const agent of toRun) {
     log(`launching reviewer subtask: ${agent}`);
     const beforeSeq = state?.latestVerdict?.[agent]?.seq || 0;
-    const { verdict, text, source } = await runReviewer(client, sessionID, agent, state, model, {
+    const { verdict, text, source, sessionBusy } = await runReviewer(client, sessionID, agent, state, model, {
       timeoutMs,
       pollMs,
       sleep,
       idleDeferMs: ran.length === 0 ? idleDeferMs : 0,
     });
+    if (sessionBusy && ran.length === 0) {
+      return {
+        ran: [],
+        passed: [],
+        failed: [],
+        sessionBusy: true,
+        findings: [],
+        completionAllowed: completionAllowed(state, config),
+        reviewCycles: state.reviewCycles,
+      };
+    }
     ran.push(agent);
     const hooked = freshRecordedVerdict(state, agent, beforeSeq);
     if (hooked) {
@@ -287,6 +297,7 @@ export async function runReviewCycle(client, store, state, config, opts = {}) {
     ran,
     passed,
     failed,
+    sessionBusy: false,
     findings,
     completionAllowed: completionAllowed(state, config),
     reviewCycles: state.reviewCycles,

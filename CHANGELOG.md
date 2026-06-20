@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.6.9
+
+### Fix: programmatic review runs on first idle (no user "continue?" needed)
+
+After the agent stopped with work done, reviews often did not start until the user
+sent another message (e.g. "continue?"). The agent also sometimes told the user it
+was "pausing for review" instead of letting the guard take over automatically.
+
+- **SessionBusy auto-retry.** When `session.idle` fires before the host accepts
+  `promptAsync`, the guard now retries the review cycle automatically (configurable
+  `reviewIdleRetryMs` / `maxReviewIdleRetries`) instead of silently giving up or
+  waiting for a user turn.
+- **Longer idle defer + stronger subtask retries.** Default `reviewIdleDeferMs` is
+  1500ms; subtask launch retries up to 40 times with 500ms backoff.
+- **Review run count only after launch.** `reviewRunCount` increments only once
+  reviewer subtasks actually start, not on a failed SessionBusy attempt.
+- **Agent copy.** The goal agent and system prompt now explicitly say: stop when
+  done, do **not** ask the user to continue, do **not** say you are pausing for
+  review — the guard starts the next assistant turn with fixes or completion.
+
 ## v0.6.8
 
 ### Fix: programmatic review actually runs on idle (subtasks on the goal session)

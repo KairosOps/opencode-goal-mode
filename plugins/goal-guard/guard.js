@@ -32,7 +32,7 @@ import { evaluateAutoContinue } from "./autocontinue.js";
 import { summarizeState } from "./summary.js";
 import { buildSystemInjection } from "./system.js";
 import { markEdit, markVerification, markFileChanged, maybeClearDirtyOnFinalPass, maybeAutoSeedContract } from "./events.js";
-import { runReviewCycle, clientCanReview, ensureReviewClient } from "./review-runner.js";
+import { runReviewCycle, clientCanReview, ensureReviewClient, isSessionBusyError } from "./review-runner.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -84,6 +84,8 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   // they are pruned with the session via the store's onEvict so they never leak.
   const decidingIdle = new Set(); // sessionIDs currently inside an idle decision
   const reviewingSessions = new Set(); // sessionIDs currently inside a programmatic review run
+  const idleReviewRetries = new Map(); // sessionID -> retry count for SessionBusy deferrals
+  const idleReviewTimers = new Map(); // sessionID -> scheduled retry timer
   const userTurnSeq = new Map(); // sessionID -> monotonic counter, ++ per real user turn
   const bumpUserTurn = (sid) => userTurnSeq.set(sid, (userTurnSeq.get(sid) || 0) + 1);
   const sessionModel = new Map(); // sessionID -> { providerID, modelID } of the goal's model, so the
@@ -109,6 +111,12 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         decidingIdle.delete(key);
         reviewingSessions.delete(key);
         sessionModel.delete(key);
+        idleReviewRetries.delete(key);
+        const t = idleReviewTimers.get(key);
+        if (t) {
+          clearTimeout(t);
+          idleReviewTimers.delete(key);
+        }
         if (lastActiveGoalSession === key) lastActiveGoalSession = null;
       },
     });
@@ -144,6 +152,27 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
   const persist = () => persistence.save(snapshotFn);
 
   const syncIdle = overrides.syncIdle === true;
+  const scheduleFn = overrides.setTimer || ((fn, ms) => setTimeout(fn, ms));
+  const clearTimerFn = overrides.clearTimer || clearTimeout;
+
+  const scheduleIdleReviewRetry = (sessionID) => {
+    if (idleReviewTimers.has(sessionID)) return false;
+    const attempt = (idleReviewRetries.get(sessionID) || 0) + 1;
+    if (attempt > config.maxReviewIdleRetries) {
+      idleReviewRetries.delete(sessionID);
+      return false;
+    }
+    idleReviewRetries.set(sessionID, attempt);
+    const timer = scheduleFn(() => {
+      idleReviewTimers.delete(sessionID);
+      decidingIdle.add(sessionID);
+      void resolveIdleSession(sessionID).catch((err) => {
+        logger.warn("Goal idle review retry failed", { sessionID, error: String(err?.message || err) });
+      });
+    }, Math.max(config.reviewIdleRetryMs, 1));
+    idleReviewTimers.set(sessionID, timer);
+    return true;
+  };
 
   /** Async idle resolution — must NOT run inline inside the `event` hook (see session.idle). */
   async function resolveIdleSession(sessionID) {
@@ -186,9 +215,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
           await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles} review runs`, { state: summarizeState(state, config) });
           await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
         } else {
-          state.reviewRunCount = (state.reviewRunCount || 0) + 1;
-          persistence.flush(snapshotFn);
-          await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
+          await logger.toast(`Goal: running required reviews…`, "info");
           const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
           let res = null;
           reviewingSessions.add(sessionID);
@@ -201,11 +228,25 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
               timeoutMs: config.reviewTimeoutMs,
               pollMs: config.reviewPollMs,
               idleDeferMs: 0,
+              sleep: overrides.reviewSleep || undefined,
             });
           } catch (err) {
             await logger.warn("Programmatic review run failed", { error: String(err?.message || err) });
+            if (isSessionBusyError(err) && scheduleIdleReviewRetry(sessionID)) {
+              await logger.info("Session still busy — scheduling programmatic review retry", { sessionID });
+              return;
+            }
           } finally {
             reviewingSessions.delete(sessionID);
+          }
+          if (res?.sessionBusy && scheduleIdleReviewRetry(sessionID)) {
+            await logger.info("Session still busy — scheduling programmatic review retry", { sessionID });
+            return;
+          }
+          idleReviewRetries.delete(sessionID);
+          if (res?.ran?.length) {
+            state.reviewRunCount = (state.reviewRunCount || 0) + 1;
+            await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
           }
           persistence.flush(snapshotFn);
           if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {

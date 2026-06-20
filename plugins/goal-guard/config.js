@@ -30,7 +30,11 @@ export const DEFAULT_CONFIG = Object.freeze({
   reviewPollMs: 2500,
   /** Delay (ms) after session.idle before launching reviewer subtasks — lets the host
    * finish the idle transition so promptAsync is not rejected as SessionBusy. */
-  reviewIdleDeferMs: 500,
+  reviewIdleDeferMs: 1500,
+  /** Backoff (ms) between automatic retries when session.idle fires before the host accepts prompts. */
+  reviewIdleRetryMs: 2500,
+  /** Max automatic idle-review retries before surfacing a manual-review pause. */
+  maxReviewIdleRetries: 10,
   /** Hard cap on programmatic review CYCLES per goal (backstop against a reviewer that
    * never passes). On reaching it, the guard pauses and asks the human to step in. */
   maxReviewCycles: 12,
@@ -110,6 +114,8 @@ function fromEnv(env) {
     GOAL_GUARD_REVIEW_TIMEOUT_MS: ["reviewTimeoutMs", coerceInt],
     GOAL_GUARD_REVIEW_POLL_MS: ["reviewPollMs", coerceInt],
     GOAL_GUARD_REVIEW_IDLE_DEFER_MS: ["reviewIdleDeferMs", coerceInt],
+    GOAL_GUARD_REVIEW_IDLE_RETRY_MS: ["reviewIdleRetryMs", coerceInt],
+    GOAL_GUARD_MAX_REVIEW_IDLE_RETRIES: ["maxReviewIdleRetries", coerceInt],
     GOAL_GUARD_MAX_REVIEW_CYCLES: ["maxReviewCycles", coerceInt],
     GOAL_GUARD_ABORT_GRACE_MS: ["abortGraceMs", coerceInt],
     GOAL_GUARD_INJECT_SYSTEM_STATE: ["injectSystemState", coerceBool],

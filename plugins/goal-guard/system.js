@@ -53,9 +53,10 @@ export function buildSystemInjection(state, config) {
     // work and stop — it will be reviewed automatically and told what to fix.
     lines.push(
       `- The Goal Guard runs the required reviews AUTOMATICALLY (programmatically) when you stop — you do NOT ` +
-        `invoke any reviewer yourself. Implement the goal and VERIFY it (run the code / run the tests, record ` +
-        `evidence with goal_evidence), then stop. The guard will run these reviewers — ${bullet(r.missingGates)} — ` +
-        `and, if anything is blocking, re-prompt you with exactly what to fix. Each full review pass is one review cycle.`,
+        `invoke any reviewer yourself and you must NOT ask the user to continue or say you are pausing for review. ` +
+        `Implement the goal and VERIFY it (run the code / run the tests, record evidence with goal_evidence), then stop. ` +
+        `The guard will run these reviewers — ${bullet(r.missingGates)} — and, if anything is blocking, start the next ` +
+        `assistant turn with exactly what to fix. Each full review pass is one review cycle.`,
     );
   } else if (r.missingGates.length) {
     const next = r.missingGates[0];

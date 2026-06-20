@@ -135,6 +135,60 @@ test("[live-parity] the guard runs programmatic reviews when only goal_evidence 
   assert.equal(completionAllowed(guard.store.stateFor("g"), guard.config), true);
 });
 
+test("[session-busy] first idle retries programmatic review when the host is still busy (no user continue needed)", async () => {
+  let t = 1000;
+  let ready = false;
+  const launched = [];
+  const client = {
+    app: { log: async () => {} },
+    tui: { showToast: async () => {} },
+    session: {
+      promptAsync: async ({ body }) => {
+        if (!ready) {
+          const err = new Error("SessionBusyError");
+          err.name = "SessionBusyError";
+          throw err;
+        }
+        for (const part of body?.parts || []) {
+          if (part.type === "subtask") launched.push(part.agent);
+        }
+      },
+      messages: async () => ({
+        data: [{
+          parts: launched.map((agent) => ({
+            type: "tool",
+            tool: "task",
+            state: { status: "completed", input: { subagent_type: agent }, output: "Verdict: PASS" },
+          })),
+        }],
+      }),
+    },
+  };
+  const guard = __test.createGuard(
+    { client },
+    { abortGraceMs: 0, reviewPollMs: 2, reviewTimeoutMs: 1000, reviewIdleDeferMs: 0, reviewIdleRetryMs: 10, maxReviewIdleRetries: 5 },
+    {
+      persistence: noopPersistence,
+      clock: () => (t += 1),
+      syncIdle: true,
+      reviewSleep: async () => {},
+      setTimer: (fn) => {
+        queueMicrotask(() => {
+          ready = true;
+          fn();
+        });
+        return 1;
+      },
+    },
+  );
+  await guard.hooks["chat.params"]({ sessionID: "g", agent: "goal", model: MODEL }, {});
+  await guard.hooks["chat.message"]({ sessionID: "g", agent: "goal", model: MODEL }, { parts: [{ type: "text", text: "build it" }] });
+  await guard.hooks["tool.execute.after"]({ tool: "edit", sessionID: "g", callID: "c", args: {} }, { output: "", title: "", metadata: {} });
+  await guard.hooks.event({ event: { type: "session.idle", properties: { sessionID: "g" } } });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(launched.length >= 1, "review subtasks launch after SessionBusy retry without a user continue");
+});
+
 test("the model is captured from chat.params so the reviewers can be launched", async () => {
   const { guard, launched } = makeReviewingGuard("PASS");
   await startGoalWithWork(guard.hooks);

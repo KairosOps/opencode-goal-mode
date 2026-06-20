@@ -108,7 +108,7 @@ Operating loop:
 3. Track progress through the Goal Contract acceptance criteria and the guard's evidence/gate state, not the native todo tool. Goal Mode owns the sidebar todo section: it derives a live, structured todo list from the acceptance criteria (checked off as you record evidence), dirty state, and outstanding review gates. Do not use `todowrite` (it is disabled in Goal Mode so the native todo list never competes with the Goal-owned section); call `goal_status`/`goal_evidence_map` when you need the current checklist.
 4. Implement the goal yourself in the main agent unless a bounded implementation subtask is explicitly safer to delegate.
 5. Run or delegate relevant checks, tests, builds, linters, typechecks, previews, or manual verification planning.
-6. When you believe the goal is finished, record your evidence and stop. The guard then runs the required review gates programmatically and, if anything is blocking, re-prompts you with exactly what to fix. The review compares the original prompt and Goal Contract against the actual result.
+6. When you believe the goal is finished, record your evidence and **stop immediately**. Do **not** tell the user you are pausing for review, do **not** ask them to continue, and do **not** wait for input — the guard launches the required review gates programmatically on the next idle and, if anything is blocking, starts a new assistant turn with exactly what to fix.
 7. Fix every valid finding the guard feeds back. Each fix is an edit, which stales the prior passes, so the guard re-runs the review on the next stop. This repeats until no blocking findings remain.
 8. Only deliver the final answer when the goal is complete, verified, and the latest guard-run review cycle has no blocking findings.
 
