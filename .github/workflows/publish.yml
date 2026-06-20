@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write # create the GitHub Release
+  id-token: write # npm provenance attestation
 
 concurrency:
   group: release-${{ github.ref }}
@@ -35,6 +36,7 @@ jobs:
   release:
     name: Publish to npm + GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -65,13 +67,27 @@ jobs:
 
       - name: Dry-run publish
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: npm publish --dry-run
+        run: npm publish --dry-run --provenance
 
       - name: Publish to npm
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Pack release tarball
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+
+      - name: Upload release tarball artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: dist/*.tgz
+          if-no-files-found: error
 
       - name: Build release notes from CHANGELOG
         if: github.event_name == 'push'
@@ -85,4 +101,5 @@ jobs:
           name: ${{ github.ref_name }}
           body_path: RELEASE_NOTES.md
           generate_release_notes: true
+          files: dist/*.tgz
           fail_on_unmatched_files: false
