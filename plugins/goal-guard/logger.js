@@ -6,6 +6,8 @@
  * parts + a system directive — never a visible user message in the transcript.
  */
 
+import { PRIMARY_AGENT } from "./agents.js";
+
 export const GUARD_PREFIX = "[Goal Guard]";
 
 /** Minimal synthetic text part that wakes the agent loop without a user bubble. */
@@ -21,7 +23,11 @@ export function isSyntheticUserTurn(parts) {
 export function buildGuardPromptBody(text, model) {
   const directive = `${GUARD_PREFIX}\n${String(text)}`;
   return {
-    agent: "goal",
+    // Pin the continuation to the Goal primary agent so a guard-driven turn can
+    // never be misrouted to Build/Plan (which would deactivate Goal Mode). Reference
+    // the canonical constant rather than a bare "goal" literal so a future rename
+    // of PRIMARY_AGENT cannot desync the two.
+    agent: PRIMARY_AGENT,
     ...(model ? { model } : {}),
     system: directive,
     parts: [{ type: "text", text: GUARD_SYNTHETIC_TRIGGER, synthetic: true }],

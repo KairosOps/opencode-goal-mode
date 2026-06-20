@@ -30,7 +30,7 @@
 import { requiredGates, completionAllowed, gatePassedFresh } from "./gates.js";
 import { recordVerdict, parseVerdict, textOf } from "./verdicts.js";
 import { maybeClearDirtyOnFinalPass } from "./events.js";
-import { CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
+import { CYCLE_CLOSING_AGENT, PRIMARY_AGENT, prettyAgentName } from "./agents.js";
 import { shortGoalLabel } from "./summary.js";
 
 const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -176,7 +176,11 @@ async function launchReviewBatch(client, sessionID, agents, state, model, { slee
     client,
     sessionID,
     {
-      agent: "goal",
+      // Pin the reviewer batch to the Goal primary agent so it runs ON the parent
+      // goal session (the same programmatic path as task/command subtasks), never on
+      // a Build/Plan session. Reference PRIMARY_AGENT, not a bare literal, so a
+      // rename of the primary agent id cannot desync this from the rest of the guard.
+      agent: PRIMARY_AGENT,
       ...(model ? { model } : {}),
       parts: agents.map((agent) => ({
         type: "subtask",
