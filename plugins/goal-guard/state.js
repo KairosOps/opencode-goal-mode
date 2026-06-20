@@ -124,6 +124,10 @@ function reviveState(raw) {
  *   per-session sidecars (e.g. in-memory maps) and never leak them.
  */
 export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.now(), onEvict } = {}) {
+  // Floor the cap at 1: a 0/negative maxSessions made the eviction loop
+  // `while (sessions.size >= maxSessions)` always true, so a second concurrent
+  // session (e.g. a reviewer child) evicted the goal session and neither persisted.
+  const cap = Number.isFinite(maxSessions) && maxSessions > 0 ? maxSessions : 1;
   const sessions = new Map();
   let seq = 0;
   let touchCounter = 0;
@@ -151,7 +155,7 @@ export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.n
         }
       }
     }
-    while (sessions.size >= maxSessions) {
+    while (sessions.size >= cap) {
       let oldestKey = null;
       let oldest = Infinity;
       for (const [key, st] of sessions) {
@@ -210,9 +214,9 @@ export function createStore({ maxSessions = 200, ttlMs = 0, clock = () => Date.n
       }
     }
     // Restoring a snapshot must respect the configured cap, or a persisted
-    // oversized store would exceed maxSessions forever (and a later add could
+    // oversized store would exceed the cap forever (and a later add could
     // evict a live active session in one burst).
-    while (sessions.size > maxSessions) {
+    while (sessions.size > cap) {
       let oldestKey = null;
       let oldest = Infinity;
       for (const [key, st] of sessions) {

@@ -43,6 +43,19 @@ test("eviction holds the cache at the limit", () => {
   assert.ok(store.size() <= 50);
 });
 
+test("REGRESSION: a degenerate maxSessions is floored so the store never self-evicts to zero", () => {
+  // maxSessions:0 made the eviction loop `while (size >= 0)` always true. The store
+  // backstop floors the effective cap at >=1 so a live session is always retained.
+  for (const bad of [0, -1, -5]) {
+    const store = createStore({ maxSessions: bad });
+    const goal = store.stateFor("goal");
+    assert.ok(store.sessions.has("goal"), `goal not retained at maxSessions=${bad}`);
+    assert.ok(store.size() >= 1, `expected >=1 session at maxSessions=${bad}`);
+    // The created state is usable.
+    assert.equal(typeof goal, "object");
+  }
+});
+
 test("eviction drops the least-recently-touched idle session, not a recently touched one", () => {
   const store = createStore({ maxSessions: 3 });
   store.stateFor("old");

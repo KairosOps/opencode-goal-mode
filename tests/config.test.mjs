@@ -96,3 +96,15 @@ test("integer config rejects decimals and scientific notation (no silent truncat
   assert.equal(resolveConfig({ maxAutoContinue: "25" }).maxAutoContinue, 25, "a plain integer still works");
   assert.equal(resolveConfig({}, { GOAL_GUARD_ABORT_GRACE_MS: "800" }).abortGraceMs, 800);
 });
+
+test("REGRESSION: a degenerate maxSessions (0/negative) falls back to the default", () => {
+  // maxSessions:0 made the store's eviction loop always true (while (size >= 0)),
+  // so a second concurrent session evicted the first and neither persisted. Reject
+  // the degenerate value at config resolution. (The store also floors the effective
+  // cap at >=1 as a defence-in-depth backstop for direct createStore callers.)
+  assert.equal(resolveConfig({ maxSessions: 0 }).maxSessions, DEFAULT_CONFIG.maxSessions);
+  assert.equal(resolveConfig({ maxSessions: -5 }).maxSessions, DEFAULT_CONFIG.maxSessions);
+  assert.equal(resolveConfig({ maxSessions: 1 }).maxSessions, 1, "a legitimate small cap is honoured");
+  assert.equal(resolveConfig({ maxSessions: 25 }).maxSessions, 25);
+  assert.equal(resolveConfig({}, { GOAL_GUARD_MAX_SESSIONS: "0" }).maxSessions, DEFAULT_CONFIG.maxSessions);
+});

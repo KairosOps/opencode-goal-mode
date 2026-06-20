@@ -156,5 +156,12 @@ export function resolveConfig(options, env = process.env) {
     else if (typeof def === "number") merged[key] = coerceInt(opts[key], merged[key]);
     else merged[key] = coerceStr(opts[key], merged[key]); // string keys: ignore empty/blank, never inject ""
   }
+  // maxSessions must hold at least the goal session AND its reviewer child sessions.
+  // A value of 0 (or negative) made the store's eviction loop (while (size >=
+  // maxSessions)) always true, so every stateFor for a different sessionID evicted
+  // the current one — concurrent goal+reviewer state bounced and neither persisted.
+  // Reject the degenerate value and fall back to the default. (createStore also
+  // floors the effective cap at 1 as a defence-in-depth backstop.)
+  if (!Number.isFinite(merged.maxSessions) || merged.maxSessions < 1) merged.maxSessions = DEFAULT_CONFIG.maxSessions;
   return Object.freeze(merged);
 }
