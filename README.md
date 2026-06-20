@@ -225,7 +225,7 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
 | `programmaticReview` / `GOAL_GUARD_PROGRAMMATIC_REVIEW` | `true` | Have the guard launch the required reviewers itself on idle (as subtasks on the goal session). |
 | `reviewTimeoutMs` / `GOAL_GUARD_REVIEW_TIMEOUT_MS` | `360000` | Per-reviewer wall-clock cap (ms) for a programmatic review. |
 | `reviewPollMs` / `GOAL_GUARD_REVIEW_POLL_MS` | `2500` | Poll cadence (ms) while waiting for a reviewer's verdict. |
-| `reviewIdleDeferMs` / `GOAL_GUARD_REVIEW_IDLE_DEFER_MS` | `1500` | Delay (ms) after idle before launching reviewers; also backs off on `SessionBusy`. |
+| `reviewIdleDeferMs` / `GOAL_GUARD_REVIEW_IDLE_DEFER_MS` | `1500` | Delay (ms) after idle before launching reviewers (lets the host finish the idle transition so `promptAsync` is not rejected as `SessionBusy`). |
 | `reviewIdleRetryMs` / `GOAL_GUARD_REVIEW_IDLE_RETRY_MS` | `2500` | Backoff (ms) between automatic retries when the host is still busy after idle. |
 | `maxReviewIdleRetries` / `GOAL_GUARD_MAX_REVIEW_IDLE_RETRIES` | `10` | Max automatic idle-review retries before pausing for manual review. |
 | `maxReviewCycles` / `GOAL_GUARD_MAX_REVIEW_CYCLES` | `12` | Hard cap on programmatic review runs per goal; on reaching it the guard pauses for you. |
@@ -268,6 +268,14 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
   commands like `grep`, `cat`, and `sed` are pre-approved on `goal-explorer`.
 - **Goal agent stalling on Questions?** The primary `goal` agent has `question: deny`
   (v0.6.7+); record assumptions in the Goal Contract instead.
+- **Goal Mode vanished after I opened the todo panel / switched agents?** Switching the
+  session off the `goal` agent (to Build/Plan, or via an action that cycles the agent)
+  intentionally pauses Goal Mode — the guard shows a toast and stops treating that turn
+  as a goal. Your Goal Contract, reviews, and evidence are preserved. Switch back to the
+  `goal` agent (or run `/goal`) to resume; the session re-activates with all state intact.
+- **Programmatic review not firing in headless `opencode serve`?** The idle watcher
+  reconnects on transient SSE drops (v0.6.12+) and warns if it cannot start; check the
+  server log for `goal-guard.watcher.*` events.
 - **A safe command got blocked?** Run `node benchmarks/external.mjs --json` to see how the
   analyzer reads it, set `blockDestructive: false` for that project, and please
   [open an issue](https://github.com/devinoldenburg/opencode-goal-mode/issues).

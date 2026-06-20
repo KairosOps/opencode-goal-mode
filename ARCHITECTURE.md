@@ -239,7 +239,7 @@ supports `--uninstall` (which leaves locally-modified files in place).
 
 ## Testing
 
-`node --test` runs the suite (355 tests across 18 files):
+`node --test` runs the suite (370 tests across 20 files):
 
 - `tests/shell.test.mjs` / `tests/shell.property.test.mjs` — analyzer against bypass and false-positive corpora.
 - `tests/plugin.test.mjs` — hook behavior, gating, verdicts, completion, tools, isolation.
@@ -250,6 +250,7 @@ supports `--uninstall` (which leaves locally-modified files in place).
 - `tests/config.test.mjs` / `tests/gates.test.mjs` / `tests/verdicts.test.mjs` — config resolution, gate selection, verdict parsing.
 - `tests/sidebar.test.mjs` — short goal label, sidebar projection, snapshot reader.
 - `tests/toast.test.mjs` — review-verdict and completion-unlock toasts.
+- `tests/logger.test.mjs` — logger helpers, synthetic-turn detection, guardPrompt body.
 - `tests/agents.test.mjs` / `tests/commands.test.mjs` — frontmatter, permissions, and command contracts.
 - `tests/install.test.mjs` — recursive copy, manifest upgrades, uninstall.
 - `tests/deep-bughunt.test.mjs` — targeted regression cases from production bug hunts.

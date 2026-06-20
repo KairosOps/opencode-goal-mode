@@ -5,6 +5,69 @@ changed, why it matters, and which user-visible guarantee got stronger. Use it a
 the fastest factual tour of Goal Mode's evolution from prompt discipline into a
 guard-enforced workflow.
 
+## v0.6.12
+
+### Fix: a failing review could be recorded as PASS (safety-critical)
+
+`parseVerdict`'s "quoted verdict" heuristic excluded any verdict line that had a
+quote character on **both sides anywhere on the line**. A reviewer's final
+`Verdict: FAIL` whose line merely cited a quoted filename, ticket id, or CWE
+number (e.g. `Found secret in "config.js". Verdict: FAIL (CWE-"798")`) was
+dropped, so an earlier example `Verdict: PASS` won and a **failing** review was
+recorded as **PASS** — which could let a failing goal complete. The heuristic now
+only excludes a verdict that is genuinely wrapped in a quote/backtick span (a
+cited example), via a small window immediately around the verdict token.
+
+### Fix: two destructive-command bypasses in the shell classifier
+
+- **`xargs` value-flag bypass (HIGH):** the flag-skip loop only knew a few
+  value-taking flags. GNU/BSD `-a FILE` / `--arg-file FILE` (and the `=`
+  attached form) were missing, so the flag's FILE value was parsed as the command
+  and the real trailing command was hidden — `xargs -a list rm -rf /` classified
+  as benign. All always-value xargs flags are now recognized.
+- **interpreter backtick mask (MEDIUM):** `extractExecCommand` returned the first
+  backtick string and stopped, so a destructive `system()`/`exec()` appearing
+  after a benign backtick was never analyzed —
+  `ruby -e 'x = \`whoami\`; system("rm -rf /tmp/x")'` read as benign. Every
+  backtick string and every exec sink is now analyzed.
+
+### Fix: `goal_reset` no longer deactivates the session
+
+`goal_reset` replaced the whole state record with a fresh one (`active=false`,
+`currentAgent=undefined`), so immediately after a reset the session was out of
+Goal Mode — subsequent `goal_*` tools were rejected and an idle could not trigger
+a programmatic review. It now resets per-goal progress **in place** via
+`resetGoalProgress`, preserving the session's activation, current agent, and
+identity.
+
+### Fix: headless idle watcher reconnects and warns (issue #2 c3)
+
+In headless `opencode serve` deployments the programmatic review loop depends on
+the side-channel SSE watcher. A transient stream failure used to silently end it
+(and the initial start was wrapped in a swallowed `.catch`), so reviews could stop
+firing with no warning and the goal stalled. The watcher now reconnects with
+bounded backoff and warns on failure.
+
+### Fix: agent-switch deactivation is now explained (issue #2 c4)
+
+Switching a goal session off the `goal` agent (Build/Plan, or via an action that
+cycles the agent) intentionally pauses Goal Mode, but it used to vanish silently
+with no clue why or how to recover. The guard now toasts on the transition,
+telling you the session is paused, that your goal/reviews/evidence are preserved,
+and how to resume (switch back to `goal` or run `/goal`).
+
+### Fix: canonical sessionID + degenerate `maxSessions` + `PRIMARY_AGENT` literals
+
+- Every hook and the idle path now key in-memory state on a canonical (trimmed)
+  sessionID matching the store, so a padded id can no longer land in a different
+  bucket and silently miss cancel/resume/model lookups.
+- `maxSessions: 0` (or negative) is rejected at config resolution and floored in
+  the store — previously it made the eviction loop always-true, so concurrent
+  sessions bounced and neither persisted.
+- Guard continuations and reviewer batches now reference the canonical
+  `PRIMARY_AGENT` constant instead of bare `"goal"` literals (so a future rename
+  cannot desync them).
+
 ## v0.6.11
 
 ### Fix: programmatic reviewers run in parallel (one batch = one cycle)

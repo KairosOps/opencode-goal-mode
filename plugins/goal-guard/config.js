@@ -67,7 +67,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   sidebarColor: "#FFD700",
   /** Foreground colour (hex) for a completed goal in the sidebar (running → done turns yellow → red). */
   sidebarDoneColor: "#FF5555",
-  /** Reserved muted foreground colour for no-goal projections. */
+  /** Foreground colour for pending (□) Goal todo rows while a goal is running. */
   sidebarMutedColor: "#808080",
   /** Phrase that, at the start of an assistant message, claims completion. */
   completionMarker: "Goal Completed",
