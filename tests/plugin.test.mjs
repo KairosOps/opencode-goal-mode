@@ -336,6 +336,45 @@ test("switching a goal session to Build deactivates it (sidebar + subagents + co
   assert.equal(store.stateFor("switch").active, true, "switching back to Goal re-activates the session");
 });
 
+test("REGRESSION [issue #2 c4]: deactivating a goal session by switching agents surfaces an explanatory toast", async () => {
+  // The reporter saw Goal Mode silently vanish after a todo/agent interaction with
+  // no clue why or how to recover. The guard now toasts on a goal→non-goal switch,
+  // explaining that state is preserved and how to resume. (Re-activation itself was
+  // already correct; this addresses the discoverability gap.)
+  const toasts = [];
+  let t = 1_000;
+  const clock = () => (t += 1);
+  const { hooks, store } = __test.createGuard(
+    {
+      client: {
+        app: { log: async () => undefined },
+        tui: {
+          showToast: async ({ body }) => {
+            toasts.push(String(body?.message || ""));
+          },
+        },
+      },
+    },
+    {},
+    { persistence: noopPersistence, clock },
+  );
+  await hooks["chat.params"]({ sessionID: "g", agent: "goal" }, {});
+  await hooks["chat.message"]({ sessionID: "g", agent: "goal" }, { parts: [{ type: "text", text: "build the thing" }] });
+  assert.equal(store.stateFor("g").active, true);
+
+  // A genuine user turn on a non-goal agent deactivates the session and toasts.
+  await hooks["chat.message"]({ sessionID: "g", agent: "build" }, { parts: [{ type: "text", text: "switched away" }] });
+  assert.equal(store.stateFor("g").active, false);
+  const deactivationToasts = toasts.filter((m) => /paused/i.test(m) && /preserved/i.test(m));
+  assert.equal(deactivationToasts.length, 1, "exactly one explanatory deactivation toast");
+  assert.match(deactivationToasts[0], /goal agent|\/goal/i);
+
+  // Re-activating by switching back does NOT re-toast the deactivation.
+  await hooks["chat.message"]({ sessionID: "g", agent: "goal" }, { parts: [{ type: "text", text: "back" }] });
+  assert.equal(store.stateFor("g").active, true, "re-activates and preserves goal state");
+  assert.equal(deactivationToasts.length, 1, "no second deactivation toast on re-activation");
+});
+
 // ---------------------------------------------------------------------------
 // Goal-only subagent invocation
 // ---------------------------------------------------------------------------

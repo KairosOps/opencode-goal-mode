@@ -317,8 +317,20 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (inp.agent) {
           const next = goalSessionActiveForAgent(inp.agent, state);
           if (state.active !== next) {
+            const wasActive = state.active;
             state.active = next;
             persist();
+            // When a goal session is paused by an agent switch (e.g. the user opened a
+            // native todo panel, cycled agents, or switched to Build), explain what
+            // happened and that the goal state is PRESERVED (re-switching to the goal
+            // agent re-activates it). Without this the user sees Goal Mode silently
+            // vanish with no clue why or how to recover (issue #2 comment 4).
+            if (wasActive && !next && config.toastOnBlock) {
+              logger.toast(
+                `Goal Mode paused — this session is no longer on the goal agent. Switch back to the goal agent (or run /goal) to resume; your goal, reviews, and evidence are preserved.`,
+                "info",
+              );
+            }
           }
         }
         if (state.active) lastActiveGoalSession = inp.sessionID;
