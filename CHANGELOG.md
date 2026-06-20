@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6.6
+
+### Fix: reviews always run before any guard continuation (strict idle cycle)
+
+When the agent stopped thinking it was done, the idle handler could still inject a
+generic "keep going" continuation before—or instead of—the programmatic review pass.
+That violated the intended cycle: **stop → guard reviews → then either fix or Goal
+Completed**.
+
+- **Reviews first.** On idle with work outstanding, the guard now always runs the full
+  programmatic review cycle before any continuation is sent to the goal agent. Reviewer
+  subagents launch first; the goal agent is not nudged until after the cycle concludes.
+- **`guardPrompt` / `emitGoalCompleted`.** Harness-driven continuations are prefixed
+  `[Goal Guard]`, target the `goal` agent explicitly, and are distinct from the user's
+  original prompt. After every required gate passes, `emitGoalCompleted` triggers the
+  final turn whose output must be an earned `Goal Completed` with the accurate
+  `Review cycles: N` line. A failing cycle sends a fix directive; the next idle starts
+  a new review cycle.
+- **Skip review when already complete.** Programmatic review is skipped when
+  `completionAllowed` is already true (no redundant re-review on a clean stop).
+
+Regression test asserts reviewers launch before any goal-agent continuation prompt.
+
 ## v0.6.5
 
 ### Fix: reviews now actually run programmatically (the agent is never told to run them)

@@ -57,8 +57,17 @@ test("on idle, the GUARD CODE launches the required reviewers itself (not the ag
   const state = guard.store.stateFor("g");
   assert.equal(completionAllowed(state, guard.config), true, "all gates passed → completion allowed");
   assert.ok(state.reviewCycles >= 1, "a review cycle was counted");
-  // and the agent is told it may finish, with the accurate cycle count
-  assert.ok(prompts.some((p) => !p.agent || p.agent === undefined ? /Review cycles: \d+/.test(p.text) : false) || prompts.some((p) => /All required reviews PASSED/.test(p.text)));
+  const goalPrompts = prompts.filter((p) => p.agent === "goal");
+  assert.ok(goalPrompts.length >= 1, "after reviews pass the guard emits the final completion turn");
+  assert.ok(
+    goalPrompts.some((p) => /Goal Completed|All required reviews PASSED programmatically/i.test(p.text || "")),
+    "final turn asks for Goal Completed after programmatic review",
+  );
+  const firstGoalIdx = prompts.findIndex((p) => p.agent === "goal");
+  const firstReviewerIdx = prompts.findIndex((p) => p.agent && p.agent.startsWith("goal-"));
+  if (firstGoalIdx >= 0 && firstReviewerIdx >= 0) {
+    assert.ok(firstReviewerIdx < firstGoalIdx, "reviewers launch before any guard continuation to the goal agent");
+  }
 });
 
 test("on idle with a FAILING reviewer, the guard keeps completion blocked and feeds findings back (the cycle's Not-Done)", async () => {

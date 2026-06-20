@@ -105,7 +105,7 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
         if (lastActiveGoalSession === key) lastActiveGoalSession = null;
       },
     });
-  const logger = createLogger(input.client);
+  const logger = createLogger(input.client, config);
   const persistence =
     overrides.persistence ||
     createPersistence({
@@ -469,82 +469,81 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
               // session now — do not inject a stale "keep going" over it.
               if ((userTurnSeq.get(sessionID) || 0) !== turnAtStart) return;
             }
-            // Never stop an active goal before it is actually complete: if the session
-            // went idle with the goal still incomplete, send the agent onward. Backstops
-            // (hard cap + no-progress breaker) live in evaluateAutoContinue so this can
-            // never loop forever.
+            // Idle lifecycle (when the agent stops — including when it thinks it is done):
+            //   1. NEVER inject a user-like continuation BEFORE programmatic reviews.
+            //   2. When there is work to verify, the GUARD runs every required reviewer
+            //      subagent itself (one full pass = one review cycle).
+            //   3. All PASS → harness emits the final Goal Completed turn.
+            //   4. Any FAIL → harness prompts a fix cycle; the next idle re-reviews.
+            //   5. Only when there is NO work yet (no edits) may we nudge implementation.
+            const model = sessionModel.get(sessionID);
+            const hasWork = state.dirty || (state.lastEditSeq || 0) > 0;
+            const canProgrammaticReview =
+              config.programmaticReview &&
+              hasWork &&
+              clientCanReview(input.client) &&
+              !completionAllowed(state, config);
+
             const decision = evaluateAutoContinue(state, config);
             persistence.flush(snapshotFn);
-            if (decision.continue) {
-              // The goal is incomplete. Prefer to RUN the required reviews ourselves
-              // (code-driven, 100% — never dependent on the model calling the task tool):
-              // launch each outstanding reviewer, record verdicts (one full pass = one
-              // review cycle), then either tell the agent it is complete (all PASS) or
-              // hand it the blocking findings to fix (any FAIL) so the next idle re-reviews.
-              // The model is captured opportunistically and passed through when known, but it
-              // is NOT required: a launched reviewer session inherits the session default model
-              // when none is given (review-runner only sets `model` if truthy). Requiring it
-              // here wrongly fell back to nagging the agent to run reviews via the task tool
-              // whenever chat.params didn't surface a model in the expected shape.
-              const model = sessionModel.get(sessionID);
-              const hasWork = state.dirty || (state.lastEditSeq || 0) > 0;
-              if (config.programmaticReview && hasWork && clientCanReview(input.client)) {
-                // Bound the loop by review-cycle RUNS (not reviewCycles, which only counts
-                // concluded final-auditor verdicts) — otherwise a reviewer that never renders
-                // a verdict pins reviewCycles at 0 and the loop runs away.
-                if ((state.reviewRunCount || 0) >= config.maxReviewCycles) {
-                  await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles} review runs`, { state: summarizeState(state, config) });
-                  await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
-                } else {
-                  state.reviewRunCount = (state.reviewRunCount || 0) + 1;
-                  await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
-                  const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
-                  let res = null;
-                  reviewingSessions.add(sessionID);
-                  try {
-                    res = await runReviewCycle(input.client, store, state, config, {
-                      model,
-                      log: (m) => logger.info(m, { sessionID }),
-                      timeoutMs: config.reviewTimeoutMs,
-                      pollMs: config.reviewPollMs,
-                    });
-                  } catch (err) {
-                    await logger.warn("Programmatic review run failed; falling back to a nudge", { error: String(err?.message || err) });
-                  } finally {
-                    reviewingSessions.delete(sessionID);
-                  }
-                  persistence.flush(snapshotFn);
-                  if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {
-                    // A new user turn arrived during the (long) review — it owns the session now; do not override it.
-                  } else if (state.abortedAt) {
-                    // The user pressed stop DURING the review run (session.error set abortedAt).
-                    // Honor the cancel — never fight the stop button by injecting a continuation.
-                    await logger.info("Goal auto-continue suppressed: user cancelled during the review run", { sessionID });
-                  } else if (res && res.completionAllowed) {
-                    await logger.toast(`All required reviews PASSED — ${res.reviewCycles} review cycle${res.reviewCycles === 1 ? "" : "s"}`, "success");
-                    await logger.continueSession(sessionID, `All required reviews PASSED (run programmatically by Goal Guard). Review cycles: ${res.reviewCycles}. The goal is complete — reply with \`Goal Completed\` and an accurate \`Review cycles: ${res.reviewCycles}\` line.`);
-                  } else if (res && res.failed.length) {
-                    const findings = res.findings.length ? ` Blocking findings: ${res.findings.join(" | ")}.` : "";
-                    await logger.toast(`Review cycle ${res.reviewCycles}: ${res.failed.map(prettyAgentName).join(", ") || "issues found"} → fix & re-review`, "warning");
-                    await logger.continueSession(sessionID, `A Goal Guard review cycle (#${res.reviewCycles}) found blocking issues you MUST fix now — do NOT claim completion.${findings} Failing reviewers: ${res.failed.join(", ")}. Fix the issues and stop; you will be re-reviewed automatically.`);
-                  } else {
-                    // Either the review threw (res null) or completion is still not allowed
-                    // with NO failing reviewer (a freshness/stale-state edge). Do NOT fabricate
-                    // an empty "Failing reviewers:" directive — send the neutral continue nudge.
-                    await logger.continueSession(sessionID, decision.message);
-                  }
-                }
-              } else {
-                await logger.toast("Goal not complete — continuing automatically", "info");
-                await logger.continueSession(sessionID, decision.message);
-              }
-            } else if (decision.cancelled) {
-              // User cancelled this turn — honor it. Send NO prompt; just record it.
+
+            if (decision.cancelled) {
               await logger.info("Goal auto-continue suppressed: user cancelled the turn", { sessionID });
             } else if (decision.stopReason) {
               await logger.warn(`Goal Guard paused auto-continue: ${decision.stopReason}`, { state: summarizeState(state, config) });
               await logger.toast(`Goal Mode paused (${decision.stopReason}); review and continue manually`, "warning");
-            } else if (state.dirty) {
+            } else if (decision.continue && canProgrammaticReview) {
+              if ((state.reviewRunCount || 0) >= config.maxReviewCycles) {
+                await logger.warn(`Goal paused: reached maxReviewCycles=${config.maxReviewCycles} review runs`, { state: summarizeState(state, config) });
+                await logger.toast(`Goal Mode paused (${config.maxReviewCycles} review cycles) — review manually`, "warning");
+              } else {
+                state.reviewRunCount = (state.reviewRunCount || 0) + 1;
+                await logger.toast(`Goal: running required reviews (cycle ${state.reviewRunCount})…`, "info");
+                const turnBeforeReview = userTurnSeq.get(sessionID) || 0;
+                let res = null;
+                reviewingSessions.add(sessionID);
+                try {
+                  res = await runReviewCycle(input.client, store, state, config, {
+                    model,
+                    log: (m) => logger.info(m, { sessionID }),
+                    timeoutMs: config.reviewTimeoutMs,
+                    pollMs: config.reviewPollMs,
+                  });
+                } catch (err) {
+                  await logger.warn("Programmatic review run failed", { error: String(err?.message || err) });
+                } finally {
+                  reviewingSessions.delete(sessionID);
+                }
+                persistence.flush(snapshotFn);
+                if ((userTurnSeq.get(sessionID) || 0) !== turnBeforeReview) {
+                  /* user resumed during review — do not override */
+                } else if (state.abortedAt) {
+                  await logger.info("Goal auto-continue suppressed: user cancelled during the review run", { sessionID });
+                } else if (res && res.completionAllowed) {
+                  await logger.toast(`All required reviews PASSED — ${res.reviewCycles} review cycle${res.reviewCycles === 1 ? "" : "s"}`, "success");
+                  await logger.emitGoalCompleted(sessionID, res.reviewCycles, model);
+                } else if (res && res.failed.length) {
+                  const findings = res.findings.length ? ` Blocking findings: ${res.findings.join(" | ")}.` : "";
+                  await logger.toast(`Review cycle ${res.reviewCycles}: ${res.failed.map(prettyAgentName).join(", ") || "issues found"} → fix & re-review`, "warning");
+                  await logger.guardPrompt(
+                    sessionID,
+                    `Review cycle #${res.reviewCycles} found blocking issues — fix them now, then stop.${findings} ` +
+                      `Failing reviewers: ${res.failed.join(", ")}. Do NOT claim completion; the guard will re-run every required review on the next idle.`,
+                    model,
+                  );
+                } else {
+                  await logger.guardPrompt(
+                    sessionID,
+                    "Programmatic review did not finish cleanly. Fix any outstanding issues, verify your work, and stop — the guard will re-run the required reviews automatically.",
+                    model,
+                  );
+                }
+              }
+            } else if (decision.continue) {
+              // Early incomplete goal (no edits yet): nudge implementation only — not a review cycle.
+              await logger.toast("Goal not complete — continuing automatically", "info");
+              await logger.guardPrompt(sessionID, decision.message, model);
+            } else if (state.dirty && state.active) {
               await logger.warn("Goal session idle while dirty or review-stale", { state: summarizeState(state, config) });
             }
           } finally {
