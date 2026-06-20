@@ -53,7 +53,7 @@ themselves loaded as plugins. Each module is independently unit-tested.
 | `goal-guard/completion.js` | `Goal Completed` claim evaluation. |
 | `goal-guard/events.js` | Shared edit/verification/evidence mutators. |
 | `goal-guard/autocontinue.js` | Auto-continue decision logic and continuation copy; programmatic review in `guard.js` is independent and takes precedence on idle when work is outstanding. |
-| `goal-guard/review-runner.js` | Code-driven review enforcement — launches required reviewer subagents as **subtasks on the parent goal session**; `ensureReviewClient()` HTTP fallback for headless serve. |
+| `goal-guard/review-runner.js` | Code-driven review enforcement — launches all required reviewer subagents **in parallel** as one batched subtask prompt on the parent goal session; polls concurrently; one batch = one review cycle. `ensureReviewClient()` HTTP fallback for headless serve. |
 | `goal-guard/summary.js` | State summaries, status reports, evidence-map projections, and the short goal label. |
 | `goal-guard/system.js` | Live state block injected into the system prompt; with `programmaticReview` on (default), tells the agent the guard runs reviews on stop — task-tool directives only when programmatic review is disabled. |
 | `goal-guard/tools.js` | The `goal_status` / `goal_evidence_map` / `goal_reviewer_memory` / `goal_contract` / `goal_evidence` / `goal_reset` tools. |
@@ -74,7 +74,7 @@ pinned to `1.17.6` in devDependencies).
 | `tool.execute.after` | Record edits, verification, mutations, and review verdicts. |
 | `experimental.text.complete` | Rewrite premature `Goal Completed` claims. |
 | `experimental.session.compacting` | Preserve guard state across compaction. |
-| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); on `session.idle`, **defer** programmatic review via `resolveIdleSession` (must not await nested prompts inside the hook) — for an incomplete goal with work done, run the full review cycle **first** (`programmaticReview`); on all PASS call `emitGoalCompleted`; on FAIL call `guardPrompt` with blocking findings (prefixed `[Goal Guard]`, `agent: goal`); nudge implementation only when there is no work yet; skip re-review when `completionAllowed` is already true. |
+| `event` | Track `file.edited` (subagent edits); honor a user cancel on `session.error` (skip the next auto-continue); on `session.idle`, **defer** programmatic review via `resolveIdleSession` (must not await nested prompts inside the hook) — for an incomplete goal with work done, run the full review cycle **first** (`programmaticReview`); on all PASS call `emitGoalCompleted`; on FAIL call `guardPrompt` with blocking findings (system directive + synthetic part, never a user bubble); nudge implementation only when there is no work yet; skip re-review when `completionAllowed` is already true. |
 | `tool` | Register the custom `goal_*` tools. |
 | `dispose` | Flush persisted state. |
 

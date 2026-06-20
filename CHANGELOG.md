@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.6.11
+
+### Fix: programmatic reviewers run in parallel (one batch = one cycle)
+
+Required reviewers were launched sequentially — each subagent waited for the
+previous one to finish before the next started. They now launch together in a
+single batched subtask prompt; the guard polls all reviewers concurrently and
+records verdicts once the whole batch finishes (cycle-closing auditor last, so
+one parallel pass still counts as exactly one review cycle).
+
+## v0.6.10
+
+### Fix: guard continuations never appear as user messages
+
+Harness-driven continuations (`guardPrompt`, `emitGoalCompleted`, auto-continue
+after idle) previously used plain `text` parts, which showed up in the TUI as if
+the user had typed them (e.g. `[Goal Guard] …` or "continue?" bubbles).
+
+- **`guardPrompt` uses synthetic parts + system directive.** Continuations now send
+  the directive in `system` and a minimal `synthetic: true` text part to wake the
+  agent loop — nothing user-visible in the transcript.
+- **`chat.message` ignores synthetic turns.** Synthetic harness turns no longer bump
+  `userTurnSeq` or pollute `goalText`, so guard continuations cannot masquerade as
+  a real user resume mid-review.
+
 ## v0.6.9
 
 ### Fix: programmatic review runs on first idle (no user "continue?" needed)

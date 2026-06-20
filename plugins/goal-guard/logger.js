@@ -2,12 +2,31 @@
  * Defensive wrappers around the OpenCode client. Every call is best-effort:
  * a logging or toast failure must never propagate into a hook and break a turn.
  *
- * Guard-initiated turns use `guardPrompt` / `emitGoalCompleted` — never a bare
- * user-shaped message. The `[Goal Guard]` prefix marks harness-driven continuations
- * (post-review fix cycle or final completion), distinct from the user's goal prompt.
+ * Guard-initiated turns use `guardPrompt` / `emitGoalCompleted` with synthetic
+ * parts + a system directive — never a visible user message in the transcript.
  */
 
-const GUARD_PREFIX = "[Goal Guard]";
+export const GUARD_PREFIX = "[Goal Guard]";
+
+/** Minimal synthetic text part that wakes the agent loop without a user bubble. */
+export const GUARD_SYNTHETIC_TRIGGER = "(goal-guard continuation)";
+
+/** True when every text part in a user turn is harness synthetic (not the human). */
+export function isSyntheticUserTurn(parts) {
+  if (!Array.isArray(parts) || parts.length === 0) return false;
+  return parts.every((p) => !p || p.type !== "text" || p.synthetic === true);
+}
+
+/** Build a promptAsync body for harness-driven goal continuations. */
+export function buildGuardPromptBody(text, model) {
+  const directive = `${GUARD_PREFIX}\n${String(text)}`;
+  return {
+    agent: "goal",
+    ...(model ? { model } : {}),
+    system: directive,
+    parts: [{ type: "text", text: GUARD_SYNTHETIC_TRIGGER, synthetic: true }],
+  };
+}
 
 export function createLogger(client, config = {}) {
   const log = client?.app?.log?.bind(client.app);
@@ -15,19 +34,15 @@ export function createLogger(client, config = {}) {
   const promptAsync = client?.session?.promptAsync?.bind(client.session);
 
   /**
-   * Harness-driven continuation after a programmatic review cycle (fix or complete).
-   * Always targets the goal agent and prefixes the directive so it is not a fake user turn.
+   * Harness-driven continuation after review or auto-continue. Uses synthetic
+   * parts + system directive so nothing appears as a user-typed message.
    */
   async function guardPrompt(sessionID, text, model) {
     if (!promptAsync || !sessionID || !text) return false;
     try {
       await promptAsync({
         path: { id: String(sessionID) },
-        body: {
-          agent: "goal",
-          ...(model ? { model } : {}),
-          parts: [{ type: "text", text: `${GUARD_PREFIX}\n${String(text)}` }],
-        },
+        body: buildGuardPromptBody(text, model),
       });
       return true;
     } catch {

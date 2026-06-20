@@ -22,7 +22,7 @@
 import { resolveConfig } from "./config.js";
 import { createStore, createState } from "./state.js";
 import { createPersistence } from "./persistence.js";
-import { createLogger } from "./logger.js";
+import { createLogger, isSyntheticUserTurn } from "./logger.js";
 import { analyzeCommand, looksLikeDestructiveBash, looksLikeMutatingBash, isVerification } from "./shell.js";
 import { isPrimaryAgent, isReviewAgent, isGoalAgent, goalSessionActiveForAgent, CYCLE_CLOSING_AGENT, prettyAgentName } from "./agents.js";
 import { textOf, parseVerdict, recordVerdict } from "./verdicts.js";
@@ -291,6 +291,12 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
     async "chat.message"(inp, out) {
       try {
         if (!inp?.sessionID) return;
+        // Harness continuations (guardPrompt) use synthetic parts — never treat
+        // them as a real user turn (no bumpUserTurn, no goal-text capture).
+        if (isSyntheticUserTurn(out?.parts)) {
+          captureModel(inp.sessionID, inp.model);
+          return;
+        }
         const state = store.stateFor(inp.sessionID);
         // A genuine new user turn is starting. Mark it (so a continuation decision
         // mid-grace can detect it was superseded) and clear any pending cancel so the

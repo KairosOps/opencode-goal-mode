@@ -436,7 +436,8 @@ test("an idle goal that is NOT complete auto-continues (sends one continuation p
   await hooks.event({ event: { type: "session.idle", properties: { sessionID: "ac" } } });
   assert.equal(sent.length, 1, "an incomplete goal must be continued, not stopped");
   assert.equal(sent[0].path.id, "ac");
-  assert.match(sent[0].body.parts[0].text, /not complete|continue/i);
+  assert.equal(sent[0].body.parts[0].synthetic, true, "guard continuations must be synthetic, not user messages");
+  assert.match(sent[0].body.system, /not complete|continue/i);
 });
 
 test("a COMPLETE goal is allowed to stop (no auto-continue)", async () => {

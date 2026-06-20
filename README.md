@@ -244,8 +244,9 @@ Goal Mode works great with zero configuration. When you want to tune it, set opt
   enforcement works regardless of the sidebar.
 - **Reviews didn't kick off on their own?** Upgrade to **v0.6.9+**. After you stop
   with work done, the guard automatically retries if the session is still busy —
-  you should **not** need to type "continue?". Reviewer subtasks appear on the goal
-  session and the guard starts the next assistant turn with fixes or completion.
+  you should **not** need to type "continue?". Reviewer subtasks launch **in parallel**
+  on the goal session (v0.6.11+) and the guard starts the next assistant turn with
+  fixes or completion — never as a fake user message (v0.6.10+).
 - **Explorer subagent prompting on basic shell?** Upgrade to v0.6.7+ — read-only
   commands like `grep`, `cat`, and `sed` are pre-approved on `goal-explorer`.
 - **Goal agent stalling on Questions?** The primary `goal` agent has `question: deny`

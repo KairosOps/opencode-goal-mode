@@ -10,27 +10,21 @@ import { parseVerdict } from "../plugins/goal-guard/verdicts.js";
 /** Mock client: subtasks on the goal session surface as completed `task` tool parts. */
 function mockReviewClient(verdictFor, sessionID = "goal-session") {
   const launched = [];
-  let currentAgent = null;
-  const polls = new Map();
+  const stats = { batchCount: 0 };
   return {
     launched,
+    stats,
     sessionID,
     session: {
       promptAsync: async ({ path, body }) => {
         assert.equal(path.id, sessionID, "review subtasks run on the parent goal session");
-        for (const part of body?.parts || []) {
-          if (part.type === "subtask") {
-            currentAgent = part.agent;
-            launched.push(part.agent);
-          }
+        const subtasks = (body?.parts || []).filter((p) => p.type === "subtask");
+        if (subtasks.length) stats.batchCount += 1;
+        for (const part of subtasks) {
+          launched.push(part.agent);
         }
       },
       messages: async () => {
-        const agent = currentAgent;
-        const p = polls.get(agent) || 0;
-        polls.set(agent, p + 1);
-        const v = typeof verdictFor === "function" ? verdictFor(agent) : verdictFor;
-        const text = v ? `Reviewed the changes.\n\nVerdict: ${v}` : "I could not reach a conclusion.";
         const parts = launched.map((a) => {
           const verdict = typeof verdictFor === "function" ? verdictFor(a) : verdictFor;
           const out = verdict ? `Reviewed the changes.\n\nVerdict: ${verdict}` : "I could not reach a conclusion.";
@@ -40,7 +34,7 @@ function mockReviewClient(verdictFor, sessionID = "goal-session") {
             state: {
               status: "completed",
               input: { subagent_type: a, agent: a },
-              output: a === agent ? text : out,
+              output: out,
             },
           };
         });
@@ -87,6 +81,7 @@ test("runReviewCycle programmatically launches ALL required reviewers as subtask
   assert.equal(completionAllowed(state, DEFAULT_CONFIG), true);
   assert.ok(res.reviewCycles >= 1, "the cycle-closing auditor counted a review cycle");
   assert.deepEqual(res.failed, []);
+  assert.equal(client.stats.batchCount, 1, "all reviewers launch in one parallel batch");
 });
 
 test("a clean programmatic cycle clears the dirty flag (parity with the agent-driven path); a FAIL leaves it dirty", async () => {
@@ -195,7 +190,7 @@ test("promptSubtaskWithRetry tolerates SessionBusy then succeeds", async () => {
   assert.ok(res.passed.length >= 1, "review succeeded after SessionBusy cleared");
 });
 
-test("[bughunt rl4] runReviewer waits for the reviewer to finish — an interim PASS is not latched over the final FAIL", async () => {
+test("[bughunt rl4] waitForReviewer waits for the reviewer to finish — an interim PASS is not latched over the final FAIL", async () => {
   const sid = "stream";
   const seq = [
     "Analyzing… Verdict: PASS (tentative)",
@@ -203,36 +198,35 @@ test("[bughunt rl4] runReviewer waits for the reviewer to finish — an interim 
     "Found a blocker.\nVerdict: FAIL",
     "Found a blocker.\nVerdict: FAIL",
   ];
-  let currentAgent = null;
+  const launched = [];
   const polls = new Map();
   const client = {
     session: {
       promptAsync: async ({ body }) => {
         for (const part of body?.parts || []) {
-          if (part.type === "subtask") currentAgent = part.agent;
+          if (part.type === "subtask") launched.push(part.agent);
         }
       },
       messages: async () => {
-        const p = polls.get(currentAgent) || 0;
-        polls.set(currentAgent, p + 1);
-        const text = seq[Math.min(p, seq.length - 1)];
-        return {
-          data: [
-            {
-              parts: [
-                {
-                  type: "tool",
-                  tool: "task",
-                  state: {
-                    status: "completed",
-                    input: { subagent_type: currentAgent },
-                    output: text,
-                  },
-                },
-              ],
+        const parts = launched.map((agent) => {
+          const p = polls.get(agent) || 0;
+          polls.set(agent, p + 1);
+          const verdict = agent === "goal-final-auditor" ? "FAIL" : "PASS";
+          const text =
+            agent === "goal-final-auditor"
+              ? seq[Math.min(p, seq.length - 1)]
+              : `Reviewed.\nVerdict: ${verdict}`;
+          return {
+            type: "tool",
+            tool: "task",
+            state: {
+              status: "completed",
+              input: { subagent_type: agent },
+              output: text,
             },
-          ],
-        };
+          };
+        });
+        return { data: [{ parts }] };
       },
     },
   };

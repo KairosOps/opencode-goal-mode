@@ -25,12 +25,18 @@ function makeReviewingGuard(verdictFor, opts = {}) {
             currentAgent = part.agent;
             launched.push(part.agent);
             prompts.push({ id: path.id, agent: part.agent, text: part.prompt || "", kind: "subtask" });
-          } else if (part.type === "text") {
+          } else if (part.type === "text" && !part.synthetic) {
             prompts.push({ id: path.id, agent: body?.agent, text: part.text || "", kind: "text" });
           }
         }
         if (body?.agent && !(body.parts || []).some((p) => p.type === "subtask")) {
-          prompts.push({ id: path.id, agent: body.agent, text: body.parts?.[0]?.text || "", kind: "guard" });
+          prompts.push({
+            id: path.id,
+            agent: body.agent,
+            text: body.system || "",
+            kind: "guard",
+            synthetic: (body.parts || []).every((p) => p.type !== "text" || p.synthetic === true),
+          });
         }
       },
       messages: async () => {
@@ -83,6 +89,10 @@ test("on idle, the GUARD CODE launches the required reviewers as subtasks (not t
   assert.ok(
     goalPrompts.some((p) => /Goal Completed|All required reviews PASSED programmatically/i.test(p.text || "")),
     "final turn asks for Goal Completed after programmatic review",
+  );
+  assert.ok(
+    goalPrompts.every((p) => p.synthetic !== false),
+    "guard continuations must use synthetic parts, never user-shaped messages",
   );
   const firstGoalIdx = prompts.findIndex((p) => p.agent === "goal");
   const firstReviewerIdx = prompts.findIndex((p) => p.kind === "subtask" && p.agent?.startsWith("goal-"));
