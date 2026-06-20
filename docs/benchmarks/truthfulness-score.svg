@@ -1,17 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="202" viewBox="0 0 720 202" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-<rect width="720" height="202" fill="#ffffff"/>
-<text x="20" y="28" font-size="17" font-weight="700" fill="#1f2328">Completion-enforcement fixtures</text>
-<text x="20" y="47" font-size="12" fill="#656d76">9 hand-authored policy cases (a spec, not a survey): premature claims blocked, valid ones allowed.</text>
-<text x="218" y="87" font-size="12" text-anchor="end" fill="#1f2328">Truthfulness score</text>
-<rect x="230" y="70" width="420" height="22" rx="3" fill="#eaeef2"/>
-<rect x="230" y="70" width="420.0" height="22" rx="3" fill="#2da44e"/>
-<text x="658.0" y="87" font-size="12" font-weight="600" fill="#1f2328">100.0%</text>
-<text x="218" y="125" font-size="12" text-anchor="end" fill="#1f2328">Decision accuracy</text>
-<rect x="230" y="108" width="420" height="22" rx="3" fill="#eaeef2"/>
-<rect x="230" y="108" width="420.0" height="22" rx="3" fill="#0969da"/>
-<text x="658.0" y="125" font-size="12" font-weight="600" fill="#1f2328">100.0%</text>
-<text x="218" y="163" font-size="12" text-anchor="end" fill="#1f2328">Reason accuracy</text>
-<rect x="230" y="146" width="420" height="22" rx="3" fill="#eaeef2"/>
-<rect x="230" y="146" width="420.0" height="22" rx="3" fill="#bf8700"/>
-<text x="658.0" y="163" font-size="12" font-weight="600" fill="#1f2328">100.0%</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="202" font-family="-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" viewBox="0 0 720 202"><rect width="720" height="202" fill="#fff"/><text x="20" y="28" fill="#1f2328" font-size="17" font-weight="700">Completion-enforcement fixtures</text><text x="20" y="47" fill="#656d76" font-size="12">9 hand-authored policy cases (a spec, not a survey): premature claims blocked, valid ones allowed.</text><text x="218" y="87" fill="#1f2328" font-size="12" text-anchor="end">Truthfulness score</text><rect width="420" height="22" x="230" y="70" fill="#eaeef2" rx="3"/><rect width="420" height="22" x="230" y="70" fill="#2da44e" rx="3"/><text x="658" y="87" fill="#1f2328" font-size="12" font-weight="600">100.0%</text><text x="218" y="125" fill="#1f2328" font-size="12" text-anchor="end">Decision accuracy</text><rect width="420" height="22" x="230" y="108" fill="#eaeef2" rx="3"/><rect width="420" height="22" x="230" y="108" fill="#0969da" rx="3"/><text x="658" y="125" fill="#1f2328" font-size="12" font-weight="600">100.0%</text><text x="218" y="163" fill="#1f2328" font-size="12" text-anchor="end">Reason accuracy</text><rect width="420" height="22" x="230" y="146" fill="#eaeef2" rx="3"/><rect width="420" height="22" x="230" y="146" fill="#bf8700" rx="3"/><text x="658" y="163" fill="#1f2328" font-size="12" font-weight="600">100.0%</text></svg>
