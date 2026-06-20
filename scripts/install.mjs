@@ -11,6 +11,7 @@ import {
   readFileSync,
   writeFileSync,
   rmSync,
+  renameSync,
 } from "node:fs";
 import { join, resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,7 +67,13 @@ if (values.global && values.target) {
 }
 
 function resolveTarget() {
-  if (values.target) return resolve(String(values.target));
+  if (values.target) {
+    // Expand a leading ~ to the user's home so `--target '~/foo'` (quoted, or any
+    // programmatic call) lands in $HOME/foo rather than a literal `~` directory.
+    const raw = String(values.target);
+    const expanded = raw.startsWith("~") ? raw.replace(/^~/, homedir() || process.env.HOME || "") : raw;
+    return resolve(expanded);
+  }
   if (values.global) {
     // OpenCode reads global config from ~/.config/opencode. Resolve home from $HOME,
     // falling back to the OS home dir (homedir() works where $HOME is unset, e.g.
@@ -157,19 +164,41 @@ function loadManifest() {
  * Merge-safe: preserves any existing entries and only touches our own.
  */
 const TUI_PLUGIN_SPEC = pkg.name;
+/** Atomic write: tmp file + rename so a crash/OOM/kill mid-write cannot leave a
+ *  truncated tui.json (which would then be 'invalid JSON' and refuse to re-install
+ *  without --force). rename is atomic on POSIX when tmp and target share a filesystem. */
+function atomicWriteJson(path, content) {
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, content, "utf8");
+  renameSync(tmp, path);
+}
 function ensureTuiPlugin(remove = false) {
   const tuiPath = join(target, "tui.json");
   let data = { $schema: "https://opencode.ai/tui.json", plugin: [] };
+  let diskHadNonObject = false;
   try {
     const existing = JSON.parse(readFileSync(tuiPath, "utf8"));
-    if (existing && typeof existing === "object") data = existing;
+    // Only adopt an EXISTING plain object. A JSON array/null/scalar is not a valid
+    // tui.json: adopting it (typeof [] === "object") then setting `data.plugin = …`
+    // would attach a property to an array that JSON.stringify drops, so the entry
+    // was silently lost while the installer reported success.
+    if (existing && typeof existing === "object" && !Array.isArray(existing)) data = existing;
+    else if (existing !== undefined && existing !== null) diskHadNonObject = true;
   } catch (err) {
-    if (existsSync(tuiPath)) {
-      if (!values.force) throw new Error(`Refusing to replace invalid ${tuiPath}. Fix it or rerun with --force.`);
-      const backupPath = `${tuiPath}.goal-mode-backup`;
-      if (!values["dry-run"]) copyFileSync(tuiPath, backupPath);
-      console.log(`${values["dry-run"] ? "Would back up" : "Backed up"} invalid ${tuiPath} to ${backupPath}`);
+    if (existsSync(tuiPath)) diskHadNonObject = true;
+  }
+  if (diskHadNonObject) {
+    if (!values.force) {
+      throw new Error(
+        `Refusing to ${remove ? "update" : "replace"} non-object/invalid ${tuiPath}. ` +
+          `Fix it (it must be a JSON object) or rerun with --force to back it up and continue.`,
+      );
     }
+    const backupPath = `${tuiPath}.goal-mode-backup`;
+    if (!values["dry-run"]) copyFileSync(tuiPath, backupPath);
+    console.log(`${values["dry-run"] ? "Would back up" : "Backed up"} invalid ${tuiPath} to ${backupPath}`);
+    // Start fresh from a clean object so we never carry over a corrupt shape.
+    data = { $schema: "https://opencode.ai/tui.json", plugin: [] };
   }
   if (!Array.isArray(data.plugin)) data.plugin = [];
   const has = data.plugin.includes(TUI_PLUGIN_SPEC);
@@ -178,7 +207,7 @@ function ensureTuiPlugin(remove = false) {
   if (!data.$schema) data.$schema = "https://opencode.ai/tui.json";
   if (!values["dry-run"]) {
     mkdirSync(target, { recursive: true });
-    writeFileSync(tuiPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    atomicWriteJson(tuiPath, `${JSON.stringify(data, null, 2)}\n`);
   }
   return true;
 }
@@ -230,8 +259,12 @@ if (values.uninstall) {
       kept.push(rel);
     }
   }
-  if (!values["dry-run"] && existsSync(manifestPath)) rmSync(manifestPath, { force: true });
+  // Clean tui.json BEFORE removing the manifest: if tui.json is invalid and the
+  // user didn't pass --force, ensureTuiPlugin throws. Removing the manifest first
+  // would leave an orphan sidebar entry that a later --uninstall can't reach (the
+  // manifest is already gone), so the entry would be stuck until manual editing.
   const tuiRemoved = ensureTuiPlugin(true);
+  if (!values["dry-run"] && existsSync(manifestPath)) rmSync(manifestPath, { force: true });
   if (!values["dry-run"]) pruneEmptyDirs(target, Object.keys(manifest.files));
   if (tuiRemoved) console.log(`${values["dry-run"] ? "Would remove" : "Removed"} the sidebar entry from ${join(target, "tui.json")}`);
   const cachedCleared = refreshTuiPluginCache();
@@ -322,7 +355,10 @@ if (summary.conflicts.length) {
 
 if (!values["dry-run"]) {
   mkdirSync(target, { recursive: true });
-  writeFileSync(manifestPath, JSON.stringify({ version: pkg.version, files: newManifestFiles }, null, 2), "utf8");
+  // Atomic write (tmp + rename) so a crash/OOM mid-write cannot leave a truncated
+  // manifest.json — the next run would then mis-read ownership and could re-copy or
+  // skip files incorrectly.
+  atomicWriteJson(manifestPath, JSON.stringify({ version: pkg.version, files: newManifestFiles }, null, 2));
 }
 
 const tuiAdded = ensureTuiPlugin(false);

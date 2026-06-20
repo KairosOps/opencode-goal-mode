@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { readRepo } from "./helpers.mjs";
 
@@ -142,9 +142,61 @@ test("installer refuses invalid tui.json unless --force backs it up", () => {
   const cfg = join(temp, "cfg");
   mkdirSync(cfg, { recursive: true });
   writeFileSync(join(cfg, "tui.json"), "{bad json\n");
-  assert.throws(() => run(["--target", cfg], { stdio: "pipe" }), /Refusing to replace invalid/);
+  assert.throws(() => run(["--target", cfg], { stdio: "pipe" }), /Refusing to .*invalid.*tui\.json/i);
   run(["--target", cfg, "--force"]);
   assert.equal(existsSync(join(cfg, "tui.json.goal-mode-backup")), true);
+});
+
+test("REGRESSION: a non-object tui.json (JSON array) is refused, not silently corrupted", () => {
+  // A JSON array is typeof "object", so the old `typeof existing === "object"`
+  // check adopted it, set .plugin on the array (which JSON.stringify drops), and
+  // reported success while the sidebar entry was silently lost. Refuse non-objects.
+  const temp = mkdtempSync(join(tmpdir(), "goal-array-tui-"));
+  const cfg = join(temp, "cfg");
+  mkdirSync(cfg, { recursive: true });
+  writeFileSync(join(cfg, "tui.json"), "[]\n");
+  assert.throws(() => run(["--target", cfg], { stdio: "pipe" }), /Refusing/i);
+  // After --force, the array is backed up and a clean object tui.json is written.
+  run(["--target", cfg, "--force"]);
+  assert.equal(existsSync(join(cfg, "tui.json.goal-mode-backup")), true);
+  const after = JSON.parse(readFileSync(join(cfg, "tui.json"), "utf8"));
+  assert.equal(Array.isArray(after), false, "tui.json is now a clean object, not the adopted array");
+  assert.ok(Array.isArray(after.plugin) && after.plugin.includes("opencode-goal-mode"), "sidebar entry registered");
+});
+
+test("REGRESSION: uninstall cleans tui.json before removing the manifest (orphan-safe)", () => {
+  // If tui.json is invalid, uninstall must throw BEFORE deleting the manifest, so a
+  // re-run can still reach the manifest and complete. Previously the manifest was
+  // removed first, leaving a stuck sidebar reference that --uninstall could no
+  // longer touch (the manifest was already gone).
+  const temp = mkdtempSync(join(tmpdir(), "goal-uninstall-order-"));
+  const cfg = join(temp, "cfg");
+  run(["--target", cfg]); // normal install
+  const manifestPath = join(cfg, ".goal-mode-manifest.json");
+  assert.equal(existsSync(manifestPath), true);
+  // Corrupt tui.json so removal would throw without --force.
+  writeFileSync(join(cfg, "tui.json"), "{broken\n");
+  assert.throws(() => run(["--target", cfg, "--uninstall"], { stdio: "pipe" }), /Refusing/i);
+  // The manifest is STILL present (removal happens only after tui.json succeeds),
+  // so a retry with --force can complete a full uninstall.
+  assert.equal(existsSync(manifestPath), true, "manifest preserved so a retry can still uninstall");
+  run(["--target", cfg, "--uninstall", "--force"]);
+  assert.equal(existsSync(manifestPath), false, "manifest removed after --force completes");
+});
+
+test("REGRESSION: --target '~' is expanded to the home directory", () => {
+  // A quoted/programmatic `--target '~/x'` previously created a literal '~' dir.
+  const home = homedir();
+  if (!home) return; // nothing to expand against in this environment
+  const rel = join(".goal-install-tilde-test-" + process.pid);
+  try {
+    const out = run(["--target", join("~", rel), "--dry-run"]);
+    assert.match(out, /Would (install|copy|register)/i);
+    // A literal '~' directory must NOT be created under CWD.
+    assert.equal(existsSync(join(process.cwd(), "~")), false);
+  } finally {
+    rmSync(join(home, rel), { recursive: true, force: true });
+  }
 });
 
 test("uninstall ignores tampered manifest paths outside the target", () => {

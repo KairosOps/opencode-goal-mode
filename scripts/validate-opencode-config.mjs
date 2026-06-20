@@ -54,8 +54,12 @@ const sidebarSrc = readFileSync(join(root, "plugins", "goal-sidebar.tsx"), "utf8
 if (!/export default \{[^}]*\btui\b/.test(sidebarSrc)) {
   throw new Error("goal-sidebar.tsx must `export default { id, tui }`");
 }
-if (/^export\s+const\s/m.test(sidebarSrc)) {
-  throw new Error("goal-sidebar.tsx must not use `export const` (OpenCode loads every export; use a single default object)");
+// OpenCode loads EVERY named export of a TUI plugin module, so goal-sidebar.tsx
+// must expose exactly one `export default`. Flag any named export form (const/let/
+// var/function/class), not just `export const`, or e.g. `export function` would
+// slip through and be loaded as a spurious plugin export.
+if (/^export\s+(const|let|var|function|class)\s/m.test(sidebarSrc)) {
+  throw new Error("goal-sidebar.tsx must use a single `export default` only — OpenCode loads every named export (found `export const|let|var|function|class`)");
 }
 
 const forbiddenComponentName = /(auth|session|token|secret|preauth|failures|hosts\.ya?ml)/i;
@@ -69,7 +73,11 @@ for (const dir of ["agents", "commands", "plugins"]) {
 
 /** Split a markdown component into [frontmatter, body], erroring on a missing fence. */
 function splitFrontmatter(file, text) {
-  const match = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  // Normalize CRLF -> LF and strip a leading UTF-8 BOM so a Windows checkout (no
+  // core.autocrlf=input) or a BOM-prefixed file validates the same as an LF one —
+  // OpenCode's own YAML parser tolerates both, so the validator must too.
+  const normalized = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) throw new Error(`${file} missing or malformed YAML frontmatter`);
   return [match[1], match[2]];
 }
