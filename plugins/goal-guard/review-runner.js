@@ -10,12 +10,14 @@
  *
  * Reviewers are launched as subtasks on the **parent goal session** (the same
  * programmatic path OpenCode uses for `task` / command subtasks), not as separate
- * top-level sessions.
+ * top-level sessions. **All required reviewers in a cycle launch in parallel** (one
+ * batched subtask prompt); the guard polls them concurrently and records verdicts
+ * once every reviewer in the batch has finished.
  *
- * One full pass over the required-but-not-fresh reviewers (ending with the
- * cycle-closing auditor) is ONE review cycle. A failing reviewer makes the agent
- * fix the issue (an edit), which staleness-invalidates the prior passes, so the
- * next idle re-runs the cycle — exactly the loop:
+ * One parallel pass over every required-but-not-fresh reviewer is ONE review cycle
+ * (counted when the cycle-closing auditor's verdict is recorded after the batch).
+ * A failing reviewer makes the agent fix the issue (an edit), which staleness-
+ * invalidates the prior passes, so the next idle re-runs the cycle — exactly the loop:
  *     agent done → review → FAIL → fix → review → FAIL → fix → review → PASS.
  *
  * Reviewers are read-only subagents (edit: deny), so running them never advances
@@ -166,67 +168,75 @@ function freshRecordedVerdict(state, agent, beforeSeq) {
   return v;
 }
 
+/** Launch every reviewer in one batched subtask prompt (parallel on the host). */
+async function launchReviewBatch(client, sessionID, agents, state, model, { sleep, idleDeferMs }) {
+  if (!agents.length) return;
+  if (idleDeferMs > 0) await sleep(idleDeferMs);
+  await promptSubtaskWithRetry(
+    client,
+    sessionID,
+    {
+      agent: "goal",
+      ...(model ? { model } : {}),
+      parts: agents.map((agent) => ({
+        type: "subtask",
+        agent,
+        description: `${prettyAgentName(agent)} review`,
+        prompt: reviewerPrompt(agent, state),
+      })),
+    },
+    { sleep },
+  );
+}
+
 /**
- * Launch ONE reviewer subagent as a subtask on the goal session and return its verdict.
- * Polls until the reviewer FINISHES streaming (output stabilizes) or the guard hook
- * records a fresh verdict via tool.execute.after — so an interim mid-stream verdict
- * can't be latched.
+ * Poll until ONE reviewer finishes (output stabilizes) or the guard hook records
+ * a fresh verdict — so an interim mid-stream verdict can't be latched.
  */
-async function runReviewer(client, sessionID, agent, state, model, { timeoutMs, pollMs, sleep, idleDeferMs }) {
+async function waitForReviewer(client, sessionID, agent, state, { timeoutMs, pollMs, sleep }) {
   const beforeSeq = state?.latestVerdict?.[agent]?.seq || 0;
-  try {
-    if (idleDeferMs > 0) await sleep(idleDeferMs);
-    await promptSubtaskWithRetry(
-      client,
-      sessionID,
-      {
-        agent: "goal",
-        ...(model ? { model } : {}),
-        parts: [
-          {
-            type: "subtask",
-            agent,
-            description: `${prettyAgentName(agent)} review`,
-            prompt: reviewerPrompt(agent, state),
-          },
-        ],
-      },
-      { sleep },
-    );
-    const start = Date.now();
-    let prevText = null;
-    let stable = "";
-    while (Date.now() - start < timeoutMs) {
-      await sleep(pollMs);
-      const hooked = freshRecordedVerdict(state, agent, beforeSeq);
-      if (hooked) {
-        return { verdict: hooked.verdict, text: hooked.text || "", source: "hook" };
-      }
-      const text = await readReviewerOutput(client, sessionID, agent);
-      if (text && text === prevText) {
-        stable = text;
-        break;
-      }
-      prevText = text;
-    }
-    const finalText = stable || prevText || "";
+  const start = Date.now();
+  let prevText = null;
+  let stable = "";
+  while (Date.now() - start < timeoutMs) {
+    await sleep(pollMs);
     const hooked = freshRecordedVerdict(state, agent, beforeSeq);
     if (hooked) {
-      return { verdict: hooked.verdict, text: hooked.text || finalText, source: "hook" };
+      return { agent, verdict: hooked.verdict, text: hooked.text || "", source: "hook" };
     }
-    return { verdict: parseVerdict(finalText), text: finalText, source: "transcript" };
-  } catch (err) {
-    const hooked = freshRecordedVerdict(state, agent, beforeSeq);
-    if (hooked) return { verdict: hooked.verdict, text: hooked.text || "", source: "hook" };
-    return { verdict: null, text: "", error: String(err?.message || err), sessionBusy: isSessionBusyError(err) };
+    const text = await readReviewerOutput(client, sessionID, agent);
+    if (text && text === prevText) {
+      stable = text;
+      break;
+    }
+    prevText = text;
   }
+  const finalText = stable || prevText || "";
+  const hooked = freshRecordedVerdict(state, agent, beforeSeq);
+  if (hooked) {
+    return { agent, verdict: hooked.verdict, text: hooked.text || finalText, source: "hook" };
+  }
+  return { agent, verdict: parseVerdict(finalText), text: finalText, source: "transcript" };
+}
+
+function applyReviewerResult(store, state, agent, { verdict, text, source, beforeSeq }) {
+  const hooked = freshRecordedVerdict(state, agent, beforeSeq);
+  if (hooked) {
+    return hooked.verdict === "PASS" ? "passed" : "failed";
+  }
+  if (verdict) {
+    if (source === "transcript") {
+      recordVerdict(store, state, agent, verdict, text || `programmatic review (${agent}): Verdict: ${verdict}`);
+    }
+    return verdict === "PASS" ? "passed" : "failed";
+  }
+  return "failed";
 }
 
 /**
  * Run ONE review cycle: launch every required reviewer that is not currently
- * fresh-passing (cycle-closing auditor last), record each verdict, and report the
- * outcome. Records verdicts via the shared recordVerdict so review-cycle counting,
- * reviewer memory, and gate freshness all update exactly as the task-path does.
+ * fresh-passing **in parallel**, wait for all to finish, record each verdict
+ * (cycle-closing auditor last so one batch = one cycle), and report the outcome.
  *
  * @returns {{ ran: string[], passed: string[], failed: string[], completionAllowed: boolean, reviewCycles: number, findings: string[] }}
  */
@@ -245,21 +255,24 @@ export async function runReviewCycle(client, store, state, config, opts = {}) {
   }
   const required = requiredGates(state, config);
   const toRun = required.filter((g) => !gatePassedFresh(state, g));
-  toRun.sort((a, b) => (a === CYCLE_CLOSING_AGENT ? 1 : 0) - (b === CYCLE_CLOSING_AGENT ? 1 : 0));
+  if (!toRun.length) {
+    return {
+      ran: [],
+      passed: [],
+      failed: [],
+      sessionBusy: false,
+      findings: [],
+      completionAllowed: completionAllowed(state, config),
+      reviewCycles: state.reviewCycles,
+    };
+  }
 
-  const ran = [];
-  const passed = [];
-  const failed = [];
-  for (const agent of toRun) {
-    log(`launching reviewer subtask: ${agent}`);
-    const beforeSeq = state?.latestVerdict?.[agent]?.seq || 0;
-    const { verdict, text, source, sessionBusy } = await runReviewer(client, sessionID, agent, state, model, {
-      timeoutMs,
-      pollMs,
-      sleep,
-      idleDeferMs: ran.length === 0 ? idleDeferMs : 0,
-    });
-    if (sessionBusy && ran.length === 0) {
+  for (const agent of toRun) log(`launching reviewer subtask: ${agent}`);
+
+  try {
+    await launchReviewBatch(client, sessionID, toRun, state, model, { sleep, idleDeferMs });
+  } catch (err) {
+    if (isSessionBusyError(err)) {
       return {
         ran: [],
         passed: [],
@@ -270,20 +283,32 @@ export async function runReviewCycle(client, store, state, config, opts = {}) {
         reviewCycles: state.reviewCycles,
       };
     }
+    return {
+      ran: toRun,
+      passed: [],
+      failed: toRun,
+      sessionBusy: false,
+      findings: [],
+      completionAllowed: completionAllowed(state, config),
+      reviewCycles: state.reviewCycles,
+    };
+  }
+
+  const waitOpts = { timeoutMs, pollMs, sleep };
+  const outcomes = await Promise.all(toRun.map((agent) => waitForReviewer(client, sessionID, agent, state, waitOpts)));
+
+  const ran = [];
+  const passed = [];
+  const failed = [];
+  const beforeSeq = Object.fromEntries(toRun.map((agent) => [agent, state?.latestVerdict?.[agent]?.seq || 0]));
+  const recordOrder = [...toRun.filter((a) => a !== CYCLE_CLOSING_AGENT), ...toRun.filter((a) => a === CYCLE_CLOSING_AGENT)];
+
+  for (const agent of recordOrder) {
+    const outcome = outcomes.find((o) => o.agent === agent);
+    if (!outcome) continue;
     ran.push(agent);
-    const hooked = freshRecordedVerdict(state, agent, beforeSeq);
-    if (hooked) {
-      (hooked.verdict === "PASS" ? passed : failed).push(agent);
-      continue;
-    }
-    if (verdict) {
-      if (source === "transcript") {
-        recordVerdict(store, state, agent, verdict, text || `programmatic review (${agent}): Verdict: ${verdict}`);
-      }
-      (verdict === "PASS" ? passed : failed).push(agent);
-    } else {
-      failed.push(agent);
-    }
+    const bucket = applyReviewerResult(store, state, agent, { ...outcome, beforeSeq: beforeSeq[agent] });
+    (bucket === "passed" ? passed : failed).push(agent);
   }
 
   maybeClearDirtyOnFinalPass(state, config);

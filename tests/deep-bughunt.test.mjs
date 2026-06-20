@@ -161,9 +161,10 @@ function makeReviewingGuard(onFirstReview) {
               await onFirstReview();
             }
             prompts.push({ id: path.id, agent: part.agent, kind: "subtask", text: part.prompt || "" });
-          } else if (part.type === "text") {
-            prompts.push({ id: path.id, agent: body?.agent, kind: "guard", text: part.text || "" });
           }
+        }
+        if (body?.agent && !(body.parts || []).some((p) => p.type === "subtask")) {
+          prompts.push({ id: path.id, agent: body.agent, kind: "guard", text: body.system || "" });
         }
       },
       messages: async () => ({
