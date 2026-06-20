@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.7
+
+### Fix: explorer bash allowlist + deny question tool on primary goal (#2)
+
+Addresses [issue #2](https://github.com/devinoldenburg/opencode-goal-mode/issues/2) items 1 and 2.
+
+- **`goal-explorer` bash allowlist.** Common read-only exploration commands (`grep`, `cat`,
+  `rg`, `head`, `tail`, `find`, `ls`, `sed -n`, and read-only `git` introspection) are
+  now pre-approved instead of prompting on every invocation.
+- **`question: deny` on the primary `goal` agent.** The Questions tool is no longer
+  available to the Goal agent, so autonomous runs cannot stall mid-loop waiting for user
+  input. Ambiguity is handled via assumptions recorded in the Goal Contract and
+  subagent research.
+
 ## v0.6.6
 
 ### Fix: reviews always run before any guard continuation (strict idle cycle)

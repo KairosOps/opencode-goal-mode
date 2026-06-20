@@ -8,7 +8,22 @@ permission:
   glob: allow
   grep: allow
   list: allow
-  bash: ask
+  bash:
+    "*": ask
+    "rg *": allow
+    "grep *": allow
+    "cat *": allow
+    "head *": allow
+    "tail *": allow
+    "wc *": allow
+    "find *": allow
+    "ls": allow
+    "ls *": allow
+    "sed -n *": allow
+    "git status *": allow
+    "git diff *": allow
+    "git log *": allow
+    "git show *": allow
   task: deny
   external_directory: allow
   todowrite: deny
