@@ -637,15 +637,51 @@ export function createGuard(input = {}, options = {}, overrides = {}) {
 }
 
 /** Subscribe to the server event stream so session.idle is handled even when the
- * plugin `event` hook is not invoked (observed in some headless serve deployments). */
+ * plugin `event` hook is not invoked (observed in some headless serve deployments).
+ *
+ * Reconnects on stream end/error with bounded backoff so a transient SSE failure
+ * can no longer SILENTLY kill programmatic review for the whole headless session
+ * (the previous `.catch(() => {})` swallowed the death and the guard never warned,
+ * so reviews simply stopped firing and the goal stalled — issue #2 comment 3). */
 async function startSessionIdleWatcher(baseUrl, hooks) {
   const { createOpencodeClient } = await import("@opencode-ai/sdk");
   const client = createOpencodeClient({ baseUrl: String(baseUrl) });
-  const sub = await client.event.subscribe();
-  const stream = sub.stream || sub;
-  for await (const ev of stream) {
-    if (ev?.type === "session.idle" && ev.properties?.sessionID) {
-      await hooks.event({ event: ev });
+  const maxBackoffMs = 30 * 1000;
+  const baseStepMs = 1000;
+  let attempt = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let sub;
+    try {
+      sub = await client.event.subscribe();
+      attempt = 0; // a successful (re)subscribe resets the backoff
+    } catch (err) {
+      attempt += 1;
+      // Best-effort log; never throw out of the watcher loop.
+      try {
+        await hooks?.event?.({ event: { type: "goal-guard.watcher.subscribe-failed", properties: { baseUrl: String(baseUrl), attempt, error: String(err?.message || err) } } });
+      } catch {
+        /* logging is best-effort */
+      }
+      await new Promise((r) => setTimeout(r, Math.min(maxBackoffMs, baseStepMs * 2 ** Math.min(attempt, 5))));
+      continue;
+    }
+    const stream = sub.stream || sub;
+    try {
+      for await (const ev of stream) {
+        if (ev?.type === "session.idle" && ev.properties?.sessionID) {
+          await hooks.event({ event: ev });
+        }
+      }
+      // Stream ended cleanly (host shutdown) — reconnect once on the next iteration.
+    } catch (err) {
+      attempt += 1;
+      try {
+        await hooks?.event?.({ event: { type: "goal-guard.watcher.stream-error", properties: { baseUrl: String(baseUrl), attempt, error: String(err?.message || err) } } });
+      } catch {
+        /* logging is best-effort */
+      }
+      await new Promise((r) => setTimeout(r, Math.min(maxBackoffMs, baseStepMs * 2 ** Math.min(attempt, 5))));
     }
   }
 }
@@ -665,7 +701,16 @@ export async function GoalGuardPlugin(input, options) {
   const guard = createGuard(input || {}, options || {}, { reviewClient });
 
   if (input?.serverUrl) {
-    void startSessionIdleWatcher(String(input.serverUrl), guard.hooks).catch(() => {});
+    // A failure here used to be silently swallowed (.catch(() => {})), so if the SSE
+    // watcher could not start at all in a headless deployment, programmatic review
+    // NEVER fired and no one was warned — the goal stalled. Surface a warning log
+    // instead. (The watcher itself now reconnects on transient stream failures.)
+    void startSessionIdleWatcher(String(input.serverUrl), guard.hooks).catch((err) => {
+      guard.logger.warn("Goal Guard idle watcher failed to start (programmatic review may not fire in headless mode)", {
+        serverUrl: String(input.serverUrl),
+        error: String(err?.message || err),
+      });
+    });
   }
   // Register custom goal_* tools, isolated so a resolution failure of
   // @opencode-ai/plugin cannot prevent the core guard hooks from loading.
