@@ -9,7 +9,8 @@ How OpenCode Goal Mode's **mechanically-enforced** goal discipline compares to
 Anthropic's Claude Code and OpenAI's Codex. Sourced from Claude Code docs
 (`https://docs.anthropic.com/en/docs/claude-code/hooks` and `/security`) and
 OpenAI Codex docs (`https://developers.openai.com/codex/cli` and `/cloud`),
-cross-checked against this plugin's source. The emphasis throughout is
+cross-checked against this plugin's source and `@opencode-ai/plugin@1.17.6`.
+The emphasis throughout is
 *mechanical enforcement* — what the harness guarantees — versus *prompt-driven*
 behavior the model is asked to do.
 
