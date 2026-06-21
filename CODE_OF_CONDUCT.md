@@ -10,6 +10,7 @@ v2.1.
 In short: be respectful, assume good intent, and keep discussion focused on the
 work. Harassment or discrimination of any kind is not tolerated.
 
-To report unacceptable behavior, contact the maintainer through a
+To report unacceptable behavior, contact the maintainer privately. Use a
 [GitHub Security Advisory](https://github.com/devinoldenburg/opencode-goal-mode/security/advisories/new)
-(for anything sensitive) or by opening an issue for non-sensitive matters.
+only when the report includes a security vulnerability; use a public issue only
+for non-sensitive community or process concerns.
