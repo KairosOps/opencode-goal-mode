@@ -146,7 +146,7 @@ cycle: **stop → guard reviews → fix or Goal Completed**.
 
 Regression tests cover async idle deferral, HTTP review client fallback, evidence-only
 goals, and SessionBusy retry. Docker fresh-user Zen goal-session e2e confirms
-`reviewRunCount` increments within ~30s of first idle (355 unit tests).
+`reviewRunCount` increments within ~30s of first idle.
 
 ## v0.6.7
 

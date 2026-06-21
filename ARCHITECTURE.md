@@ -221,7 +221,8 @@ runs it in a separate Bun/OpenTUI job.
 variables (`GOAL_GUARD_*`), and the plugin `options` object passed via the
 `["./plugins/goal-guard.js", { … }]` form in `opencode.json`. Toggles cover
 destructive blocking, network-exec blocking, completion enforcement,
-`autoContinue`, `programmaticReview`, `reviewIdleDeferMs`, review timeouts/polling, `maxReviewCycles`,
+`autoContinue`, `programmaticReview`, `reviewIdleDeferMs`, `reviewIdleRetryMs`,
+`maxReviewIdleRetries`, review timeouts/polling, `maxReviewCycles`,
 system-state injection, persistence, contextual gates, subagent restriction,
 session cache size/TTL, sidebar colours, and toasts. See README.md for the full
 option table.
@@ -239,7 +240,7 @@ supports `--uninstall` (which leaves locally-modified files in place).
 
 ## Testing
 
-`node --test` runs the suite (370 tests across 20 files):
+`node --test` runs the suite across 20 files:
 
 - `tests/shell.test.mjs` / `tests/shell.property.test.mjs` — analyzer against bypass and false-positive corpora.
 - `tests/plugin.test.mjs` — hook behavior, gating, verdicts, completion, tools, isolation.
