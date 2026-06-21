@@ -204,5 +204,8 @@ export const INCIDENT_SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3
 
 /** A stable signature so identical incidents in one run dedupe instead of spamming. */
 export function incidentSignature(runId, familyId, key) {
-  return `${runId}:${familyId}:${key || ""}`;
+  if (!runId || !familyId || !key) {
+    throw new Error(`Invalid incident signature: ${runId}:${familyId}:${key}`);
+  }
+  return `${runId}:${familyId}:${key}`;
 }
